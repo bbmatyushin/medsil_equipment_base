@@ -1,3 +1,10 @@
+.idea/
+*/__init__.py
+__init__.py
+accembler_db/*accdb
+accembler_db/tables_csv/
+accembler_db/tables_json/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
