@@ -1,3 +1,6 @@
+улучшение_класса_sqlalchemy.txt
+*/*.db
+*.db
 .idea/
 */__init__.py
 __init__.py
