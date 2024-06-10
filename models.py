@@ -85,6 +85,8 @@ class Department(Base):
     city: Mapped["Cities"] = relationship(back_populates="department")
     client: Mapped["Client"] = relationship(back_populates="department")
     dept_contact_pers: Mapped[list["DeptContactPers"]] = relationship(back_populates="department")
+    equipment_accounting_department: Mapped[list["EquipmentAccountingDepartment"]] = \
+        relationship(back_populates='department')
 
     def __repr__(self):
         return f'<Department(id={self.id!r}, name={self.name!r})>'
@@ -139,6 +141,7 @@ class Equipment(Base):
     # relationships
     manufacturer: Mapped["Manufacturer"] = relationship(back_populates="equipment")
     supplier: Mapped["Supplier"] = relationship(back_populates="equipment")
+    equipment_spare_part: Mapped[list["EquipmentSparePart"]] = relationship(back_populates='equipment')
 
     def my_test(self):
         print(self.__dict__)
@@ -147,6 +150,43 @@ class Equipment(Base):
         return f'Equipment(id={self.id!r}, fullname={self.fullname!r}, shortname={self.shortname!r}, ' \
                f'med_directory={self.med_directory!r}, manufacturer_id={self.manufacturer_id!r}, ' \
                f'supplier_id={self.supplier_id!r}, create_dt={self.create_dt!r})'
+
+
+class EquipmentAccountingDepartment(Base):
+    __tablename__ = "equipment_accounting_department"
+    __table_args__ = {"comment": "Связь таблиц equipment_accounting и department"}
+
+    equipment_accounting_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('equipment_accounting.id',
+                                                                                ondelete='CASCADE'),
+                                                               nullable=False)
+    department_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('department.id', ondelete='CASCADE'),
+                                                     nullable=False)
+
+    # relationship
+    # TODO: Добавить в таблицу equipment_accounting relationship - equipment_spare_part
+    equipment_accounting: Mapped[list["EquipmentAccounting"]] = relationship(back_populates='equipment_accounting_department')
+    department: Mapped[list["Department"]] = relationship(back_populates='equipment_accounting_department')
+
+    def __repr__(self):
+        return f"EquipmentAccountingDepartment(id={self.id!r})"
+
+
+class EquipmentSparePart(Base):
+    __tablename__ = "equipment_spare_part"
+    __table_args__ = {"comment": "Связь таблиц equipment и spare_part"}
+
+    equipment_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('equipment.id', ondelete='CASCADE'),
+                                                    nullable=False)
+    spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
+                                                     nullable=False)
+
+    # relationship
+    # TODO: Добавить в таблицу SparePart relationship - equipment_spare_part
+    equipment: Mapped[list["Equipment"]] = relationship(back_populates='equipment_spare_part')
+    spare_part: Mapped[list["SparePart"]] = relationship(back_populates='equipment_spare_part')
+
+    def __repr__(self):
+        return f"EquipmentSparePart(id={self.id!r})"
 
 
 class Manufacturer(Base):
