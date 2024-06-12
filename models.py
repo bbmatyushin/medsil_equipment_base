@@ -3,12 +3,12 @@ import asyncio
 import re
 from datetime import datetime, date
 
-from sqlalchemy import UUID, Integer, String, TIMESTAMP, ForeignKey, Boolean, SmallInteger, Date
-from sqlalchemy import func
+from sqlalchemy import UUID, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date
+from sqlalchemy import func, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from database import engine, async_session
+from database import async_engine, async_session
 
 
 class Base(DeclarativeBase):
@@ -30,7 +30,10 @@ class Base(DeclarativeBase):
 
 class Cities(Base):
     __tablename__ = "cities"
-    __table_args__ = {'comment': 'Информация о городах'}
+    __table_args__ = (
+        UniqueConstraint('name', 'region', name='uq_cities_name_region'),
+        {'comment': 'Таблица с информацией о городах'}
+    )
 
     name: Mapped[str] = mapped_column(String(150), nullable=False, comment='Название города')
     region: Mapped[str] = mapped_column(String(100), nullable=True, comment='Область / Регион')
@@ -127,7 +130,9 @@ class Equipment(Base):
 
     fullname: Mapped[str] = mapped_column(String(50), nullable=False, comment='Полное название оборудования')
     shortname: Mapped[str] = mapped_column(String(20))
-    med_directory: Mapped[str] = mapped_column(String(20), nullable=True, comment='Вид направления: Гематология, Биохимия и т.д.')
+    med_directory_id: Mapped[int] = mapped_column(ForeignKey('med_directory.id',
+                                                                             ondelete='CASCADE'),
+                                                  nullable=True, comment='ID направления')
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID,
                                                        ForeignKey('manufacturer.id',
                                                                   ondelete='CASCADE'),
@@ -144,14 +149,14 @@ class Equipment(Base):
     manufacturer: Mapped["Manufacturer"] = relationship(back_populates="equipment")
     supplier: Mapped["Supplier"] = relationship(back_populates="equipment")
     equipment_spare_part: Mapped[list["EquipmentSparePart"]] = relationship(back_populates='equipment')
+    med_directory: Mapped["MedDirectory"] = relationship(back_populates="equipment")
 
     def my_test(self):
         print(self.__dict__)
 
     def __repr__(self):
         return f'Equipment(id={self.id!r}, fullname={self.fullname!r}, shortname={self.shortname!r}, ' \
-               f'med_directory={self.med_directory!r}, manufacturer_id={self.manufacturer_id!r}, ' \
-               f'supplier_id={self.supplier_id!r}, create_dt={self.create_dt!r})'
+               f'med_directory_id={self.med_directory_id!r}, create_dt={self.create_dt!r})'
 
 
 class EquipmentAccounting(Base):
@@ -254,7 +259,7 @@ class EquipmentStatus(Base):
     __tablename__ = 'equipment_status'
     __table_args__ = {'comment': 'фиксированный набор статусов для оборудования'}
 
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True, comment='ID статуса')
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment='ID статуса')
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment='Название статуса')
 
     # relationships
@@ -282,6 +287,12 @@ class Employee(Base):
     equipment_acc_department_emp: Mapped[list["EquipmentAccDepartmentEmp"]] = \
         relationship(back_populates="employee")
     service: Mapped[list["Service"]] = relationship(back_populates="employee")
+
+    def __init__(self):
+        self.usr_id = uuid.uuid4()
+        self.position_id = uuid.uuid4()
+        self.is_active = True
+        self.create_dt = datetime.now()
 
     def __repr__(self):
         return f'<Employee(usr_id={self.usr_id!r}, position_id={self.position_id!r}, ' \
@@ -313,7 +324,8 @@ class Manufacturer(Base):
     __tablename__ = "manufacturer"
     __table_args__ = {'comment': 'Таблица с информацией о производителях'}
 
-    name: Mapped[str] = mapped_column(String(150), nullable=False, comment='Название производителя')  # обязательное поле)
+    name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True,
+                                      comment='Название производителя')  # обязательное поле)
     inn: Mapped[str] = mapped_column(String(12), nullable=True, comment='ИНН производителя')
     country: Mapped[str] = mapped_column(String(20), nullable=True, comment='Страна производителя')
     city_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('cities.id', ondelete='CASCADE'),
@@ -333,6 +345,21 @@ class Manufacturer(Base):
 
     def __repr__(self):
         return f'<Manufacturer(id={self.id!r}, name={self.name!r})>'
+
+
+class MedDirectory(Base):
+    __tablename__ = 'med_directory'
+    __table_args__ = {'comment': 'Направление, область применения для оборудования (Гематология, Биохимия и т.п.)'}
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment='ID направления')
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True,
+                                      comment='Название направления')
+
+    # relationships
+    equipment: Mapped[list["Equipment"]] = relationship(back_populates="med_directory")
+
+    def __repr__(self):
+        return f'<MedDirectory(id={self.id!r}, name={self.name!r})>'
 
 
 class Position(Base):
@@ -407,7 +434,7 @@ class ServiceType(Base):
     __tablename__ = 'service_type'
     __table_args__ = {'comment': 'Тип ремонта/вида работы'}
 
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True, comment='ID типа ремонта')
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment='ID типа ремонта')
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment='Название типа ремонта')
 
     # relationships
@@ -454,7 +481,7 @@ class SparePartCount(Base):
 
     spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
                                                      nullable=False)
-    count: Mapped[int] = mapped_column(SmallInteger, nullable=False, comment='Количество запчастей')
+    count: Mapped[int] = mapped_column(nullable=False, comment='Количество запчастей')
     row_add_dt: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, default=func.now(),
                                                  nullable=True, comment='когда была добавлена запись')
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False,
@@ -500,7 +527,7 @@ class User(Base):
     surname: Mapped[str] = mapped_column(String(50), nullable=True, comment='Фамилия пользователя')
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment='Имя пользователя')
     patron: Mapped[str] = mapped_column(String(50), nullable=True, comment='Отчество пользователя')
-    sex: Mapped[int] = mapped_column(SmallInteger,  nullable=False, comment='Пол. 1 - мужчина, 2 - женщина')
+    sex: Mapped[int] = mapped_column( nullable=False, comment='Пол. 1 - мужчина, 2 - женщина')
     birth: Mapped[date] = mapped_column(Date, nullable=True, comment='Дата рождения')
     email: Mapped[str] = mapped_column(String(100), nullable=True, comment='Электронная почта')
     phone: Mapped[str] = mapped_column(String(50), nullable=True, comment='Телефон')
@@ -518,7 +545,7 @@ class User(Base):
 
 
 async def main():
-    async with engine.begin() as conn:
+    async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
@@ -538,5 +565,6 @@ async def add_manufacturer():
 
 if __name__ == '__main__':
     asyncio.run(main())
-    asyncio.run(add_manufacturer())
+    # asyncio.run(add_manufacturer())
+    # Employee().__init__()
     # Equipment().test()
