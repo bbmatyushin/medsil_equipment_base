@@ -148,7 +148,9 @@ class Equipment(Base):
     equipment_accounting: Mapped[list["EquipmentAccounting"]] = relationship(back_populates='equipment')
     manufacturer: Mapped["Manufacturer"] = relationship(back_populates="equipment")
     supplier: Mapped["Supplier"] = relationship(back_populates="equipment")
-    equipment_spare_part: Mapped[list["EquipmentSparePart"]] = relationship(back_populates='equipment')
+    spare_part: Mapped[list["SparePart"]] = relationship(
+        back_populates='equipment', secondary="equipment_spare_part"
+    )
     med_directory: Mapped["MedDirectory"] = relationship(back_populates="equipment")
 
     def my_test(self):
@@ -183,9 +185,7 @@ class EquipmentAccounting(Base):
     equipment_status: Mapped["EquipmentStatus"] = relationship(back_populates="equipment_accounting")
     equipment_acc_department: Mapped[list["EquipmentAccDepartment"]] = \
         relationship(back_populates="equipment_accounting")
-    service: Mapped[list["Service"]] = \
-        relationship(back_populates="equipment_accounting",
-                     primaryjoin='EquipmentAccounting.id == Service.equipment_accounting_id')
+    service: Mapped[list["Service"]] = relationship(back_populates="equipment_accounting")
 
     def __repr__(self):
         return f'EquipmentAccounting(id={self.id!r}, equipment_id={self.equipment_id!r}, ' \
@@ -210,46 +210,41 @@ class EquipmentAccDepartment(Base):
     equipment_accounting: Mapped["EquipmentAccounting"] = \
         relationship(back_populates='equipment_acc_department')
     department: Mapped["Department"] = relationship(back_populates='equipment_acc_department')
-    equipment_acc_department_emp: Mapped[list["EquipmentAccDepartmentEmp"]] = \
-        relationship(back_populates='equipment_acc_department')
+    employee: Mapped[list["Employee"]] = relationship(
+        back_populates='equipment_acc_department_emp', secondary="equipment_acc_department_emp"
+    )
 
     def __repr__(self):
         return f"EquipmentAccDepartment(id={self.id!r})"
 
 
 class EquipmentAccDepartmentEmp(Base):
+    """many-to-many связь"""
     __tablename__ = "equipment_acc_department_emp"
     __table_args__ = {"comment": "Связь между сотрудником(-ми), которые установили оборудование в подразделении"}
 
-    employee_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('employee.id', ondelete='CASCADE'),
-                                                   nullable=False, comment='id сотрудника')
-    equipment_acc_department_id: Mapped[uuid.UUID] = mapped_column(UUID,
-                                                                   ForeignKey('equipment_acc_department.id',
-                                                                              ondelete='CASCADE'),
-                                                                   nullable=False,
-                                                                   comment='id записи в таблице equipment_acc_department')
-
-    # relationship
-    employee: Mapped["Employee"] = relationship(back_populates='equipment_acc_department_emp')
-    equipment_acc_department: Mapped["EquipmentAccDepartment"] = \
-        relationship(back_populates='equipment_acc_department_emp')
+    employee_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('employee.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='id сотрудника')
+    equipment_acc_department_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('equipment_acc_department.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='id записи в таблице equipment_acc_department')
 
     def __repr__(self):
         return f"EquipmentAccDepartmentEmp(id={self.id!r})"
 
 
 class EquipmentSparePart(Base):
+    """many-to-many связь между оборудованием и запчастями"""
     __tablename__ = "equipment_spare_part"
     __table_args__ = {"comment": "Связь между оборудование и запчастями. Связывает таблицы equipment и spare_part"}
 
-    equipment_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('equipment.id', ondelete='CASCADE'),
-                                                    nullable=False)
-    spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
-                                                     nullable=False)
-
-    # relationship
-    equipment: Mapped[list["Equipment"]] = relationship(back_populates='equipment_spare_part')
-    spare_part: Mapped[list["SparePart"]] = relationship(back_populates='equipment_spare_part')
+    equipment_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('equipment.id', ondelete='CASCADE'),
+                      nullable=False, primary_key=True, comment='id оборудования')
+    spare_part_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
+                      nullable=False, primary_key=True, comment='id запчасти')
 
     def __repr__(self):
         return f"EquipmentSparePart(id={self.id!r})"
@@ -284,15 +279,17 @@ class Employee(Base):
     # relationships
     user: Mapped["User"] = relationship(back_populates="employee")
     position: Mapped["Position"] = relationship(back_populates="employee")
-    equipment_acc_department_emp: Mapped[list["EquipmentAccDepartmentEmp"]] = \
-        relationship(back_populates="employee")
+    equipment_acc_department: Mapped[list["EquipmentAccDepartment"]] = relationship(
+        back_populates="employee", secondary="equipment_acc_department_emp"
+    )
     service: Mapped[list["Service"]] = relationship(back_populates="employee")
+    shipment_spare_part: Mapped[list["ShipmentSparePart"]] = relationship(back_populates="employee")
 
-    def __init__(self):
-        self.usr_id = uuid.uuid4()
-        self.position_id = uuid.uuid4()
-        self.is_active = True
-        self.create_dt = datetime.now()
+    # def __init__(self):
+    #     self.usr_id = uuid.uuid4()
+    #     self.position_id = uuid.uuid4()
+    #     self.is_active = True
+    #     self.create_dt = datetime.now()
 
     def __repr__(self):
         return f'<Employee(usr_id={self.usr_id!r}, position_id={self.position_id!r}, ' \
@@ -399,14 +396,12 @@ class Service(Base):
                                               nullable=False)
 
     # relationships
+    spare_part: Mapped[list["SparePart"]] = relationship(
+        back_populates="service", secondary="service_spare_part"
+    )
     service_type: Mapped["ServiceType"] = relationship(back_populates="service")
-    service_spare_part: Mapped[list["ServiceSparePart"]] = \
-        relationship(back_populates="service",
-                     primaryjoin='Service.id == ServiceSparePart.service_id')
     employee: Mapped["Employee"] = relationship(back_populates="service")
-    equipment_accounting: Mapped["EquipmentAccounting"] = \
-        relationship(back_populates="service",
-                     primaryjoin='Service.equipment_accounting_id == EquipmentAccounting.id')
+    equipment_accounting: Mapped["EquipmentAccounting"] = relationship(back_populates="service")
 
     def __repr__(self):
         return (f'<Service(id={self.id!r}, service_type_id={self.service_type_id!r}, '
@@ -414,20 +409,19 @@ class Service(Base):
 
 
 class ServiceSparePart(Base):
+    """many-to-many связь"""
     __tablename__ = 'service_spare_part'
     __table_args__ = {'comment': 'Таблица используется для связи между ремонтом и запчастями для анализаторов'}
 
-    spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
-                                                      nullable=False, comment='ID запчасти')
-    service_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('service.id', ondelete='CASCADE'),
-                                                  nullable=False, comment='ID ремонта')
-
-    # relationships
-    spare_part: Mapped["SparePart"] = relationship(back_populates="service_spare_part")
-    service: Mapped["Service"] = relationship(back_populates="service_spare_part")
+    spare_part_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='ID запчасти')
+    service_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('service.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='ID ремонта')
 
     def __repr__(self):
-        return f'<ServiceSparePart(id={self.id!r}, service_id={self.service_id!r})>'
+        return f'<ServiceSparePart(id={self.id!r})>'
 
 
 class ServiceType(Base):
@@ -444,6 +438,32 @@ class ServiceType(Base):
         return f'<ServiceType(id={self.id!r}, name={self.name!r})>'
 
 
+class ShipmentSparePart(Base):
+    __tablename__ = 'shipment_spare_part'
+    __table_args__ = {'comment': 'Для фиксации отгрузки запчастей из офиса. Учитывается только '
+                                 'количество запчастей, без указания для какого клиента.'}
+
+    spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
+                                                      nullable=False, comment='ID запчасти')
+    count_shipment: Mapped[int] = mapped_column(nullable=False, default=1,
+                                                comment='Количество отгружаемых запчастей')
+    expiration_dt: Mapped[date] = mapped_column(Date, nullable=True,
+                                                comment='Срок годности для некоторых запчастей')
+    shipment_dt: Mapped[date] = mapped_column(Date, nullable=True, default=func.now(),
+                                             comment='Дата внесения записи об отгрузки запчастей')
+    emp_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('employee.id', ondelete='CASCADE'),
+                                              comment='ID сотрудника, который отгрузил запчасть (передал ее клиенту)',
+                                              nullable=True)
+
+    # relationships
+    spare_part: Mapped["SparePart"] = relationship(back_populates="shipment_spare_part")
+    employee: Mapped["Employee"] = relationship(back_populates="shipment_spare_part")
+
+    def __repr__(self):
+        return (f'<ShipmentSparePart(id={self.id!r}, spare_part_id={self.spare_part_id!r}, '
+                f'count={self.count_shipment!r}, shipment_dt={self.shipment_dt!r})>')
+
+
 class SparePart(Base):
     __tablename__ = "spare_part"
     __table_args__ = {'comment': 'Запчасти для анализаторов'}
@@ -455,21 +475,23 @@ class SparePart(Base):
                                                                             ondelete='CASCADE'),
                                                            nullable=False)
     comment: Mapped[str] = mapped_column(String(300), nullable=True, comment='Комментарий / Примечание')
+    is_expiration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True,
+                                                comment='Флаг указывающий, что у запчасти должен быть срок годности')
     is_overdue: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
                                              comment='Отмечается когда запчасть просрочилась')
     create_dt: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, default=func.now(),
                                                  nullable=True, comment='дата и время добавления записи')
 
     # relationships
-    equipment_spare_part: Mapped[list["EquipmentSparePart"]] = \
-        relationship(back_populates='spare_part',
-                     primaryjoin='SparePart.id == EquipmentSparePart.spare_part_id')
-    spare_part_count: Mapped[list["SparePartCount"]] = \
-        relationship(back_populates='spare_part',
-                     primaryjoin='SparePart.id == SparePartCount.spare_part_id')
-    service_spare_part: Mapped[list["ServiceSparePart"]] = \
-        relationship(back_populates="spare_part",
-                     primaryjoin='SparePart.id == ServiceSparePart.spare_part_id')
+    service: Mapped[list["Service"]] = relationship(
+        back_populates="spare_part", secondary="service_spare_part",
+    )
+    equipment: Mapped[list["Equipment"]] = relationship(
+        back_populates="spare_part", secondary="equipment_spare_part",
+    )
+    spare_part_count: Mapped[list["SparePartCount"]] = relationship(back_populates='spare_part')
+    supply_spare_part: Mapped[list["SupplySparePart"]] = relationship(back_populates="spare_part")
+    shipment_spare_part: Mapped[list["ShipmentSparePart"]] = relationship(back_populates="spare_part")
 
     def __repr__(self):
         return f'<SparePart(id={self.id!r}, article={self.article!r}, name={self.name!r})>'
@@ -488,12 +510,11 @@ class SparePartCount(Base):
                                              comment='Флаг указывающий, что это текущее кол-во запчастей на данные момент')
 
     # relationships
-    spare_part: Mapped["SparePart"] = \
-        relationship(back_populates='spare_part_count',
-                     primaryjoin='SparePartCount.spare_part_id == SparePart.id')
+    spare_part: Mapped["SparePart"] = relationship(back_populates='spare_part_count')
 
     def __repr__(self):
         return f'<SparePartCount(id={self.id!r}, count={self.count!r}, is_current={self.is_current!r})>'
+
 
 class Supplier(Base):
     __tablename__ = "supplier"
@@ -518,6 +539,27 @@ class Supplier(Base):
 
     def __repr__(self):
         return f'<Supplier(id={self.id!r}, name={self.name!r})>'
+
+
+class SupplySparePart(Base):
+    __tablename__ = 'supply_spare_part'
+    __table_args__ = {'comment': 'Для фиксации поступления запчастей в офиса.'}
+
+    spare_part_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part.id', ondelete='CASCADE'),
+                                                      nullable=False, comment='ID запчасти')
+    count_supply: Mapped[int] = mapped_column(nullable=False, default=1,
+                                                comment='Количество поступивших запчастей')
+    expiration_dt: Mapped[date] = mapped_column(Date, nullable=True,
+                                                comment='Срок годности для некоторых запчастей')
+    supply_dt: Mapped[date] = mapped_column(Date, nullable=True, default=func.now(),
+                                             comment='Дата внесения записи о поступлении запчастей')
+
+    # relationships
+    spare_part: Mapped["SparePart"] = relationship(back_populates="supply_spare_part")
+
+    def __repr__(self):
+        return (f'<SupplySparePart(id={self.id!r}, spare_part_id={self.spare_part_id!r}, '
+                f'count={self.count_supply!r}, supply_dt={self.supply_dt!r})>')
 
 
 class User(Base):
