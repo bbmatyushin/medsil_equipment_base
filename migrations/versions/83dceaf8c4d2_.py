@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: e7a385d247eb
+Revision ID: 83dceaf8c4d2
 Revises: 
-Create Date: 2024-06-13 22:02:36.361265
+Create Date: 2024-06-15 15:20:47.655099
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "e7a385d247eb"
+revision: str = "83dceaf8c4d2"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -85,7 +85,7 @@ def upgrade() -> None:
             comment="True если прибор был поставлен МЕДСИЛ",
         ),
         sa.Column(
-            "usr_id",
+            "user_id",
             sa.UUID(),
             nullable=False,
             comment="id пользователя, добавившего запись",
@@ -108,7 +108,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["service_id"], ["service.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(["usr_id"], ["user.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         comment="Учёт оборудования. Основная таблица",
     )
@@ -165,6 +165,7 @@ def upgrade() -> None:
         ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("name"),
         comment="Должности сотрудников",
     )
     op.create_table(
@@ -258,7 +259,7 @@ def upgrade() -> None:
         sa.Column(
             "article",
             sa.String(length=50),
-            nullable=True,
+            nullable=False,
             comment="Артикул запчасти",
         ),
         sa.Column(
@@ -305,6 +306,9 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "name", "article", name="unq_spare_part_name_article"
+        ),
         comment="Запчасти для анализаторов",
     )
     op.create_table(
@@ -385,6 +389,9 @@ def upgrade() -> None:
         ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "surname", "name", "patron", name="unq_user_surname_name_patron"
+        ),
         comment="Таблица зарегистрированных пользователей",
     )
     op.create_table(
@@ -421,15 +428,13 @@ def upgrade() -> None:
             ["city_id"], ["cities.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("name", "inn", name="unq_client_name_inn"),
         comment="Таблица с информацией о клиентах (ЛПУ)",
     )
     op.create_table(
         "employee",
         sa.Column(
-            "usr_id", sa.UUID(), nullable=False, comment="ID пользователя"
-        ),
-        sa.Column(
-            "position_id", sa.UUID(), nullable=False, comment="ID должности"
+            "user_id", sa.UUID(), nullable=False, comment="ID пользователя"
         ),
         sa.Column(
             "is_active",
@@ -444,17 +449,14 @@ def upgrade() -> None:
             comment="Дата создания записи",
         ),
         sa.Column("id", sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["position_id"], ["position.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(["usr_id"], ["user.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         comment="Сотрудники",
     )
     op.create_table(
         "login_pass",
         sa.Column(
-            "usr_id", sa.UUID(), nullable=False, comment="ID пользователя"
+            "user_id", sa.UUID(), nullable=False, comment="ID пользователя"
         ),
         sa.Column(
             "login",
@@ -475,10 +477,10 @@ def upgrade() -> None:
             comment="Дата создания записи",
         ),
         sa.Column("id", sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(["usr_id"], ["user.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("login"),
-        sa.UniqueConstraint("usr_id"),
+        sa.UniqueConstraint("user_id"),
         comment="Таблица с логинами и паролями",
     )
     op.create_table(
@@ -542,6 +544,7 @@ def upgrade() -> None:
             ["city_id"], ["cities.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("inn"),
         sa.UniqueConstraint("name"),
         comment="Таблица с информацией о производителях",
     )
@@ -624,6 +627,8 @@ def upgrade() -> None:
             ["city_id"], ["cities.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("inn"),
+        sa.UniqueConstraint("name"),
         comment="Таблица с информацией о поставщиках",
     )
     op.create_table(
@@ -784,6 +789,24 @@ def upgrade() -> None:
         comment="Для фиксации отгрузки запчастей из офиса. Учитывается только количество запчастей, без указания для какого клиента.",
     )
     op.create_table(
+        "user_position",
+        sa.Column(
+            "emp_id", sa.UUID(), nullable=False, comment="ID сотрудника"
+        ),
+        sa.Column(
+            "position_id", sa.UUID(), nullable=False, comment="ID должности"
+        ),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["emp_id"], ["employee.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["position_id"], ["position.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("emp_id", "position_id", "id"),
+        comment="Должности сотрудников",
+    )
+    op.create_table(
         "dept_contact_pers",
         sa.Column(
             "department_id",
@@ -938,6 +961,7 @@ def downgrade() -> None:
     op.drop_table("equipment_spare_part")
     op.drop_table("equipment_acc_department")
     op.drop_table("dept_contact_pers")
+    op.drop_table("user_position")
     op.drop_table("shipment_spare_part")
     op.drop_table("equipment")
     op.drop_table("department")

@@ -1,11 +1,11 @@
 import uuid
 import asyncio
 import re
-from datetime import datetime, date
+from datetime import date
 
-from sqlalchemy import UUID, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date
+from sqlalchemy import UUID, String, TIMESTAMP, ForeignKey, Boolean, Date
 from sqlalchemy import func, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, configure_mappers
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from database import async_engine, async_session
@@ -52,9 +52,12 @@ class Cities(Base):
 
 class Client(Base):
     __tablename__ = "client"
-    __table_args__ = {'comment': 'Таблица с информацией о клиентах (ЛПУ)'}
+    __table_args__ = (
+        UniqueConstraint('name', 'inn', name='unq_client_name_inn'),
+        {'comment': 'Таблица с информацией о клиентах (ЛПУ)'}
+    )
 
-    name: Mapped[str] = mapped_column(String(150), nullable=False,  comment='Название клиента')
+    name: Mapped[str] = mapped_column(String(150), nullable=False, comment='Название клиента')
     inn: Mapped[str] = mapped_column(String(12), nullable=True, comment='ИНН клиента')
     city_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('cities.id', ondelete='CASCADE'),
                                                nullable=True, comment='Значение из таблицы cities.id')
@@ -174,7 +177,7 @@ class EquipmentAccounting(Base):
                                                   nullable=True, comment='id ремонта. Заполняется если оборудование было сдано в ремонте')
     is_service: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True, comment='True если прибор был обслужан МЕДСИЛ')
     is_our_supply: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True, comment='True если прибор был поставлен МЕДСИЛ')
-    usr_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
                                                nullable=False, comment='id пользователя, добавившего запись')
     create_dt: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, default=func.now(),
                                                  nullable=True, comment='дата и время добавления записи')
@@ -185,7 +188,9 @@ class EquipmentAccounting(Base):
     equipment_status: Mapped["EquipmentStatus"] = relationship(back_populates="equipment_accounting")
     equipment_acc_department: Mapped[list["EquipmentAccDepartment"]] = \
         relationship(back_populates="equipment_accounting")
-    service: Mapped[list["Service"]] = relationship(back_populates="equipment_accounting")
+    service: Mapped[list["Service"]] = relationship(back_populates="equipment_accounting",
+                                                    remote_side="Service.equipment_accounting_id",
+                                                    foreign_keys=[service_id])
 
     def __repr__(self):
         return f'EquipmentAccounting(id={self.id!r}, equipment_id={self.equipment_id!r}, ' \
@@ -211,7 +216,8 @@ class EquipmentAccDepartment(Base):
         relationship(back_populates='equipment_acc_department')
     department: Mapped["Department"] = relationship(back_populates='equipment_acc_department')
     employee: Mapped[list["Employee"]] = relationship(
-        back_populates='equipment_acc_department_emp', secondary="equipment_acc_department_emp"
+        back_populates='equipment_acc_department',
+        secondary="equipment_acc_department_emp"
     )
 
     def __repr__(self):
@@ -268,17 +274,14 @@ class Employee(Base):
     __tablename__ = 'employee'
     __table_args__ = {'comment': 'Сотрудники'}
 
-    usr_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
                                               nullable=False, comment='ID пользователя')
-    position_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('position.id', ondelete='CASCADE'),
-                                                   nullable=False, comment='ID должности')
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
                                             comment='True - сотрудник работает, False - сотрудник не работает')
     create_dt: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, default=func.now(), nullable=True, comment='Дата создания записи')
 
     # relationships
     user: Mapped["User"] = relationship(back_populates="employee")
-    position: Mapped["Position"] = relationship(back_populates="employee")
     equipment_acc_department: Mapped[list["EquipmentAccDepartment"]] = relationship(
         back_populates="employee", secondary="equipment_acc_department_emp"
     )
@@ -286,13 +289,12 @@ class Employee(Base):
     shipment_spare_part: Mapped[list["ShipmentSparePart"]] = relationship(back_populates="employee")
 
     # def __init__(self):
-    #     self.usr_id = uuid.uuid4()
-    #     self.position_id = uuid.uuid4()
+    #     self.user_id = uuid.uuid4()
     #     self.is_active = True
     #     self.create_dt = datetime.now()
 
     def __repr__(self):
-        return f'<Employee(usr_id={self.usr_id!r}, position_id={self.position_id!r}, ' \
+        return f'<Employee(user_id={self.user_id!r}, ' \
                f'is_active={self.is_active!r}, create_dt={self.create_dt!r})>'
 
 
@@ -300,7 +302,7 @@ class LoginPass(Base):
     __tablename__ = 'login_pass'
     __table_args__ = {"comment": "Таблица с логинами и паролями"}
 
-    usr_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
                                               unique=True, nullable=False, comment='ID пользователя')
     login: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, comment='Логин пользователя')
     password: Mapped[str] = mapped_column(String(32), nullable=False, comment='Пароль пользователя в шифрованном виде MD5')
@@ -314,7 +316,7 @@ class LoginPass(Base):
     #     self.password = password
 
     def __repr__(self):
-        return f'<LoginPass(usr_id={self.usr_id!r}, login={self.login!r}, password={self.password!r})>'
+        return f'<LoginPass(user_id={self.user_id!r}, login={self.login!r}, password={self.password!r})>'
 
 
 class Manufacturer(Base):
@@ -323,7 +325,7 @@ class Manufacturer(Base):
 
     name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True,
                                       comment='Название производителя')  # обязательное поле)
-    inn: Mapped[str] = mapped_column(String(12), nullable=True, comment='ИНН производителя')
+    inn: Mapped[str] = mapped_column(String(12), nullable=True, unique=True, comment='ИНН производителя')
     country: Mapped[str] = mapped_column(String(20), nullable=True, comment='Страна производителя')
     city_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('cities.id', ondelete='CASCADE'),
                                                comment='Значение из таблицы cities.id',
@@ -363,14 +365,17 @@ class Position(Base):
     __tablename__ = 'position'
     __table_args__ = {'comment': 'Должности сотрудников'}
 
-    name: Mapped[str] = mapped_column(String(100), nullable=False, comment='Название должности')
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, comment='Название должности')
     type: Mapped[str] = mapped_column(String(10), nullable=False,
                                       comment='company - должность для сотрудников компании, '
                                               'client - должность для клиентов')
 
     # relationships
-    employee: Mapped["Employee"] = relationship(back_populates="position")
     dept_contact_pers: Mapped["DeptContactPers"] = relationship(back_populates="position")
+    user: Mapped[list['User']] = relationship(
+        back_populates='position',
+        secondary='user_position'
+    )
 
     def __repr__(self):
         return f'<Position(id={self.id!r}, name={self.name!r})>'
@@ -382,9 +387,9 @@ class Service(Base):
 
     service_type_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('service_type.id', ondelete='CASCADE'),
                                                        nullable=False, comment='ID типа ремонта/вида работы')
-    equipment_accounting_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('equipment_accounting.id',
-                                                                                ondelete='CASCADE'),
-                                                               nullable=False, comment='ID учётного оборудования')
+    equipment_accounting_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('equipment_accounting.id', ondelete='CASCADE'),
+                      nullable=False, comment='ID учётного оборудования')
     description: Mapped[str] = mapped_column(String(300), nullable=True, comment='Описание ремонта, неисправности')
     reason: Mapped[str] = mapped_column(String(100), nullable=True, comment='На основании чего делается ремонт')
     job_content: Mapped[str] = mapped_column(String(300), nullable=True, comment='Содержание работ')
@@ -399,9 +404,13 @@ class Service(Base):
     spare_part: Mapped[list["SparePart"]] = relationship(
         back_populates="service", secondary="service_spare_part"
     )
-    service_type: Mapped["ServiceType"] = relationship(back_populates="service")
+    service_type: Mapped["ServiceType"] = relationship(
+        back_populates="service", foreign_keys=[service_type_id]
+    )
     employee: Mapped["Employee"] = relationship(back_populates="service")
-    equipment_accounting: Mapped["EquipmentAccounting"] = relationship(back_populates="service")
+    equipment_accounting: Mapped["EquipmentAccounting"] = relationship(
+        back_populates="service", foreign_keys=[equipment_accounting_id]
+    )
 
     def __repr__(self):
         return (f'<Service(id={self.id!r}, service_type_id={self.service_type_id!r}, '
@@ -466,9 +475,12 @@ class ShipmentSparePart(Base):
 
 class SparePart(Base):
     __tablename__ = "spare_part"
-    __table_args__ = {'comment': 'Запчасти для анализаторов'}
+    __table_args__ = (
+        UniqueConstraint('name', 'article', name='unq_spare_part_name_article'),
+        {'comment': 'Запчасти для анализаторов'}
+    )
 
-    article: Mapped[str] = mapped_column(String(50), nullable=True, comment='Артикул запчасти')
+    article: Mapped[str] = mapped_column(String(50), nullable=False, comment='Артикул запчасти')
     name: Mapped[str] = mapped_column(String(150), nullable=False, comment='Название запчасти')
     unit: Mapped[str] = mapped_column(String(10), nullable=True, comment='Единица измерения')
     spare_part_count_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('spare_part_count.id',
@@ -520,8 +532,8 @@ class Supplier(Base):
     __tablename__ = "supplier"
     __table_args__ = {'comment': 'Таблица с информацией о поставщиках'}
 
-    name: Mapped[str] = mapped_column(String(150), nullable=False, comment='Название поставщика')  # обязательное поле)
-    inn: Mapped[str] = mapped_column(String(12), nullable=True, comment='ИНН поставщика')
+    name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True, comment='Название поставщика')
+    inn: Mapped[str] = mapped_column(String(12), nullable=True, unique=True, comment='ИНН поставщика')
     country: Mapped[str] = mapped_column(String(20), nullable=True, comment='Страна поставщика')
     city_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey('cities.id', ondelete='CASCADE'),
                                                nullable=True, comment='Значение из таблицы cities.id')
@@ -564,12 +576,15 @@ class SupplySparePart(Base):
 
 class User(Base):
     __tablename__ = "user"
-    __table_args__ = {'comment': 'Таблица зарегистрированных пользователей'}
+    __table_args__ = (
+        UniqueConstraint('surname', 'name', 'patron', name='unq_user_surname_name_patron'),
+        {'comment': 'Таблица зарегистрированных пользователей'}
+    )
 
     surname: Mapped[str] = mapped_column(String(50), nullable=True, comment='Фамилия пользователя')
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment='Имя пользователя')
     patron: Mapped[str] = mapped_column(String(50), nullable=True, comment='Отчество пользователя')
-    sex: Mapped[int] = mapped_column( nullable=False, comment='Пол. 1 - мужчина, 2 - женщина')
+    sex: Mapped[int] = mapped_column(nullable=False, comment='Пол. 1 - мужчина, 2 - женщина')
     birth: Mapped[date] = mapped_column(Date, nullable=True, comment='Дата рождения')
     email: Mapped[str] = mapped_column(String(100), nullable=True, comment='Электронная почта')
     phone: Mapped[str] = mapped_column(String(50), nullable=True, comment='Телефон')
@@ -581,9 +596,31 @@ class User(Base):
     login_pass: Mapped["LoginPass"] = relationship(back_populates="user")
     employee: Mapped[list["Employee"]] = relationship(back_populates="user")
     equipment_accounting: Mapped[list["EquipmentAccounting"]] = relationship(back_populates="user")
+    position: Mapped[list['Position']] = relationship(
+        back_populates='user',
+        secondary='user_position'
+    )
 
     def __repr__(self):
         return f'<User(id={self.id!r}, name={self.name!r}, create_dt={self.create_dt!r})>'
+
+
+class UserPosition(Base):
+    """many-to-many связь между сотрудником и должностью.
+    У одного сотрудника может быть несколько должностей"""
+    __tablename__ = 'user_position'
+    __table_args__ = {'comment': 'Должности сотрудников'}
+
+    user_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('user.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='ID пользователя')
+    position_id: Mapped[uuid.UUID] = \
+        mapped_column(UUID, ForeignKey('position.id', ondelete='CASCADE'),
+                      primary_key=True, nullable=False, comment='ID должности')
+
+    def __repr__(self):
+        return (f'<UserPosition(id={self.id!r}, emp_id={self.user_id!r}, '
+                f'position_id={self.position_id!r})>')
 
 
 async def main():
@@ -606,7 +643,8 @@ async def add_manufacturer():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    configure_mappers()  # noqa для проверки моделей
+    # asyncio.run(main())
     # asyncio.run(add_manufacturer())
     # Employee().__init__()
     # Equipment().test()
