@@ -132,9 +132,9 @@ class Equipment(Base):
     __table_args__ = {'comment': 'Таблица с информацией об оборудование'}
 
     fullname: Mapped[str] = mapped_column(String(50), nullable=False, comment='Полное название оборудования')
-    shortname: Mapped[str] = mapped_column(String(20))
+    shortname: Mapped[str] = mapped_column(String(20), nullable=True, comment='Краткое название оборудования')
     med_directory_id: Mapped[int] = mapped_column(ForeignKey('med_directory.id',
-                                                                             ondelete='CASCADE'),
+                                                             ondelete='CASCADE'),
                                                   nullable=True, comment='ID направления')
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID,
                                                        ForeignKey('manufacturer.id',
@@ -188,9 +188,10 @@ class EquipmentAccounting(Base):
     equipment_status: Mapped["EquipmentStatus"] = relationship(back_populates="equipment_accounting")
     equipment_acc_department: Mapped[list["EquipmentAccDepartment"]] = \
         relationship(back_populates="equipment_accounting")
-    service: Mapped[list["Service"]] = relationship(back_populates="equipment_accounting",
-                                                    remote_side="Service.equipment_accounting_id",
-                                                    foreign_keys=[service_id])
+    service: Mapped[list["Service"]] = relationship(
+        back_populates="equipment_accounting",
+        primaryjoin="Service.equipment_accounting_id==EquipmentAccounting.id"
+    )
 
     def __repr__(self):
         return f'EquipmentAccounting(id={self.id!r}, equipment_id={self.equipment_id!r}, ' \
@@ -409,7 +410,9 @@ class Service(Base):
     )
     employee: Mapped["Employee"] = relationship(back_populates="service")
     equipment_accounting: Mapped["EquipmentAccounting"] = relationship(
-        back_populates="service", foreign_keys=[equipment_accounting_id]
+        back_populates="service",
+        # primaryjoin="Service.equipment_accounting_id==EquipmentAccounting.id",
+        foreign_keys=[equipment_accounting_id]
     )
 
     def __repr__(self):
@@ -501,7 +504,10 @@ class SparePart(Base):
     equipment: Mapped[list["Equipment"]] = relationship(
         back_populates="spare_part", secondary="equipment_spare_part",
     )
-    spare_part_count: Mapped[list["SparePartCount"]] = relationship(back_populates='spare_part')
+    spare_part_count: Mapped[list["SparePartCount"]] = relationship(
+        back_populates='spare_part',
+        foreign_keys=[spare_part_count_id],
+    )
     supply_spare_part: Mapped[list["SupplySparePart"]] = relationship(back_populates="spare_part")
     shipment_spare_part: Mapped[list["ShipmentSparePart"]] = relationship(back_populates="spare_part")
 
@@ -522,7 +528,10 @@ class SparePartCount(Base):
                                              comment='Флаг указывающий, что это текущее кол-во запчастей на данные момент')
 
     # relationships
-    spare_part: Mapped["SparePart"] = relationship(back_populates='spare_part_count')
+    spare_part: Mapped["SparePart"] = relationship(
+        back_populates='spare_part_count',
+        primaryjoin='SparePart.spare_part_count_id==SparePartCount.id',
+    )
 
     def __repr__(self):
         return f'<SparePartCount(id={self.id!r}, count={self.count!r}, is_current={self.is_current!r})>'
@@ -626,7 +635,7 @@ class UserPosition(Base):
 async def main():
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        # await conn.run_sync(Base.metadata.create_all)
 
 
 async def add_manufacturer():
@@ -643,8 +652,8 @@ async def add_manufacturer():
 
 
 if __name__ == '__main__':
-    configure_mappers()  # noqa для проверки моделей
-    # asyncio.run(main())
+    # configure_mappers()  # noqa для проверки моделей
+    asyncio.run(main())
     # asyncio.run(add_manufacturer())
     # Employee().__init__()
     # Equipment().test()
