@@ -9,6 +9,9 @@ from sqlalchemy.orm import DeclarativeBase, configure_mappers
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from database import async_engine, async_session
+from logger import get_logger
+
+logger = get_logger('Models')
 
 
 class Base(DeclarativeBase):
@@ -18,12 +21,15 @@ class Base(DeclarativeBase):
     def validate_fields(self, key, value):
         """Проверка правильности заполнения полей"""
         if key == 'inn':
-            value = re.sub(r'\s+', '', value)
-            if not value.isdigit():
-                raise ValueError(f'ИНН должен содержать только цифр: {value}')
-            if len(value) not in (10, 12):
-                raise ValueError(f'ИНН должен содержать 10 или 12 цифр: {value}')
-            return value
+            if value:
+                value = re.sub(r'\s+', '', value)
+                if not value.isdigit():
+                    logger.error(f'ИНН должен содержать только цифр: {value}')
+                    raise ValueError(f'ИНН должен содержать только цифр: {value}')
+                if len(value) not in (10, 12):
+                    logger.error(f'ИНН должен содержать 10 или 12 цифр: {value}')
+                    raise ValueError(f'ИНН должен содержать 10 или 12 цифр: {value}')
+                return value
 
         if key == 'kpp': ...
 

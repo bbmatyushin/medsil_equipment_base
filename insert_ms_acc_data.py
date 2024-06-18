@@ -21,7 +21,9 @@ async def get_id(name: Optional[str], table: DeclarativeAttributeIntercept) -> U
         async with session.begin():
             result_id = await session.execute(select(table.id).filter_by(name=name))
             id_value = result_id.scalar()
-        print(f"{id_value=}")
+        # print(f"{id_value=}")
+        if table.__name__ == 'Manufacturer' and id_value is None:
+            id_value = uuid.UUID('00000000-0000-0000-0000-000000000000')
         return id_value
 
 
@@ -79,6 +81,12 @@ async def insert_manufacturer():
                 except IntegrityError as err:
                     logger.error(err.orig)
 
+            async with session.begin():
+                # Добавляет производителя заглушку
+                null_name = Manufacturer(name='Не указано', is_active=True,
+                                         id=uuid.UUID('00000000-0000-0000-0000-000000000000'))
+                session.add(null_name)
+
 
 async def insert_supplier():
     """Добавляем поставщиков"""
@@ -103,28 +111,55 @@ async def insert_equipment():
     data_med_dir = await get_med_directory_name()
     async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
         async with async_session() as session:
-            async with session.begin():
-                async for line in f:
-                    equipment_data = json.loads(line)
-                    fullname = equipment_data.get('Название полное')
-                    shortname = equipment_data.get('Краткое название', None)
-                    med_dir_code = equipment_data.get('Направление', None)
-                    med_dir_name = data_med_dir.get(med_dir_code, None)
-                    med_directory_id = await get_id(name=med_dir_name, table=MedDirectory)
-                    manufacturer_id = await get_id(name=equipment_data.get('Производитель'), table=Manufacturer)
-                    supplier_id = await get_id(name=equipment_data.get('Поставщик'), table=Supplier)
-                    try:
-                        new_equipment = Equipment(fullname=fullname,
-                                                  shortname=shortname,
-                                                  med_directory_id=med_directory_id,
-                                                  manufacturer_id=manufacturer_id,
-                                                  supplier_id=supplier_id,
-                                                  )
-                        session.add(new_equipment)
-                    except IntegrityError as err:
-                        logger.error(err.orig)
-                        logger.error(f"{fullname=}, {med_directory_id=}, {manufacturer_id=}, {supplier_id=}")
-                await session.commit()
+            async for line in f:
+                try:
+                    async with session.begin():
+                        equipment_data = json.loads(line)
+                        fullname = equipment_data.get('Название полное')
+                        shortname = equipment_data.get('Краткое название', None)
+                        med_dir_code = equipment_data.get('Направление', None)
+                        med_dir_name = data_med_dir.get(med_dir_code, None)
+                        med_directory_id = await get_id(name=med_dir_name, table=MedDirectory)
+                        manufacturer_id = await get_id(name=equipment_data.get('Производитель'),
+                                                       table=Manufacturer)
+                        supplier_id = await get_id(name=equipment_data.get('Поставщик'), table=Supplier)
+                        try:
+                            new_equipment = Equipment(fullname=fullname,
+                                                      shortname=shortname,
+                                                      med_directory_id=med_directory_id,
+                                                      manufacturer_id=manufacturer_id,
+                                                      supplier_id=supplier_id,
+                                                      )
+                            session.add(new_equipment)
+                        except IntegrityError as err:
+                            logger.error(f"{err.orig=}")
+                            logger.error(f"{fullname=}, {med_directory_id=}, {manufacturer_id=}, {supplier_id=}")
+                except Exception as err:
+                    logger.error(f"{err=}")
+                    exit(1)
+
+
+async def insert_client():
+    """Добавляем клиентов из БД MS Access в новую БД"""
+    file_path = 'accembler_db/tables_json/клиент.json'
+    async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+        async with async_session() as session:
+            async for line in f:
+                data = json.loads(line)
+                try:
+                    async with session.begin():
+                        if data.get('Наименование'):
+                            new_row = Client(name=data.get('Наименование'),
+                                             inn=data.get('ИНН'))
+                            session.add(new_row)
+                except IntegrityError as err:
+                    logger.error(err.orig)
+
+
+async def insert_department():
+    """Добавляем подразделения из БД MS Access в новую БД"""
+    # TODO: Написать функцию для добавления подразделений
+    pass
 
 
 async def delete_data():
@@ -135,7 +170,10 @@ async def delete_data():
             # await session.execute(delete(MedDirectory))
             # await session.execute(delete(Manufacturer))
             # await session.execute(delete(Supplier))
-            await session.execute(delete(Equipment))
+            # await session.execute(delete(Client))
+
+            # await session.execute(delete(Equipment))
+            pass
 
 
 async def main():
@@ -144,17 +182,18 @@ async def main():
     # task2_insert_med_direction = asyncio.create_task(insert_med_direction())
     # task3_insert_manufacturer = asyncio.create_task(insert_manufacturer())
     # task4_insert_supplier = asyncio.create_task(insert_supplier())
+    # task5_insert_client = asyncio.create_task(insert_client())
 
     await delete_data()  # сначало будет удаление данных
 
     # await asyncio.gather(task1_insert_cities,
     #                      task2_insert_med_direction,
     #                      task3_insert_manufacturer,
-    #                      task4_insert_supplier
+    #                      task4_insert_supplier,
+    #                      task5_insert_client
     #                      )
-
-    await insert_equipment()
-
+    await insert_client()
+    # await insert_equipment()
 
 
 if __name__ == '__main__':
