@@ -17,6 +17,7 @@ logger = get_logger('INSERT_ACC')
 
 
 async def get_id(name: Optional[str], table: DeclarativeAttributeIntercept) -> Union[int, uuid.UUID]:
+    """Получаем id по имени из нашей БД"""
     async with async_session() as session:
         async with session.begin():
             result_id = await session.execute(select(table.id).filter_by(name=name))
@@ -25,6 +26,15 @@ async def get_id(name: Optional[str], table: DeclarativeAttributeIntercept) -> U
         if table.__name__ == 'Manufacturer' and id_value is None:
             id_value = uuid.UUID('00000000-0000-0000-0000-000000000000')
         return id_value
+
+
+async def get_name_by_code(code: int, file_path: str, ms_key: str) -> str:
+    """Функция принимает код и возвращает значение ключа ms_key в файле file_path из БД MS Access"""
+    async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+        async for line in f:
+            data = json.loads(line)
+            if data.get('Код') == code or data.get('КодКлиента') == code:
+                return data.get(ms_key)
 
 
 async def get_med_directory_name():
@@ -158,7 +168,106 @@ async def insert_client():
 
 async def insert_department():
     """Добавляем подразделения из БД MS Access в новую БД"""
-    # TODO: Написать функцию для добавления подразделений
+    file_path = 'accembler_db/tables_json/подразделение.json'
+    async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+        async with async_session() as session:
+            async for line in f:
+                data = json.loads(line)
+                try:
+                    async with session.begin():
+                        if data.get('Наименование'):
+                            name = data['Наименование']
+                            address = data.get('Адрес')
+                            city_code = data.get('Город')
+                            if city_code:
+                                city_path = 'accembler_db/tables_json/города.json'
+                                city_name = await get_name_by_code(code=city_code,
+                                                                   file_path=city_path,
+                                                                   ms_key='Город')
+                                city_uuid = await get_id(name=city_name, table=Cities)
+                            else:
+                                city_uuid = None
+                            client_code = data.get('Клиент')
+                            if client_code:
+                                client_path = 'accembler_db/tables_json/клиент.json'
+                                client_name = await get_name_by_code(code=client_code,
+                                                                     file_path=client_path,
+                                                                     ms_key='Наименование')
+                                client_uuid = await get_id(name=client_name, table=Client)
+                            else:
+                                client_uuid = None
+
+                            new_row = Department(name=name, client_id=client_uuid,
+                                                 city_id=city_uuid, address=address)
+                            session.add(new_row)
+                except IntegrityError as err:
+                    logger.error(err.orig)
+
+
+async def insert_position():
+    """Наполняем таблицу с должностями КЛИЕНТОВ"""
+    file_path = 'accembler_db/tables_json/контактные_лица.json'
+    async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+        async with async_session() as session:
+            async for line in f:
+                data = json.loads(line)
+                try:
+                    async with session.begin():
+                        if data.get('Должность'):
+                            new_row = Position(name=data.get('Должность'), type='client')
+                            session.add(new_row)
+                except IntegrityError as err:
+                    logger.error(err.orig)
+            async with session.begin():
+                # Удаляем должность 'зав.лаб', т.к. она дублируется с 'зав.лаб.'
+                await session.execute(delete(Position).filter_by(name='зав.лаб'))
+
+
+async def insert_deptcontactpers():
+    """Контактные лица подразделений"""
+    file_path = 'accembler_db/tables_json/контактные_лица.json'
+    async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+        async with async_session() as session:
+            async for line in f:
+                data = json.loads(line)
+                try:
+                    async with session.begin():
+                        surname = name = patron = mob_phone = work_phone = dept_uuid = None
+                        if data.get('ФИО'):
+                            fio = data['ФИО'].strip().split()
+                            if len(fio) == 3:
+                                surname, name, patron = map(str.strip, fio)
+                            elif len(fio) == 2:
+                                name, patron = map(str.strip, fio)
+                            else:
+                                name = fio[0].strip()
+                            position = 'зав.лаб.' if data.get('Должность') == 'зав.лаб' else data.get('Должность')
+                            position_uuid = await get_id(name=position, table=Position)
+                            if data.get('Телефон'):
+                                mob_phone = data['Телефон'] if data['Телефон'].startswith('+') \
+                                    else data['Телефон'] if data['Телефон'].startswith('8') \
+                                    else '+7' + data['Телефон']
+                            if data.get('Второй номер'):
+                                work_phone = data['Второй номер'] if data['Второй номер'].startswith('+') \
+                                    else data['Второй номер'] if data['Второй номер'].startswith('8') \
+                                    else '+7' + data['Второй номер']
+                            if data.get('Больница'):
+                                dept_path = 'accembler_db/tables_json/подразделение.json'
+                                dept_name = await get_name_by_code(code=data['Больница'],
+                                                                   file_path=dept_path,
+                                                                   ms_key='Наименование')
+                                dept_uuid = await get_id(name=dept_name, table=Department)
+                            comment = data['Примечание'] if data.get('Примечание') else None
+                            new_row = DeptContactPers(department_id=dept_uuid,
+                                                      name=name, surname=surname, patron=patron,
+                                                      position_id=position_uuid, mob_phone=mob_phone,
+                                                      work_phone=work_phone, comment=comment)
+                            session.add(new_row)
+                except IntegrityError as err:
+                    logger.error(err.orig)
+
+
+async def insert_spare_parts():  # TODO Добавить запчасти
     pass
 
 
@@ -171,20 +280,24 @@ async def delete_data():
             # await session.execute(delete(Manufacturer))
             # await session.execute(delete(Supplier))
             # await session.execute(delete(Client))
-
             # await session.execute(delete(Equipment))
+            # await session.execute(delete(Department))
+            # await session.execute(delete(Position))
+            # await session.execute(delete(DeptContactPers))
+            await session.execute(delete(SparePart))
             pass
 
 
 async def main():
     # task_delete_data = asyncio.create_task(delete_data())
+    await delete_data()  # сначало будет удаление данных
+
     # task1_insert_cities = asyncio.create_task(insert_cities())
     # task2_insert_med_direction = asyncio.create_task(insert_med_direction())
     # task3_insert_manufacturer = asyncio.create_task(insert_manufacturer())
     # task4_insert_supplier = asyncio.create_task(insert_supplier())
     # task5_insert_client = asyncio.create_task(insert_client())
 
-    await delete_data()  # сначало будет удаление данных
 
     # await asyncio.gather(task1_insert_cities,
     #                      task2_insert_med_direction,
@@ -192,8 +305,12 @@ async def main():
     #                      task4_insert_supplier,
     #                      task5_insert_client
     #                      )
-    await insert_client()
+    # await insert_client()
     # await insert_equipment()
+    # await insert_department()
+    # await insert_position()
+    # await insert_deptcontactpers()
+    await insert_spare_parts()
 
 
 if __name__ == '__main__':

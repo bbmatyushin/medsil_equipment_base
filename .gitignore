@@ -6,7 +6,7 @@ accembler_db/*accdb
 accembler_db/tables_csv/
 accembler_db/tables_json/
 ER-diagrams/.\$equipment_medsil.drawio.bkp
-migrations/versions/fd477713e243_.py
+migrations/versions/*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

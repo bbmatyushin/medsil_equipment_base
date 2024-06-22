@@ -370,15 +370,18 @@ class MedDirectory(Base):
 
 class Position(Base):
     __tablename__ = 'position'
-    __table_args__ = {'comment': 'Должности сотрудников'}
+    __table_args__ = (
+        UniqueConstraint('name', 'type', name='unique_name_type'),
+        {'comment': 'Должности сотрудников'}
+    )
 
-    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, comment='Название должности')
+    name: Mapped[str] = mapped_column(String(100), nullable=False, comment='Название должности')
     type: Mapped[str] = mapped_column(String(10), nullable=False,
                                       comment='company - должность для сотрудников компании, '
                                               'client - должность для клиентов')
 
     # relationships
-    dept_contact_pers: Mapped["DeptContactPers"] = relationship(back_populates="position")
+    dept_contact_pers: Mapped[list["DeptContactPers"]] = relationship(back_populates="position")
     user: Mapped[list['User']] = relationship(
         back_populates='position',
         secondary='user_position'
