@@ -9,6 +9,7 @@ sudo apt install mdbtools
 2. Создать директорию tables_json `mkdir accembler_db/tables_json`;
 3. Выполнить скрипт `python3 accembler_db/get_accdb_data.py`. После чего в директории tables_json таблицы будут представленны в виде json-файлов.
 
+---
 ### Ветка для построения моделей с помощью Django ORM
 
 
