@@ -1,4 +1,3 @@
-улучшение_класса_sqlalchemy.txt
 */*.db
 *.db
 .idea/
@@ -6,7 +5,7 @@ accembler_db/*accdb
 accembler_db/tables_csv/
 accembler_db/tables_json/
 ER-diagrams/.\$equipment_medsil.drawio.bkp
-migrations/versions/*.py
+ebase_site/ebase_site/*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
