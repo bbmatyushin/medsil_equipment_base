@@ -1,4 +1,4 @@
-<mxfile host="Electron" modified="2024-06-23T08:08:20.523Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.1 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="aXQ7KGvyDkbAWd5QD7qZ" version="24.5.1" type="device">
+<mxfile host="Electron" modified="2024-07-07T18:27:46.461Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.1 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="9uj1I9MGrs_FLgwxA5xN" version="24.5.1" type="device">
   <diagram id="R2lEEEUBdFMjLlhIrx00" name="Page-1">
     <mxGraphModel dx="2284" dy="1955" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0" extFonts="Permanent Marker^https://fonts.googleapis.com/css?family=Permanent+Marker">
       <root>
@@ -174,7 +174,7 @@
             <mxRectangle width="30" height="30" as="alternateBounds" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="lMJyeegf2vFTaAxQ_78F-97" value="is_service BOOLEAN | true если прибор был обслужан МЕДСИЛ" style="shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;align=left;spacingLeft=6;fontSize=13;" parent="lMJyeegf2vFTaAxQ_78F-95" vertex="1">
+        <mxCell id="lMJyeegf2vFTaAxQ_78F-97" value="is_our_service BOOLEAN | true если прибор был обслужан МЕДСИЛ" style="shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;align=left;spacingLeft=6;fontSize=13;" parent="lMJyeegf2vFTaAxQ_78F-95" vertex="1">
           <mxGeometry x="30" width="530" height="30" as="geometry">
             <mxRectangle width="530" height="30" as="alternateBounds" />
           </mxGeometry>
@@ -1823,9 +1823,6 @@
         <mxCell id="kxE5AuZ-NOVss_I3708C-58" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
           <mxGeometry x="-164.43" y="-580" width="25.57" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="kxE5AuZ-NOVss_I3708C-60" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
-          <mxGeometry x="389.99999999999994" y="-218" width="25.57" height="30" as="geometry" />
-        </mxCell>
         <mxCell id="EnR-oiWnpN2HKON65j5N-1" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
           <mxGeometry x="374.43" y="96" width="25.57" height="30" as="geometry" />
         </mxCell>
@@ -1837,9 +1834,6 @@
         </mxCell>
         <mxCell id="dGH10c2tyEcqLzRCcw3e-4" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
           <mxGeometry x="818.71" y="-945" width="25.57" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="CY3UOYMvysFZNTX4NIzW-1" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
-          <mxGeometry x="1010" y="65" width="25.57" height="30" as="geometry" />
         </mxCell>
         <mxCell id="lDg5u5kDcbs1FcL7efta-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.25;entryY=1;entryDx=0;entryDy=0;endArrow=ERmany;endFill=0;exitX=0.75;exitY=0;exitDx=0;exitDy=0;" parent="1" source="lMJyeegf2vFTaAxQ_78F-7" target="jtmxGdGq-ApD5k-u8g2U-1" edge="1">
           <mxGeometry relative="1" as="geometry">
@@ -1906,9 +1900,6 @@
         </mxCell>
         <mxCell id="lDg5u5kDcbs1FcL7efta-34" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
           <mxGeometry x="1700" y="-340" width="25.57" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="lDg5u5kDcbs1FcL7efta-35" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
-          <mxGeometry x="828" y="-120" width="25.57" height="30" as="geometry" />
         </mxCell>
         <mxCell id="lDg5u5kDcbs1FcL7efta-39" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
           <mxGeometry x="1260" y="-610" width="25.57" height="30" as="geometry" />
@@ -2020,9 +2011,6 @@
             <mxPoint x="560" y="10" as="sourcePoint" />
             <mxPoint x="610" y="95" as="targetPoint" />
           </mxGeometry>
-        </mxCell>
-        <mxCell id="cb9S6iOuMijL7sywJ5l5-9" value="" style="shape=image;html=1;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=1;aspect=fixed;image=img/clipart/Gear_128x128.png" parent="1" vertex="1">
-          <mxGeometry x="389.99999999999994" y="-391" width="25.57" height="30" as="geometry" />
         </mxCell>
         <mxCell id="9jBSX6xbYsGvZPdANN7m-4" value="supply_spare_part (поставка запчастей)" style="shape=table;startSize=30;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;fontSize=15;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
           <mxGeometry x="20" y="-890" width="380" height="190" as="geometry" />

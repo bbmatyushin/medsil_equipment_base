@@ -4,8 +4,12 @@
 accembler_db/*accdb
 accembler_db/tables_csv/
 accembler_db/tables_json/
+create_role.sql
 ER-diagrams/.\$equipment_medsil.drawio.bkp
+ER-diagrams/.\$equipment_medsil.drawio.dtmp
 ebase_site/ebase_site/*.py
+ebase_site/ebase/migrations/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
