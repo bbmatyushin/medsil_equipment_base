@@ -7,6 +7,7 @@ accembler_db/tables_json/
 create_role.sql
 ER-diagrams/.\$equipment_medsil.drawio.bkp
 ER-diagrams/.\$equipment_medsil.drawio.dtmp
+ER-diagrams/equipment_medsil.drawio
 ebase_site/ebase_site/*.py
 ebase_site/ebase/migrations/
 
