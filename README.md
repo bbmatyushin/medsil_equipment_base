@@ -13,5 +13,176 @@ sudo apt install mdbtools
 
 ---
 
+## Развертывания готового веб-приложения на Django на сервере Linux:
 
+#### Шаг 1: Подготовка сервера
+```shell
+sudo apt update
+sudo apt upgrade
+```
+#### Шаг 2: Установка необходимых компонентов
+```shell
+sudo apt install python3 python3-pip python3-venv
+```
+Установите PostgreSQL (или любую другую базу данных):
+```shell
+sudo apt install postgresql
+```
+#### Шаг 3: Подготовка приложения Django
+**Скопируйте приложение:** Скопируйте ваше Django приложение на сервер.\
+**Установите зависимости:** Перейдите в папку проекта и установите зависимости:
+```shell
+python3 -m venv venv && \
+source bin/venv/activate && \
+pip3 install -r requirements.txt
+```
+**Настройте базу данных:** Обновите настройки в settings.py вашего Django проекта для подключения к базе данных PostgreSQL.
+#### Шаг 4: Настройка сервера
+Создайте и примените миграции: Выполните миграции для создания таблиц в базе данных:
+``` shell
+python3 manage.py makemigrations
+python3 manage.py migrate
+```
+#### Шаг 5: Настройка веб-сервера
+**Установите и настройте Gunicorn:** Установите Gunicorn и создайте файл конфигурации, например, gunicorn_config.py.
+```shell
+pip3 install gunicorn
+```
+Файл конфигурации, для удобства, можно раположить, например, в корневой папке проекта рядом с settings.py.\
+Пример файла gunicorn_config.py:
+```python
+bind = "127.0.0.1:8000"
+workers = 3
+timeout = 30
+loglevel = "info"
+```
 
+**Настройте Nginx:** Установите Nginx.
+```shell
+sudo apt install nginx
+```
+Создайте файл конфигурации для вашего сайта. Обычно эти файлы располагаются в директории /etc/nginx/sites-available/.
+Назовите файл, например, myproject.\
+Откройте файл конфигурации myproject в текстовом редакторе и добавьте следующий конфигурационный блок:
+```conf
+server {
+    listen 80;
+    server_name your_domain_or_IP;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+* `listen 80;` - указывает Nginx слушать входящие запросы на порту 80.
+* `server_name your_domain_or_IP;` - замените your_domain_or_IP на ваш доменное имя или IP адрес сервера.
+* `proxy_pass http://127.0.0.1:8000;` - указывает Nginx перенаправлять запросы на Gunicorn, который работает на 127.0.0.1:8000.
+* Настройки `proxy_set_header` используются для передачи заголовков.
+Создайте символическую ссылку на ваш файл конфигурации в папке sites-enabled:
+```shell
+sudo ln -s /etc/nginx/sites-available/myproject /etc/nginx/sites-enabled/
+```
+Перезапустите Nginx для применения изменений:
+``` shell
+sudo systemctl restart nginx
+```
+После выполнения этих шагов, Nginx будет настроен для работы в связке с Gunicorn и веб-приложением Django будет доступно через Nginx по указанному доменному имени или IP адресу.
+
+#### Шаг 6: Запуск приложения
+**Запуск Gunicorn для Django приложения**\
+Перейдите в директорию вашего проекта Django. Запустите Gunicorn, указав путь к файлу WSGI вашего проекта. Например, если ваш файл WSGI называется myproject.wsgi, выполните:
+```shell
+gunicorn --config gunicorn_config.py myproject.wsgi
+```
+__Пример запуска Gunicorn__
+Если ваш проект Django находится в директории /home/user/myproject/, и ваш файл WSGI называется myproject.wsgi, то команда запуска Gunicorn будет выглядеть так:
+```shell
+gunicorn --bind 0.0.0.0:8000 myproject.wsgi
+```
+**Примечания**
+* `--bind 0.0.0.0:8000` указывает Gunicorn слушать все интерфейсы на порту 8000.
+* `myproject.wsgi` - это путь к файлу WSGI вашего Django проекта.
+* Параметры `workers`, `timeout`, `loglevel` в файле конфигурации могут быть настроены в зависимости от ваших потребностей.
+#### Шаг 7: Настройка брандмауэра
+**Настройте брандмауэр:** Если у вас есть брандмауэр, разрешите доступ к порту 80 (или другому порту, который использует Nginx) для входящих соединений.
+После завершения этих шагов ваше веб-приложение Django должно быть развернуто на сервере Linux и готово к использованию через веб-браузер.
+
+## Развертывания готового веб-приложения на Django в Docker:
+#### Шаг 1: Установка Docker
+Установите Docker на ваш виртуальный сервер. В большинстве случаев это можно сделать с помощью команд:
+```shell
+sudo apt update
+sudo apt install docker.io
+```
+#### Шаг 2: Создание Docker образа для Django приложения
+Создайте файл Dockerfile в корневой директории вашего Django проекта.
+В Dockerfile определите образ базового контейнера, установите зависимости, скопируйте приложение и выполните команды для подготовки приложения. Пример Dockerfile:
+```vim
+FROM python:3.8
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+```
+1. Необходимо создать конфигурационные файлы gunicorn_config.py и nginx.conf и поместить их в корневую директорию вашего проекта.
+2. В gunicorn_config.py укажите параметры для Gunicorn (примеры выше), а в nginx.conf настройки для Nginx.\
+```conf
+events {}
+
+http {
+    server {
+        listen 80;
+        server_name your_domain_or_IP;
+
+        location / {
+            proxy_pass http://django:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+#### Шаг 3: Docker-compose для Django, Gunicorn, Nginx и Postgres
+Создайте файл docker-compose.yml в корневой директории вашего проекта.\
+В файле docker-compose.yml определите сервисы для Django, Gunicorn, Nginx и Postgres. Пример docker-compose.yml:
+```yml
+version: '3'
+
+services:
+  django:
+    build: .
+    command: gunicorn --bind 0.0.0.0:8000 myproject.wsgi
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:password@db:5432/mydatabase
+
+  db:
+    image: postgres
+    environment:
+      POSTGRES_DB: mydatabase
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+
+  nginx:
+    image: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - django
+```
+##### Запустите Docker-Compose из корневой директории вашего проекта:
+```shell
+sudo docker-compose up
+```
