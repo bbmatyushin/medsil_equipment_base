@@ -2,7 +2,8 @@ import uuid
 from enum import Enum
 
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
+from django.contrib.postgres.fields import ArrayField
 
 
 class PositionType(Enum):
@@ -13,7 +14,7 @@ class PositionType(Enum):
 
 class EbaseModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
-                          verbose_name='UUID', db_comment='UUID записи', help_text='UUID записи')
+                          verbose_name='ID', db_comment='ID записи', help_text='ID записи')
     create_dt = models.DateTimeField(
         auto_now_add=True, editable=False, verbose_name='Дата создания записи',
         db_comment='Дата создания записи.',
@@ -22,6 +23,45 @@ class EbaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class CompanyUser(AbstractUser):
+    """Модель пользователя."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
+                          verbose_name='ID', db_comment='ID пользователя',
+                          help_text='ID пользователя')
+    patron = models.CharField(
+        max_length=50, null=True, blank=True, verbose_name='Отчество',
+        db_comment='Отчество', help_text='Отчество'
+    )
+    sex = models.CharField(
+        max_length=1, null=True, blank=True, verbose_name='Пол',
+        db_comment='Пол', help_text='Пол', choices=[('1', 'Мужской'), ('2', 'Женский')]
+    )
+    birth = models.DateField(
+        null=True, blank=True, verbose_name='Дата рождения',
+        db_comment='Дата рождения', help_text='Дата рождения'
+    )
+    phone = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='Телефон',
+        db_comment='Телефон', help_text='Телефоны, до 100 символов.'
+    )
+    equipment_acc_department = models.ManyToManyField(
+        'EquipmentAccDepartment', on_delete=models.RESTRICT, null=False,
+        related_name='company_user_equipment_acc_department',
+        verbose_name='Учет поставленного оборудования',
+        db_comment='Учет поставленного оборудования', help_text='Учет поставленного оборудования'
+    )
+
+
+    class Meta:
+        db_table = 'company_user'
+        db_table_comment = 'Таблица с пользователями. \n\n-- BMatyushin'
+        verbose_name = 'Пользователь'
+        verbose_name_plural = 'Пользователи'
+
+    def __repr__(self):
+        return f"<CompanyUser {self.username=!r}>"
 
 
 class City(EbaseModel):
@@ -182,18 +222,18 @@ class Equipment(EbaseModel):
     ),
     med_direction = models.ForeignKey(
         "MedDirection", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_med_equipment", verbose_name="UUID Направления",
-        db_comment="UUID направления", help_text="UUID из таблицы Направления."
+        related_name="equipment_med_equipment", verbose_name="ID Направления",
+        db_comment="ID направления", help_text="ID из таблицы Направления."
     )
     manufacturer = models.ForeignKey(
         "Manufacturer", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_manufacturer", verbose_name="UUID Производителя",
-        db_comment="UUID производителя", help_text="UUID из таблицы Производителя."
+        related_name="equipment_manufacturer", verbose_name="ID Производителя",
+        db_comment="ID производителя", help_text="ID из таблицы Производителя."
     )
     supplier = models.ForeignKey(
         "Supplier", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_supplier", verbose_name="UUID Поставщика",
-        db_comment="UUID поставщика", help_text="UUID из таблицы Поставщика."
+        related_name="equipment_supplier", verbose_name="ID Поставщика",
+        db_comment="ID поставщика", help_text="ID из таблицы Поставщика."
     )
 
     class Meta:
@@ -206,29 +246,64 @@ class Equipment(EbaseModel):
         return f'<Equipment {self.full_name=!r}>'
 
 
+class EquipmentAccDepartment(EbaseModel):
+    """Учет поставленного оборудования в подразделения клиента.
+    Для полей с автоматическим заполнением, обязательно editable=False"""
+    equipment_accounting = models.ForeignKey(
+        'EquipmentAccounting', on_delete=models.RESTRICT, null=False, editable=False,
+        related_name='equipment_acc_department_equipment_accounting',
+        verbose_name='ID Учёта оборудования', db_comment="ID Учёта оборудования",
+        help_text="ID Учёта оборудования. Заполняется автоматически"
+    )
+    department = models.ForeignKey(
+        'Department', on_delete=models.RESTRICT, null=False, editable=False,
+        related_name='equipment_accounting_department_department', verbose_name='ID Подразделения',
+        db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
+    )
+    user = models.ManyToManyField(
+        'CompanyUser', on_delete=models.RESTRICT, null=False, editable=False,
+        related_name='equipment_accounting_company_user', verbose_name='ID сотрудника',
+        db_comment="ID сотрудника", help_text="ID сотрудника. Заполняется автоматически"
+    )
+    is_active = models.BooleanField(
+        default=True, verbose_name='У клиента',
+        db_comment='Флаг, указывающий на то, что прибор установлен в подразделении клиента',
+        help_text='Флаг, указывающий на то, что прибор установлен в подразделении клиента'
+    )
+
+    class Meta:
+        db_table = 'equipment_acc_department'
+        db_table_comment = 'Учет поставленного оборудования в подразделения клиента.\n\n-- BMatyushin'
+        verbose_name = 'Учет поставленного оборудования'
+        verbose_name_plural = 'Учет поставленного оборудования'
+        
+    def __repr__(self):
+        return f"<EquipmentAccDepartment {self.id=!r}, {self.is_active=!r}>"
+
+
 class EquipmentAccounting(EbaseModel):
     """Модель для учета оборудований.
     Для полей с автоматическим заполнением, обязательно editable=False"""
     equipment = models.ForeignKey(
         'Equipment', on_delete=models.RESTRICT, null=False, editable=False,
-        related_name='equipment_accounting_equipment', verbose_name='UUID Оборудования',
-        db_comment="UUID оборудования", help_text="UUID оборудования. Заполняется автоматически"
+        related_name='equipment_accounting_equipment', verbose_name='ID Оборудования',
+        db_comment="ID оборудования", help_text="ID оборудования. Заполняется автоматически"
     )
     equipment_status = models.ForeignKey(
         'EquipmentStatus', on_delete=models.SET_NULL, null=True, editable=True,
         related_name='equipment_accounting_equipment_status',
-        verbose_name='UUID Статус оборудования', db_comment="UUID статуса оборудования",
-        help_text="UUID статуса оборудования"
+        verbose_name='ID Статус оборудования', db_comment="ID статуса оборудования",
+        help_text="ID статуса оборудования"
     )
-    # TODO: добавить модель Service
-    # service = models.ForeignKey(
-    #     'Service', on_delete=models.CASCADE, null=True,
-    #     related_name='equipment_accounting_service', verbose_name='UUID Ремонта',
-    #     db_comment='Заполняется, если оборудование было сдано в ремонт',
-    #     help_text='Заполняется, если оборудование было сдано в ремонт'
-    # )
+    service = models.ManyToManyField(
+        'Service', on_delete=models.SET_DEFAULT, default=uuid.UUID(int=0), null=False,
+        related_name='equipment_accounting_service', verbose_name='ID Ремонта',
+        db_comment=('Заполняется, если оборудование было сдано в ремонт.'
+                    'При удалении записи из таблицы service заполняется "00000000-0000-0000-0000-000000000000"'),
+        help_text='Заполняется, если оборудование было сдано в ремонт'
+    )
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, editable=False,
+        "CompanyUser", on_delete=models.SET_NULL, null=True, editable=False,
         related_name='equipment_accounting_user', verbose_name='Пользователь',
         db_comment='Пользователь, который добавил запись в таблицу "Учёт оборудования"',
         help_text=('Пользователь, который добавил запись в таблицу "Учёт оборудования". '
@@ -371,6 +446,117 @@ class Position(models.Model):
 
     def __repr__(self):
         return f'<Position {self.name=!r}>'
+
+
+class Service(EbaseModel):
+    """Таблица для учета поступившего на ремонт оборудования."""
+    service_type = models.ForeignKey(
+        "ServiceType", on_delete=models.SET_NULL, null=True,
+        related_name="service_service_type", verbose_name='ID Типа ремонта',
+        db_comment='ID Типа ремонта', help_text='ID Типа ремонта из таблицы "Тип ремонта"'
+    )
+    user = models.ForeignKey(
+        "CompanyUser", on_delete=models.SET_NULL, null=False,
+        related_name="service_company_user", verbose_name='ID Пользователя',
+        db_comment='ID Пользователя (сотрудника)',
+        help_text='ID Пользователя (сотрудника) из таблицы "Пользователи"'
+    )
+    description = models.TextField(
+        null=True, blank=True, verbose_name='Описание неисправности',
+        db_comment='Описание неисправности', help_text='Описание неисправности'
+    )
+    reason = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='Причина',
+        db_comment='На основании чего делается ремонт',
+        help_text='На основании чего делается ремонт'
+    )
+    job_content = models.TextField(
+        null=True, blank=True, verbose_name='Содержание работ',
+        db_comment='Содержание работ', help_text='Содержание работ'
+    )
+    beg_dt = models.DateField(
+        auto_now_add=True, editable=False, verbose_name='Дата начала ремонта',
+        db_comment='Дата начала ремонта', help_text='Дата начала ремонта'
+    )
+    end_dt = models.DateField(
+        null=True, blank=True, verbose_name='Дата окончания ремонта',
+        db_comment='Дата окончания ремонта', help_text='Дата окончания ремонта'
+    )
+    comment = models.TextField(
+        null=True, blank=True, verbose_name='Комментарии',
+        db_comment='Примечание, комментарии по ремонту',
+        help_text='Примечание, комментарии по ремонту'
+    )
+    equipment_accounting = models.ManyToManyField(
+        "EquipmentAccounting", on_delete=models.SET_DEFAULT, default=uuid.UUID(int=0),
+        null=False, related_name="service_equipment_accounting",
+        verbose_name='ID учтённого оборудования',
+        db_comment=("ID учтённого оборудования. При удалении записи из таблицы equipment_accounting,"
+                    "будет значение '00000000-0000-0000-0000-000000000000'"),
+        help_text="ID учтённого оборудования. Заполняется автоматически"
+    )
+
+    class Meta:
+        db_table = 'service'
+        db_table_comment = 'Учет ремонта оборудования. \n\n-- BMatyushin'
+        verbose_name = 'Учет ремонта оборудования'
+        verbose_name_plural = 'Учет ремонта оборудования'
+
+    def __repr__(self):
+        return f'<Service {self.id=!r}, {self.user=!r}>'
+
+
+class ServiceType(models.Model):
+    """Типы ремонта / Виды работ"""
+    name = models.CharField(
+        max_length=50, null=False, blank=False, verbose_name='Тип ремонта',
+        db_comment='Тип ремонта', help_text='Тип ремонта'
+    )
+
+    class Meta:
+        db_table = 'service_type'
+        db_table_comment = 'Типы ремонтов / Виды работ. \n\n-- BMatyushin'
+        verbose_name = 'Тип ремонта'
+        verbose_name_plural = 'Типы ремонтов'
+
+    def __repr__(self):
+        return f'<ServiceType {self.name=!r}>'
+
+
+class SparePart(EbaseModel):
+    """Запчасти."""
+    article = models.CharField(
+        max_length=50, null=True, blank=True, verbose_name='Артикул',
+        db_comment='Артикул', help_text='Артикул'
+    )
+    name = models.CharField(
+        max_length=100, null=False, blank=False,verbose_name='Наименование',
+        db_comment='Наименование запчасти', help_text='Наименование запчасти'
+    )
+    unit = models.ForeignKey(
+        "Unit", on_delete=models.RESTRICT, null=False,
+        related_name="spare_part_unit", verbose_name='Единица измерения',
+        db_comment='Единица измерения', help_text='Единица измерения'
+    )
+    comment = models.TextField(
+        null=True, blank=True, verbose_name='Примечание',
+        db_comment='Примечание к запчасти', help_text='Примечание к запчасти'
+    )
+    is_expiration = models.BooleanField(
+        default=False, verbose_name='Срок годности',
+        db_comment='Отмечаются запчасти со сроками годности',
+        help_text='Флаг указывающий, что у запчасти должен быть срок годности'
+    )
+
+    class Meta:
+        db_table = 'spare_part'
+        db_table_comment = 'Справочник запчастей. \n\n-- BMatyushin'
+        verbose_name = 'Справочник запчастей'
+        verbose_name_plural = 'Справочник запчастей'
+        unique_together = ('article', 'name',)
+
+    def __repr__(self):
+        return f'<SparePart {self.name=!r}>'
 
 
 class Supplier(EbaseModel):

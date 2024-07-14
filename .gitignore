@@ -5,9 +5,10 @@ accembler_db/*accdb
 accembler_db/tables_csv/
 accembler_db/tables_json/
 create_role.sql
-ER-diagrams/.\$equipment_medsil.drawio.bkp
-ER-diagrams/.\$equipment_medsil.drawio.dtmp
+ER-diagrams/*.drawio.bkp
+ER-diagrams/*.drawio.dtmp
 ER-diagrams/equipment_medsil.drawio
+ER-diagrams/equipment_medsil_dj_orm.drawio
 ebase_site/ebase_site/*.py
 ebase_site/ebase/migrations/
 
