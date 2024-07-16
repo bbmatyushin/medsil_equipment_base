@@ -6,6 +6,8 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.fields import ArrayField
 
 
+company = '"medsil"'  # название схемы для таблиц
+
 class PositionType(Enum):
     """Тип должности."""
     EMPLOYEE = 'Сотрудник'
@@ -47,12 +49,10 @@ class CompanyUser(AbstractUser):
         db_comment='Телефон', help_text='Телефоны, до 100 символов.'
     )
     equipment_acc_department = models.ManyToManyField(
-        'EquipmentAccDepartment', on_delete=models.RESTRICT, null=False,
-        related_name='company_user_equipment_acc_department',
+        'EquipmentAccDepartment', related_name='company_user_equipment_acc_department',
         verbose_name='Учет поставленного оборудования',
         db_comment='Учет поставленного оборудования', help_text='Учет поставленного оборудования'
     )
-
 
     class Meta:
         db_table = 'company_user'
@@ -76,7 +76,7 @@ class City(EbaseModel):
     )
 
     class Meta:
-        db_table = 'city'
+        db_table = f'{company}."city"'
         db_table_comment = 'Таблица с перечнем городов. \n\n-- BMatyushin'
         verbose_name = 'Город'
         verbose_name_plural = 'Города'
@@ -110,7 +110,7 @@ class Client(EbaseModel):
     )
 
     class Meta:
-        db_table = 'client'
+        db_table = f'{company}."client"'
         db_table_comment = 'Таблица с перечнем клиентов. \n\n-- BMatyushin'
         verbose_name = 'Клиент'
         verbose_name_plural = 'Клиенты'
@@ -141,7 +141,7 @@ class Department(EbaseModel):
     )
 
     class Meta:
-        db_table = 'department'
+        db_table = f'{company}."department"'
         db_table_comment = 'Подразделения, филиаы клиентов.\n\n-- BMatyushin'
         verbose_name = 'Подразделение / Филиал'
         verbose_name_plural = 'Подразделения / Филиалы'
@@ -199,7 +199,7 @@ class DeptContactPers(EbaseModel):
     )
 
     class Meta:
-        db_table = 'dept_contact_pers'
+        db_table = f'{company}."dept_contact_pers"'
         db_table_comment = 'Контактные лица подразделения.\n\n-- BMatyushin'
         verbose_name = 'Контактное лицо подразделения'
         verbose_name_plural = 'Контактные лица подразделения'
@@ -235,9 +235,13 @@ class Equipment(EbaseModel):
         related_name="equipment_supplier", verbose_name="ID Поставщика",
         db_comment="ID поставщика", help_text="ID из таблицы Поставщика."
     )
+    spare_part = models.ManyToManyField(
+        "SparePart", related_name="equipment_spare_part", verbose_name="ID Запасных частей",
+        db_comment="ID запасных частей", help_text="ID из таблицы Запасных частей."
+    )
 
     class Meta:
-        db_table = 'equipment'
+        db_table = f'{company}."equipment"'
         db_table_comment = "Перечень моделей медициского оборудования.\n\n-- BMatyushin"
         verbose_name = 'Медицинское оборудование'
         verbose_name_plural = 'Медицинских оборудований'
@@ -261,9 +265,10 @@ class EquipmentAccDepartment(EbaseModel):
         db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
     )
     user = models.ManyToManyField(
-        'CompanyUser', on_delete=models.RESTRICT, null=False, editable=False,
-        related_name='equipment_accounting_company_user', verbose_name='ID сотрудника',
-        db_comment="ID сотрудника", help_text="ID сотрудника. Заполняется автоматически"
+        'CompanyUser', verbose_name='ID инженера',
+        related_name='equipment_accounting_company_user',
+        db_comment="ID сотрудника-ИНЖНЕРА, который запускал оборудование",
+        help_text="ID сотрудника-ИНЖНЕРА, который запускал оборудование. Заполняется автоматически"
     )
     is_active = models.BooleanField(
         default=True, verbose_name='У клиента',
@@ -272,7 +277,7 @@ class EquipmentAccDepartment(EbaseModel):
     )
 
     class Meta:
-        db_table = 'equipment_acc_department'
+        db_table = f'{company}."equipment_acc_department"'
         db_table_comment = 'Учет поставленного оборудования в подразделения клиента.\n\n-- BMatyushin'
         verbose_name = 'Учет поставленного оборудования'
         verbose_name_plural = 'Учет поставленного оборудования'
@@ -296,8 +301,7 @@ class EquipmentAccounting(EbaseModel):
         help_text="ID статуса оборудования"
     )
     service = models.ManyToManyField(
-        'Service', on_delete=models.SET_DEFAULT, default=uuid.UUID(int=0), null=False,
-        related_name='equipment_accounting_service', verbose_name='ID Ремонта',
+        'Service', related_name='equipment_accounting_service', verbose_name='ID Ремонта',
         db_comment=('Заполняется, если оборудование было сдано в ремонт.'
                     'При удалении записи из таблицы service заполняется "00000000-0000-0000-0000-000000000000"'),
         help_text='Заполняется, если оборудование было сдано в ремонт'
@@ -330,7 +334,7 @@ class EquipmentAccounting(EbaseModel):
     )
 
     class Meta:
-        db_table = 'equipment_accounting'
+        db_table = f'{company}."equipment_accounting"'
         indexes = [
             models.Index(fields=['serial_number'], name='serial_number_idx'),
         ]
@@ -351,7 +355,7 @@ class EquipmentStatus(models.Model):
     )
 
     class Meta:
-        db_table = 'equipment_status'
+        db_table = f'{company}."equipment_status"'
         db_table_comment = 'Таблица с набором статусов оборудования. \n\n-- BMatyushin'
         verbose_name = 'Статус оборудования'
         verbose_name_plural = 'Статусы оборудований'
@@ -398,7 +402,7 @@ class Manufacturer(EbaseModel):
     )
 
     class Meta:
-        db_table = 'manufacturer'
+        db_table = f'{company}."manufacturer"'
         db_table_comment = 'Производители оборудования. \n\n-- BMatyushin'
         verbose_name = 'Производитель оборудования'
         verbose_name_plural = 'Производители оборудований'
@@ -416,7 +420,7 @@ class MedDirection(models.Model):
     )
 
     class Meta:
-        db_table = 'med_direction'
+        db_table = f'{company}."med_direction"'
         db_table_comment = ('Направления медицинского оборудования (Гематологическое, Биохимическое и т.д.).'
                             '\n\n-- BMatyushin')
         verbose_name = 'Направление мед.оборудования'
@@ -434,12 +438,12 @@ class Position(models.Model):
     )
     type = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Тип',
-        choices=[t.value for t in PositionType], db_comment='Тип должности',
+        choices=[(t.value, t.name) for t in PositionType], db_comment='Тип должности',
         help_text='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений'
     )
 
     class Meta:
-        db_table = 'position'
+        db_table = f'{company}."position"'
         db_table_comment = 'Должности сотрудников и клиентов. \n\n-- BMatyushin'
         verbose_name = 'Должность'
         verbose_name_plural = 'Должности'
@@ -456,7 +460,7 @@ class Service(EbaseModel):
         db_comment='ID Типа ремонта', help_text='ID Типа ремонта из таблицы "Тип ремонта"'
     )
     user = models.ForeignKey(
-        "CompanyUser", on_delete=models.SET_NULL, null=False,
+        "CompanyUser", on_delete=models.RESTRICT, null=False,
         related_name="service_company_user", verbose_name='ID Пользователя',
         db_comment='ID Пользователя (сотрудника)',
         help_text='ID Пользователя (сотрудника) из таблицы "Пользователи"'
@@ -488,16 +492,17 @@ class Service(EbaseModel):
         help_text='Примечание, комментарии по ремонту'
     )
     equipment_accounting = models.ManyToManyField(
-        "EquipmentAccounting", on_delete=models.SET_DEFAULT, default=uuid.UUID(int=0),
-        null=False, related_name="service_equipment_accounting",
+        "EquipmentAccounting", related_name="service_equipment_accounting",
         verbose_name='ID учтённого оборудования',
-        db_comment=("ID учтённого оборудования. При удалении записи из таблицы equipment_accounting,"
-                    "будет значение '00000000-0000-0000-0000-000000000000'"),
         help_text="ID учтённого оборудования. Заполняется автоматически"
+    )
+    spare_part = models.ManyToManyField(
+        "SparePart", related_name="service_spare_part", verbose_name='ID запчасти',
+        help_text="ID запчасти"
     )
 
     class Meta:
-        db_table = 'service'
+        db_table = f'{company}."service"'
         db_table_comment = 'Учет ремонта оборудования. \n\n-- BMatyushin'
         verbose_name = 'Учет ремонта оборудования'
         verbose_name_plural = 'Учет ремонта оборудования'
@@ -514,7 +519,7 @@ class ServiceType(models.Model):
     )
 
     class Meta:
-        db_table = 'service_type'
+        db_table = f'{company}."service_type"'
         db_table_comment = 'Типы ремонтов / Виды работ. \n\n-- BMatyushin'
         verbose_name = 'Тип ремонта'
         verbose_name_plural = 'Типы ремонтов'
@@ -534,7 +539,7 @@ class SparePart(EbaseModel):
         db_comment='Наименование запчасти', help_text='Наименование запчасти'
     )
     unit = models.ForeignKey(
-        "Unit", on_delete=models.RESTRICT, null=False,
+        "Unit", on_delete=models.RESTRICT, null=False, default=1,
         related_name="spare_part_unit", verbose_name='Единица измерения',
         db_comment='Единица измерения', help_text='Единица измерения'
     )
@@ -547,9 +552,18 @@ class SparePart(EbaseModel):
         db_comment='Отмечаются запчасти со сроками годности',
         help_text='Флаг указывающий, что у запчасти должен быть срок годности'
     )
+    equipment = models.ManyToManyField(
+        "Equipment", related_name="spare_part_equipment", verbose_name='ID Оборудования',
+        db_comment="ID оборудования, для которого предназначена эта запчасть",
+        help_text="ID оборудования, для которого предназначена эта запчасть"
+    )
+    service = models.ManyToManyField(
+        "Service", related_name="spare_part_service", verbose_name='ID Ремонта',
+        help_text="ID ремонта, в котором использовалась запчасть"
+    )
 
     class Meta:
-        db_table = 'spare_part'
+        db_table = f'{company}."spare_part"'
         db_table_comment = 'Справочник запчастей. \n\n-- BMatyushin'
         verbose_name = 'Справочник запчастей'
         verbose_name_plural = 'Справочник запчастей'
@@ -597,11 +611,32 @@ class Supplier(EbaseModel):
     )
 
     class Meta:
-        db_table = 'supplier'
+        db_table = f'{company}."supplier"'
         db_table_comment = 'Поставщики оборудования. \n\n-- BMatyushin'
         verbose_name = 'Поставщик оборудования'
         verbose_name_plural = 'Поставщики оборудования'
 
     def __repr__(self):
         return f'<Supplier {self.name=!r}, {self.city=!r}>'
+
+
+class Unit(models.Model):
+    """Единицы измерения."""
+    short_name = models.CharField(
+        max_length=50, null=False, blank=False, verbose_name='Наименование',
+        db_comment='Единица измерения', help_text='Единица измерения'
+    )
+    full_name = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='Полное наименование',
+        db_comment='Полное наименование единицы измерения', help_text='Полное наименование единицы измерения'
+    )
+
+    class Meta:
+        db_table = f'{company}."unit"'
+        db_table_comment = 'Справочник с единицами измерения. \n\n-- BMatyushin'
+        verbose_name = 'Единица измерения'
+        verbose_name_plural = 'Единицы измерения'
+
+    def __repr__(self):
+        return f'<Unit {self.name=!r}>'
 
