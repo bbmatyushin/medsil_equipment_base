@@ -573,6 +573,74 @@ class SparePart(EbaseModel):
         return f'<SparePart {self.name=!r}>'
 
 
+class SparePartShipment(EbaseModel):
+    """Отслеживание отгрузок запчастей"""
+    spare_part = models.ForeignKey(
+        'SparePart', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="spare_part_shipment_spare_part", verbose_name='ID запчасти',
+        db_comment="ID запчасти", help_text="ID запчасти"
+    )
+    count_shipment = models.FloatField(
+        verbose_name='Кол-во', db_comment='Кол-во отгруженной запчасти',
+        help_text='Кол-во отгруженной запчасти', null=False, blank=False,
+    )
+    expiration_dt = models.DateField(
+        null=True, blank=True, verbose_name='Годен до',
+        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
+        help_text='Годен до. Срок годности для запчастей со сроком годности.',
+    )
+    shipment_dt = models.DateField(
+        null=False, blank=False, verbose_name='Дата отгрузки',
+        db_comment='Дата отгрузки', help_text='Дата отгрузки.'
+    )
+    user = models.ForeignKey(
+        'CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name='spare_part_shipment_company_user', verbose_name='ID инженера',
+        db_comment="ID сотрудника-ИНЖНЕРА, который запускал оборудование",
+        help_text="ID сотрудника-ИНЖНЕРА, который запускал оборудование. Заполняется автоматически"
+    )
+
+    class Meta:
+        db_table = f'{company}."spare_part_shipment"'
+        db_table_comment = 'Отслеживание отгрузок запчастей. \n\n-- BMatyushin'
+        verbose_name = 'Отгрузка запчастей'
+        verbose_name_plural = 'Отгрузки запчастей'
+
+    def __repr__(self):
+        return f"<SparePartShipment: {self.spare_part=!r}, {self.count_shipment=!r}>"
+
+
+class SparePartSupply(EbaseModel):
+    """Отслеживание поставок запчастей"""
+    spare_part = models.ForeignKey(
+        'SparePart', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="spare_part_supply_spare_part", verbose_name='ID запчасти',
+        db_comment="ID запчасти", help_text="ID запчасти"
+    )
+    count_supply = models.FloatField(
+        verbose_name='Кол-во', db_comment='Кол-во поставленой запчасти',
+        help_text='Кол-во поставленой запчасти', null=False, blank=False,
+    )
+    expiration_dt = models.DateField(
+        null=True, blank=True, verbose_name='Годен до',
+        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
+        help_text='Годен до. Срок годности для запчастей со сроком годности.',
+    )
+    supply_dt = models.DateField(
+        null=False, blank=False, verbose_name='Дата поставки',
+        db_comment='Дата поставки', help_text='Дата поставки.'
+    )
+
+    class Meta:
+        db_table = f'{company}."spare_part_supply"'
+        db_table_comment = 'Отслеживание поставок запчастей. \n\n-- BMatyushin'
+        verbose_name = 'Поставка запчастей'
+        verbose_name_plural = 'Поставки запчастей'
+
+    def __repr__(self):
+        return f"<SparePartSupply: {self.spare_part=!r}, {self.count_supply=!r}>"
+
+
 class Supplier(EbaseModel):
     """Поставщики оборудования."""
     name = models.CharField(
