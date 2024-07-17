@@ -3,7 +3,9 @@ from enum import Enum
 
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import MinValueValidator, EmailValidator
 from django.contrib.postgres.fields import ArrayField
+# from users.models import CompanyUser
 
 
 company = '"medsil"'  # название схемы для таблиц
@@ -27,41 +29,41 @@ class EbaseModel(models.Model):
         abstract = True
 
 
-class CompanyUser(AbstractUser):
-    """Модель пользователя."""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
-                          verbose_name='ID', db_comment='ID пользователя',
-                          help_text='ID пользователя')
-    patron = models.CharField(
-        max_length=50, null=True, blank=True, verbose_name='Отчество',
-        db_comment='Отчество', help_text='Отчество'
-    )
-    sex = models.CharField(
-        max_length=1, null=True, blank=True, verbose_name='Пол',
-        db_comment='Пол', help_text='Пол', choices=[('1', 'Мужской'), ('2', 'Женский')]
-    )
-    birth = models.DateField(
-        null=True, blank=True, verbose_name='Дата рождения',
-        db_comment='Дата рождения', help_text='Дата рождения'
-    )
-    phone = models.CharField(
-        max_length=100, null=True, blank=True, verbose_name='Телефон',
-        db_comment='Телефон', help_text='Телефоны, до 100 символов.'
-    )
-    equipment_acc_department = models.ManyToManyField(
-        'EquipmentAccDepartment', related_name='company_user_equipment_acc_department',
-        verbose_name='Учет поставленного оборудования',
-        db_comment='Учет поставленного оборудования', help_text='Учет поставленного оборудования'
-    )
-
-    class Meta:
-        db_table = 'company_user'
-        db_table_comment = 'Таблица с пользователями. \n\n-- BMatyushin'
-        verbose_name = 'Пользователь'
-        verbose_name_plural = 'Пользователи'
-
-    def __repr__(self):
-        return f"<CompanyUser {self.username=!r}>"
+# class CompanyUser(AbstractUser):
+#     """Модель пользователя."""
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
+#                           verbose_name='ID', db_comment='ID пользователя',
+#                           help_text='ID пользователя')
+#     patron = models.CharField(
+#         max_length=50, null=True, blank=True, verbose_name='Отчество',
+#         db_comment='Отчество', help_text='Отчество'
+#     )
+#     sex = models.CharField(
+#         max_length=1, null=True, blank=True, verbose_name='Пол',
+#         db_comment='Пол', help_text='Пол', choices=[('1', 'Мужской'), ('2', 'Женский')]
+#     )
+#     birth = models.DateField(
+#         null=True, blank=True, verbose_name='Дата рождения',
+#         db_comment='Дата рождения', help_text='Дата рождения'
+#     )
+#     phone = models.CharField(
+#         max_length=100, null=True, blank=True, verbose_name='Телефон',
+#         db_comment='Телефон', help_text='Телефоны, до 100 символов.'
+#     )
+#     equipment_acc_department = models.ManyToManyField(
+#         'EquipmentAccDepartment', related_name='company_user_equipment_acc_department',
+#         verbose_name='Учет поставленного оборудования',
+#         help_text='Учет поставленного оборудования'
+#     )
+#
+#     class Meta:
+#         db_table = 'company_user'
+#         db_table_comment = 'Таблица с пользователями. \n\n-- BMatyushin'
+#         verbose_name = 'Пользователь'
+#         verbose_name_plural = 'Пользователи'
+#
+#     def __repr__(self):
+#         return f"<CompanyUser {self.username=!r}>"
 
 
 class City(EbaseModel):
@@ -237,7 +239,7 @@ class Equipment(EbaseModel):
     )
     spare_part = models.ManyToManyField(
         "SparePart", related_name="equipment_spare_part", verbose_name="ID Запасных частей",
-        db_comment="ID запасных частей", help_text="ID из таблицы Запасных частей."
+        help_text="ID из таблицы Запасных частей."
     )
 
     class Meta:
@@ -265,9 +267,8 @@ class EquipmentAccDepartment(EbaseModel):
         db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
     )
     user = models.ManyToManyField(
-        'CompanyUser', verbose_name='ID инженера',
+        'users.CompanyUser', verbose_name='ID инженера',
         related_name='equipment_accounting_company_user',
-        db_comment="ID сотрудника-ИНЖНЕРА, который запускал оборудование",
         help_text="ID сотрудника-ИНЖНЕРА, который запускал оборудование. Заполняется автоматически"
     )
     is_active = models.BooleanField(
@@ -302,12 +303,10 @@ class EquipmentAccounting(EbaseModel):
     )
     service = models.ManyToManyField(
         'Service', related_name='equipment_accounting_service', verbose_name='ID Ремонта',
-        db_comment=('Заполняется, если оборудование было сдано в ремонт.'
-                    'При удалении записи из таблицы service заполняется "00000000-0000-0000-0000-000000000000"'),
         help_text='Заполняется, если оборудование было сдано в ремонт'
     )
     user = models.ForeignKey(
-        "CompanyUser", on_delete=models.SET_NULL, null=True, editable=False,
+        'users.CompanyUser', on_delete=models.SET_NULL, null=True, editable=False,
         related_name='equipment_accounting_user', verbose_name='Пользователь',
         db_comment='Пользователь, который добавил запись в таблицу "Учёт оборудования"',
         help_text=('Пользователь, который добавил запись в таблицу "Учёт оборудования". '
@@ -460,7 +459,7 @@ class Service(EbaseModel):
         db_comment='ID Типа ремонта', help_text='ID Типа ремонта из таблицы "Тип ремонта"'
     )
     user = models.ForeignKey(
-        "CompanyUser", on_delete=models.RESTRICT, null=False,
+        'users.CompanyUser', on_delete=models.RESTRICT, null=False,
         related_name="service_company_user", verbose_name='ID Пользователя',
         db_comment='ID Пользователя (сотрудника)',
         help_text='ID Пользователя (сотрудника) из таблицы "Пользователи"'
@@ -554,7 +553,6 @@ class SparePart(EbaseModel):
     )
     equipment = models.ManyToManyField(
         "Equipment", related_name="spare_part_equipment", verbose_name='ID Оборудования',
-        db_comment="ID оборудования, для которого предназначена эта запчасть",
         help_text="ID оборудования, для которого предназначена эта запчасть"
     )
     service = models.ManyToManyField(
@@ -583,6 +581,7 @@ class SparePartShipment(EbaseModel):
     count_shipment = models.FloatField(
         verbose_name='Кол-во', db_comment='Кол-во отгруженной запчасти',
         help_text='Кол-во отгруженной запчасти', null=False, blank=False,
+        validators=[MinValueValidator(0)]
     )
     expiration_dt = models.DateField(
         null=True, blank=True, verbose_name='Годен до',
@@ -594,10 +593,10 @@ class SparePartShipment(EbaseModel):
         db_comment='Дата отгрузки', help_text='Дата отгрузки.'
     )
     user = models.ForeignKey(
-        'CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name='spare_part_shipment_company_user', verbose_name='ID инженера',
-        db_comment="ID сотрудника-ИНЖНЕРА, который запускал оборудование",
-        help_text="ID сотрудника-ИНЖНЕРА, который запускал оборудование. Заполняется автоматически"
+        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name='spare_part_shipment_company_user', verbose_name='ID сотрудника',
+        db_comment="ID сотрудника, который оформил отгрузку",
+        help_text="ID сотрудника, который оформил отгрузку. Заполняется автоматически"
     )
 
     class Meta:
@@ -620,6 +619,7 @@ class SparePartSupply(EbaseModel):
     count_supply = models.FloatField(
         verbose_name='Кол-во', db_comment='Кол-во поставленой запчасти',
         help_text='Кол-во поставленой запчасти', null=False, blank=False,
+        validators=[MinValueValidator(0)],
     )
     expiration_dt = models.DateField(
         null=True, blank=True, verbose_name='Годен до',
@@ -629,6 +629,12 @@ class SparePartSupply(EbaseModel):
     supply_dt = models.DateField(
         null=False, blank=False, verbose_name='Дата поставки',
         db_comment='Дата поставки', help_text='Дата поставки.'
+    )
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name='spare_part_supply_company_user', verbose_name='ID сотрудника',
+        db_comment="ID сотрудника, который оформил поставку",
+        help_text="ID сотрудника, который оформил поставку. Заполняется автоматически"
     )
 
     class Meta:
@@ -691,12 +697,14 @@ class Supplier(EbaseModel):
 class Unit(models.Model):
     """Единицы измерения."""
     short_name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Наименование',
-        db_comment='Единица измерения', help_text='Единица измерения'
+        max_length=50, null=False, blank=False, verbose_name='Сокращенное наименование',
+        db_comment='Единица измерения', help_text='Единица измерения',
+        unique=True,
     )
     full_name = models.CharField(
         max_length=100, null=True, blank=True, verbose_name='Полное наименование',
-        db_comment='Полное наименование единицы измерения', help_text='Полное наименование единицы измерения'
+        db_comment='Полное наименование единицы измерения',
+        help_text='Полное наименование единицы измерения'
     )
 
     class Meta:
@@ -706,5 +714,5 @@ class Unit(models.Model):
         verbose_name_plural = 'Единицы измерения'
 
     def __repr__(self):
-        return f'<Unit {self.name=!r}>'
+        return f'<Unit {self.short_name=!r}>'
 
