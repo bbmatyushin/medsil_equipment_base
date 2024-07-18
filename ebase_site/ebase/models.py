@@ -10,6 +10,7 @@ from django.contrib.postgres.fields import ArrayField
 
 company = '"medsil"'  # название схемы для таблиц
 
+
 class PositionType(Enum):
     """Тип должности."""
     EMPLOYEE = 'Сотрудник'
@@ -29,44 +30,7 @@ class EbaseModel(models.Model):
         abstract = True
 
 
-# class CompanyUser(AbstractUser):
-#     """Модель пользователя."""
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
-#                           verbose_name='ID', db_comment='ID пользователя',
-#                           help_text='ID пользователя')
-#     patron = models.CharField(
-#         max_length=50, null=True, blank=True, verbose_name='Отчество',
-#         db_comment='Отчество', help_text='Отчество'
-#     )
-#     sex = models.CharField(
-#         max_length=1, null=True, blank=True, verbose_name='Пол',
-#         db_comment='Пол', help_text='Пол', choices=[('1', 'Мужской'), ('2', 'Женский')]
-#     )
-#     birth = models.DateField(
-#         null=True, blank=True, verbose_name='Дата рождения',
-#         db_comment='Дата рождения', help_text='Дата рождения'
-#     )
-#     phone = models.CharField(
-#         max_length=100, null=True, blank=True, verbose_name='Телефон',
-#         db_comment='Телефон', help_text='Телефоны, до 100 символов.'
-#     )
-#     equipment_acc_department = models.ManyToManyField(
-#         'EquipmentAccDepartment', related_name='company_user_equipment_acc_department',
-#         verbose_name='Учет поставленного оборудования',
-#         help_text='Учет поставленного оборудования'
-#     )
-#
-#     class Meta:
-#         db_table = 'company_user'
-#         db_table_comment = 'Таблица с пользователями. \n\n-- BMatyushin'
-#         verbose_name = 'Пользователь'
-#         verbose_name_plural = 'Пользователи'
-#
-#     def __repr__(self):
-#         return f"<CompanyUser {self.username=!r}>"
-
-
-class City(EbaseModel):
+class City(models.Model):
     """Модель для перечьня городов."""
     name = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Город',
@@ -76,12 +40,18 @@ class City(EbaseModel):
         max_length=100, null=True, blank=True, verbose_name='Регион',
         db_comment='Регион', help_text='Регион, Область в которой расположен город'
     )
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания записи',
+        db_comment='Дата создания записи.',
+        help_text='Дата создания записи. Заполняется автоматически'
+    )
 
     class Meta:
         db_table = f'{company}."city"'
         db_table_comment = 'Таблица с перечнем городов. \n\n-- BMatyushin'
         verbose_name = 'Город'
         verbose_name_plural = 'Города'
+        unique_together = ('name', 'region')
 
     def __repr__(self):
         return f"<City {self.name=!r}, {self.region=!r}>"
@@ -569,6 +539,40 @@ class SparePart(EbaseModel):
 
     def __repr__(self):
         return f'<SparePart {self.name=!r}>'
+
+
+class SparePartCount(EbaseModel):
+    """Общее количество запчастей (чтобы не делать сложные запросы для вывода этой инфы)"""
+    spare_part = models.ForeignKey(
+        'SparePart', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name="spare_part_count_spare_part", verbose_name='ID запчасти',
+        db_comment="ID запчасти", help_text="ID запчасти"
+    )
+    amount = models.FloatField(
+        verbose_name='Кол-во', db_comment='Кол-во запчастей',
+        help_text='Кол-во запчастей. Заполняется автоматически',
+        validators=[MinValueValidator(0)], null=False, blank=False,
+    )
+    expiration_dt = models.DateField(
+        null=True, blank=True, verbose_name='Годен до',
+        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
+        help_text='Годен до. Срок годности для запчастей со сроком годности.',
+    )
+    is_overdue = models.BooleanField(
+        default=False, verbose_name='Просрочено',
+        db_comment='Флаг указывающий, что запчасть просрочена',
+        help_text='Флаг указывающий, что запчасть просрочена'
+    )
+
+    class Meta:
+        db_table = f'{company}."spare_part_count"'
+        db_table_comment = 'Общее количество запчастей на остатке.\n\n-- BMatyushin'
+        verbose_name = 'Количество запчастей'
+        verbose_name_plural = 'Количество запчастей'
+        unique_together = ('spare_part', 'expiration_dt')
+
+    def __repr__(self):
+        return f'<SparePartCount {self.spare_part=!r} {self.amount=!r}>'
 
 
 class SparePartShipment(EbaseModel):
