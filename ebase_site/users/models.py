@@ -13,9 +13,9 @@ class CompanyUser(AbstractUser):
         max_length=50, null=True, blank=True, verbose_name='Отчество',
         db_comment='Отчество', help_text='Отчество'
     )
-    sex = models.CharField(
-        max_length=1, null=True, blank=True, verbose_name='Пол',
-        db_comment='Пол', help_text='Пол', choices=[('1', 'Мужской'), ('2', 'Женский')]
+    sex = models.IntegerField(
+        null=True, blank=True, verbose_name='Пол',
+        db_comment='Пол. 1 - Мужской, 2 - Женский', choices=[(1, 'Мужской'), (2, 'Женский')]
     )
     birth = models.DateField(
         null=True, blank=True, verbose_name='Дата рождения',

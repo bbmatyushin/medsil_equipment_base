@@ -19,9 +19,9 @@ class CompanyUserAdmin(admin.ModelAdmin):
         return obj.email
 
     # для добавления блоков с полями при заполнени таблицы через админку
-    # fieldsets = (
-    #     (None, {'fields': ('username', 'password')}),
-    #     ('Personal info', {'fields': ('first_name', 'last_name', 'patron', 'sex', 'birth', 'phone', 'email')}),
-    #     ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-    #     ('Important dates', {'fields': ('last_login', 'date_joined')}),
-    # )
+    fieldsets = (
+        ('Логин и пароль нового пользователя', {'fields': ('username', 'password')}),
+        ('Персональная информация', {'fields': ('first_name', 'last_name', 'patron', 'sex', 'birth', 'phone', 'email')}),
+        ('Разрешения', {'fields': ('is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        # ('Important dates', {'fields': ('last_login', 'date_joined')}),
+    )

@@ -2,7 +2,6 @@ import uuid
 from enum import Enum
 
 from django.db import models
-from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator, EmailValidator
 from django.contrib.postgres.fields import ArrayField
 # from users.models import CompanyUser
@@ -11,10 +10,15 @@ from django.contrib.postgres.fields import ArrayField
 company = '"medsil"'  # название схемы для таблиц
 
 
+def get_instance_city():
+    """Возвращает экземпляр модели City."""
+    return City.objects.get(name='Не указан')
+
+
 class PositionType(Enum):
     """Тип должности."""
-    EMPLOYEE = 'Сотрудник'
-    CLIENT = 'Клиент'
+    employee = 'Сотрудник'
+    client = 'Клиент'
 
 
 class EbaseModel(models.Model):
@@ -41,7 +45,7 @@ class City(models.Model):
         db_comment='Регион', help_text='Регион, Область в которой расположен город'
     )
     create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания записи',
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
         db_comment='Дата создания записи.',
         help_text='Дата создания записи. Заполняется автоматически'
     )
@@ -53,6 +57,9 @@ class City(models.Model):
         verbose_name_plural = 'Города'
         unique_together = ('name', 'region')
 
+    def __str__(self):  # в админ панели будет видно название города, вместо City object(1)
+        return f"{self.name} {f'({self.region})' if self.region else ''}"
+
     def __repr__(self):
         return f"<City {self.name=!r}, {self.region=!r}>"
 
@@ -61,24 +68,21 @@ class Client(EbaseModel):
     """Модель для перечьня клиентов."""
     name = models.CharField(
         max_length=150, null=False, blank=False, verbose_name='Наименование',
-        db_comment='Наименование клиента', help_text='Наименование клиента'
+        db_comment='Наименование клиента', help_text='Название учреждения'
     )
     inn = models.CharField(
         max_length=12, null=True, blank=True, verbose_name='ИНН',
-        db_comment='ИНН клиента', help_text='ИНН клиента'
-    )
-    country = models.CharField(
-        max_length=20, null=True, blank=True, verbose_name='Страна',
-        db_comment='Страна клиента', help_text='Страна клиента'
+        db_comment='ИНН клиента', unique=True
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
-        db_comment='Адрес клиента', help_text='Адрес клиента'
+        db_comment='Адрес клиента'
     )
     city = models.ForeignKey(
         "City", on_delete=models.SET_NULL, null=True,
         related_name="client_city", verbose_name='Город',
-        db_comment='Город клиента', help_text='Город клиента'
+        db_comment='Город клиента', help_text='Город клиента',
+        default=get_instance_city
     )
 
     class Meta:
@@ -86,6 +90,10 @@ class Client(EbaseModel):
         db_table_comment = 'Таблица с перечнем клиентов. \n\n-- BMatyushin'
         verbose_name = 'Клиент'
         verbose_name_plural = 'Клиенты'
+        unique_together = ('name', 'city')
+
+    def __str__(self):
+        return f"{self.name}, {f'ИНН {self.inn}' if self.inn else ''}"
 
     def __repr__(self):
         return f"<Client {self.name=!r}, {self.inn=!r}>"
@@ -95,21 +103,23 @@ class Department(EbaseModel):
     """Подразделения, филиалы клиентов"""
     name = models.CharField(
         max_length=200, null=False, blank=False, verbose_name='Наименование',
-        db_comment='Наименование подразделения', help_text='Наименование подразделения'
+        db_comment='Наименование подразделения', help_text='Наименование подразделения / филиала'
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
-        db_comment='Адрес подразделения', help_text='Адрес подразделения'
+        db_comment='Адрес подразделения', help_text='Адрес подразделения / филиала'
     )
     client = models.ForeignKey(
         "Client", on_delete=models.SET_NULL, null=True,
         related_name="department_client", verbose_name='Клиент',
-        db_comment='Клиент подразделения', help_text='Клиент подразделения'
+        db_comment='Клиент подразделения', help_text='Клиент, к которому относится подразделение',
     )
     city = models.ForeignKey(
         "City", on_delete=models.SET_NULL, null=True,
-        related_name="department_city", verbose_name='ID Города',
-        db_comment='ID Города подразделения', help_text='ID города в котором расположено подразделение'
+        related_name="department_city", verbose_name='Город',
+        db_comment='ID Города подразделения',
+        help_text='Города в котором расположено подразделение',
+        default=get_instance_city
     )
 
     class Meta:
@@ -118,6 +128,9 @@ class Department(EbaseModel):
         verbose_name = 'Подразделение / Филиал'
         verbose_name_plural = 'Подразделения / Филиалы'
 
+    def __str__(self):
+        return f"{self.name} ({self.city.name})"
+
     def __repr__(self):
         return f"<Department {self.name=!r}"
 
@@ -125,44 +138,43 @@ class Department(EbaseModel):
 class DeptContactPers(EbaseModel):
     """Контактные лица подразделения"""
     department = models.ForeignKey(
-        "Department", on_delete=models.SET_NULL, null=True,
-        related_name="dept_contactpers_department", verbose_name='ID Подразделения',
-        db_comment='ID Подразделения', help_text='ID Подразделения'
+        "Department", on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="dept_contactpers_department", verbose_name='Подразделение',
+        db_comment='ID Подразделения',
     )
     patron = models.CharField(
         max_length=50, null=True, blank=True, verbose_name='Отчество',
-        db_comment='Отчество контактного лица', help_text='Отчество контактного лица'
+        db_comment='Отчество контактного лица',
     )
     surname = models.CharField(
         max_length=50, null=True, blank=True, verbose_name='Фамилия',
-        db_comment='Фамилия контактного лица', help_text='Фамилия контактного лица'
+        db_comment='Фамилия контактного лица',
     )
     name = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Имя',
-        db_comment='Имя контактного лица', help_text='Имя контактного лица'
+        db_comment='Имя контактного лица',
     )
     position = models.ForeignKey(
         "Position", on_delete=models.SET_NULL, null=True,
         related_name="dept_contactpers_position", verbose_name='Должность',
-        db_comment='Должность контактного лица', help_text='Должность контактного лица'
+        db_comment='Должность контактного лица',
     )
-    mod_phone = models.CharField(
+    mob_phone = models.CharField(
         max_length=60, null=True, blank=True, verbose_name='Моб.Телефон',
         db_comment='Мобильный телефон контактного лица',
-        help_text='Мобильный телефон контактного лица'
+        help_text='Можно указать несколько'
     )
     work_phone = models.CharField(
         max_length=60, null=True, blank=True, verbose_name='Раб.Телефон',
-        db_comment='Рабочий телефон контактного лица',
-        help_text='Рабочий телефон контактного лица'
+        db_comment='Можно указать несколько', help_text='Можно указать несколько'
     )
-    mod_email = models.CharField(
+    email = models.CharField(
         max_length=50, null=True, blank=True, verbose_name='E-mail',
-        db_comment='E-mail контактного лица', help_text='E-mail контактного лица'
+        db_comment='E-mail контактного лица',
     )
     comment = models.CharField(
         max_length=300, null=True, blank=True, verbose_name='Комментарий',
-        db_comment='Комментарий контактного лица', help_text='Комментарий контактного лица'
+        db_comment='Комментарий контактного лица',
     )
     is_active = models.BooleanField(
         default=True, verbose_name='Работает',
@@ -340,7 +352,7 @@ class Manufacturer(EbaseModel):
         db_comment='Производитель оборудования', help_text='Производитель оборудования'
     )
     inn = models.CharField(
-        max_length=12, null=True, blank=True, verbose_name='ИНН',
+        max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True,
         db_comment='ИНН производителя', help_text='ИНН производителя'
     )
     country = models.CharField(
@@ -350,7 +362,8 @@ class Manufacturer(EbaseModel):
     city = models.ForeignKey(
         "City", on_delete=models.SET_NULL, null=True,
         related_name="manufacturer_city", verbose_name='Город',
-        db_comment='Город производителя', help_text='Город производителя'
+        db_comment='Город производителя', help_text='Город производителя',
+        default=get_instance_city
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
@@ -375,6 +388,10 @@ class Manufacturer(EbaseModel):
         db_table_comment = 'Производители оборудования. \n\n-- BMatyushin'
         verbose_name = 'Производитель оборудования'
         verbose_name_plural = 'Производители оборудований'
+        unique_together = ('name', 'city')
+
+    def __str__(self):
+        return f"{self.name}{f', ({self.city.name})' if self.city.name != 'Не указан' else ''}"
 
     def __repr__(self):
         return f'<Manufacturer {self.name=!r}, {self.city=!r}>'
@@ -403,11 +420,12 @@ class Position(models.Model):
     """Справочник должностей."""
     name = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Должность',
-        db_comment='Должность', help_text='Должность'
+        db_comment='Должность',
     )
     type = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Тип',
-        choices=[(t.value, t.name) for t in PositionType], db_comment='Тип должности',
+        max_length=50, null=False, blank=False, verbose_name='Тип', default=PositionType.client.name,
+        choices=[(t.name, t.value) for t in PositionType],
+        db_comment='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений',
         help_text='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений'
     )
 
@@ -416,6 +434,10 @@ class Position(models.Model):
         db_table_comment = 'Должности сотрудников и клиентов. \n\n-- BMatyushin'
         verbose_name = 'Должность'
         verbose_name_plural = 'Должности'
+        unique_together = ('name', 'type')
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self):
         return f'<Position {self.name=!r}>'
@@ -655,20 +677,18 @@ class Supplier(EbaseModel):
     """Поставщики оборудования."""
     name = models.CharField(
         max_length=150, null=False, blank=False, verbose_name='Поставщик',
-        db_comment='Поставщик оборудования', help_text='Поставщик оборудования'
     )
     inn = models.CharField(
-        max_length=12, null=True, blank=True, verbose_name='ИНН',
-        db_comment='ИНН поставщика', help_text='ИНН поставщика'
+        max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True
     )
     country = models.CharField(
         max_length=20, null=True, blank=True, verbose_name='Страна',
-        db_comment='Страна поставщика', help_text='Страна поставщика'
     )
     city = models.ForeignKey(
         "City", on_delete=models.SET_NULL, null=True,
         related_name="supplier_city", verbose_name='Город',
-        db_comment='Город поставщика', help_text='Город поставщика'
+        db_comment='Город поставщика', help_text='Город поставщика',
+        default=get_instance_city
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
@@ -691,8 +711,12 @@ class Supplier(EbaseModel):
     class Meta:
         db_table = f'{company}."supplier"'
         db_table_comment = 'Поставщики оборудования. \n\n-- BMatyushin'
-        verbose_name = 'Поставщик оборудования'
-        verbose_name_plural = 'Поставщики оборудования'
+        verbose_name = 'Поставщик'
+        verbose_name_plural = 'Поставщики'
+        unique_together = ('name', 'city')
+
+    def __str__(self):
+        return f"{self.name}{f', ({self.city.name})' if self.city.name != 'Не указан' else ''}"
 
     def __repr__(self):
         return f'<Supplier {self.name=!r}, {self.city=!r}>'
