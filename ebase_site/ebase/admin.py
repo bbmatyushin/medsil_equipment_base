@@ -27,6 +27,18 @@ class CityAdmin(admin.ModelAdmin):
         ('Новый город', {'fields': ('name', 'region')}),
     )
 
+
+@admin.register(Country)
+class CountryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'create_dt')
+    search_fields = ('name',)
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новая страна', {'fields': ('name',)}),
+    )
+
+
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'client_name', 'city_name', 'address', 'create_dt')
@@ -78,6 +90,64 @@ class DeptContactPersAdmin(admin.ModelAdmin):
             return '-'
 
 
+@admin.register(Equipment)
+class EquipmentAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'short_name', 'med_direction_name',
+                    'manufacturer_name', 'supplier_name',)
+    search_fields = ('short_name', 'full_name')
+    ordering = ('full_name',)
+
+    fieldsets = (
+        ('Новое оборудование', {'fields': ('full_name', 'short_name', 'med_direction')}),
+        ('Производитель и поставщик', {'fields': ('manufacturer', 'supplier',)}),
+    )
+
+    @admin.display(description='Направление')
+    def med_direction_name(self, obj):
+        return f"{obj.med_direction.name if obj.med_direction else '-'}"
+
+    @admin.display(description='Производитель')
+    def manufacturer_name(self, obj):
+        return f"{obj.manufacturer.name if obj.manufacturer else '-'}"
+
+    @admin.display(description='Поставщик')
+    def supplier_name(self, obj):
+        return f"{obj.supplier.name if obj.supplier else '-'}"
+
+
+@admin.register(Manufacturer)
+class ManufacturerAdmin(admin.ModelAdmin):
+    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
+                    'country_name', 'city_name', 'address',)
+    search_fields = ('name', 'inn')
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новый производитель', {'fields': ('name', 'inn',)}),
+        ('Адрес', {'fields': ('country', 'city', 'address')}),
+        ('Контакты производителя', {'fields': ('contact_person', 'contact_phone', 'email')}),
+    )
+
+    @admin.display(description='Город')
+    def city_name(self, obj):
+        return obj.city.name if obj.city else '-'
+
+    @admin.display(description='Страна')
+    def country_name(self, obj):
+        return obj.country.name if obj.country else '-'
+
+
+@admin.register(MedDirection)
+class MedDirectionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name',)
+    search_fields = ('name',)
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новое направление', {'fields': ('name',)}),
+    )
+
+
 @admin.register(Position)
 class PositionAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'type',)
@@ -102,20 +172,25 @@ class ServiceTypeAdmin(admin.ModelAdmin):
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
-    list_display = ('name', 'inn', 'country', 'city_name', 'address', 'contact_persone', 'contact_phone')
+    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
+                    'country_name', 'city_name', 'address',)
     search_fields = ('name', 'inn')
     ordering = ('name',)
 
     fieldsets = (
-        ('Новый поставщик', {
-            'fields':
-            ('name', 'inn', 'country', 'city', 'address', 'contact_persone', 'contact_phone')
-            }),
+        ('Новый поставщик', { 'fields': ('name', 'inn')}),
+        ('Адрес', {'fields': ('country', 'city', 'address',)}),
+        ('Контакты поставщика', {'fields': ('contact_person', 'contact_phone', 'email')}),
     )
 
     @admin.display(description='Город')
     def city_name(self, obj):
         return obj.city.name
+
+    @admin.display(description='Страна')
+    def country_name(self, obj):
+        return obj.country.name
+
 
 @admin.register(Unit)
 class UnitAdmin(admin.ModelAdmin):

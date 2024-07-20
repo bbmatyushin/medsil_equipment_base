@@ -15,6 +15,11 @@ def get_instance_city():
     return City.objects.get(name='Не указан')
 
 
+def get_instance_country():
+    """Возвращает экземпляр модели Country."""
+    return Country.objects.get(name='Россия')
+
+
 class PositionType(Enum):
     """Тип должности."""
     employee = 'Сотрудник'
@@ -25,7 +30,7 @@ class EbaseModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
                           verbose_name='ID', db_comment='ID записи', help_text='ID записи')
     create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания записи',
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
         db_comment='Дата создания записи.',
         help_text='Дата создания записи. Заполняется автоматически'
     )
@@ -79,10 +84,9 @@ class Client(EbaseModel):
         db_comment='Адрес клиента'
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True,
+        "City", on_delete=models.SET_NULL, null=True, blank=False,
         related_name="client_city", verbose_name='Город',
         db_comment='Город клиента', help_text='Город клиента',
-        default=get_instance_city
     )
 
     class Meta:
@@ -97,6 +101,31 @@ class Client(EbaseModel):
 
     def __repr__(self):
         return f"<Client {self.name=!r}, {self.inn=!r}>"
+
+
+class Country(models.Model):
+    """Модель для перечьня городов."""
+    name = models.CharField(
+        max_length=50, null=False, blank=False, unique=True, verbose_name='Страна',
+        db_comment='Страна', help_text='Используется для Производителей и поставщиков'
+    )
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
+        db_comment='Дата создания записи.',
+        help_text='Дата создания записи. Заполняется автоматически'
+    )
+
+    class Meta:
+        db_table = f'{company}."country"'
+        db_table_comment = 'Таблица с перечнем стран. \n\n-- BMatyushin'
+        verbose_name = 'Страна'
+        verbose_name_plural = 'Страны'
+
+    def __str__(self):  # в админ панели будет видно название города, вместо City object(1)
+        return f"{self.name}"
+
+    def __repr__(self):
+        return f"<Country {self.name=!r}"
 
 
 class Department(EbaseModel):
@@ -115,11 +144,10 @@ class Department(EbaseModel):
         db_comment='Клиент подразделения', help_text='Клиент, к которому относится подразделение',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True,
+        "City", on_delete=models.SET_NULL, null=True, blank=False,
         related_name="department_city", verbose_name='Город',
         db_comment='ID Города подразделения',
         help_text='Города в котором расположено подразделение',
-        default=get_instance_city
     )
 
     class Meta:
@@ -196,28 +224,29 @@ class Equipment(EbaseModel):
     """Модель для перечьня моделей медицинского оборудования.
     Для полей с автоматическим заполнением, обязательно editable=False"""
     full_name = models.CharField(
-        max_length=256, null=False, blank=False,
+        max_length=256, null=True, blank=False,
         db_comment="Полное наименование оборудования", verbose_name="Полное наименование",
-        help_text="Полное наименование оборудования"
-    ),
+        help_text="Полное наименование + краткое должно быть уникальным сочетанием"
+    )
     short_name = models.CharField(
-        max_length=50, null=True, blank=True, verbose_name='Краткое наименование',
-        db_comment="Краткое наименование оборудования", help_text="Краткое наименование оборудования"
-    ),
+        max_length=50, null=True, blank=True,
+        verbose_name='Краткое наименование', db_comment="Краткое наименование оборудования",
+        help_text="Полное наименование + краткое должно быть уникальным сочетанием"
+    )
     med_direction = models.ForeignKey(
-        "MedDirection", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_med_equipment", verbose_name="ID Направления",
+        "MedDirection", on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="equipment_med_equipment", verbose_name="Направление",
         db_comment="ID направления", help_text="ID из таблицы Направления."
     )
     manufacturer = models.ForeignKey(
-        "Manufacturer", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_manufacturer", verbose_name="ID Производителя",
+        "Manufacturer", on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="equipment_manufacturer", verbose_name="Производитель",
         db_comment="ID производителя", help_text="ID из таблицы Производителя."
     )
     supplier = models.ForeignKey(
-        "Supplier", on_delete=models.SET_NULL, null=True,
-        related_name="equipment_supplier", verbose_name="ID Поставщика",
-        db_comment="ID поставщика", help_text="ID из таблицы Поставщика."
+        "Supplier", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="equipment_supplier", verbose_name="Поставщик",
+        db_comment="ID поставщика",
     )
     spare_part = models.ManyToManyField(
         "SparePart", related_name="equipment_spare_part", verbose_name="ID Запасных частей",
@@ -229,6 +258,7 @@ class Equipment(EbaseModel):
         db_table_comment = "Перечень моделей медициского оборудования.\n\n-- BMatyushin"
         verbose_name = 'Медицинское оборудование'
         verbose_name_plural = 'Медицинских оборудований'
+        unique_together = ('full_name', 'short_name',)
 
     def __repr__(self):
         return f'<Equipment {self.full_name=!r}>'
@@ -355,12 +385,13 @@ class Manufacturer(EbaseModel):
         max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True,
         db_comment='ИНН производителя', help_text='ИНН производителя'
     )
-    country = models.CharField(
-        max_length=20, null=True, blank=True, verbose_name='Страна',
-        db_comment='Страна производителя', help_text='Страна производителя'
+    country = models.ForeignKey(
+        "Country", on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="manufacturer_country", verbose_name='Страна',
+        db_comment='Страна производителя',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True,
+        "City", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="manufacturer_city", verbose_name='Город',
         db_comment='Город производителя', help_text='Город производителя',
         default=get_instance_city
@@ -377,8 +408,12 @@ class Manufacturer(EbaseModel):
         max_length=100, null=True, blank=True, verbose_name='Телефон',
         db_comment='Телефон производителя', help_text='Контактные телефоны производителя'
     )
+    email = models.EmailField(
+        max_length=100, null=True, blank=True, verbose_name='E-mail',
+        db_comment='E-mail производителя'
+    )
     is_active = models.BooleanField(
-        null=False, blank=False, default=True, verbose_name='Активен',
+        null=False, blank=False, default=True, verbose_name='Действующий',
         db_comment='True, если производитель активен',
         help_text='True, если активен. Для мягкого удаления производителя.'
     )
@@ -386,9 +421,10 @@ class Manufacturer(EbaseModel):
     class Meta:
         db_table = f'{company}."manufacturer"'
         db_table_comment = 'Производители оборудования. \n\n-- BMatyushin'
-        verbose_name = 'Производитель оборудования'
-        verbose_name_plural = 'Производители оборудований'
-        unique_together = ('name', 'city')
+        verbose_name = 'Производитель'
+        verbose_name_plural = 'Производители'
+        unique_together = ('name', 'city',)
+        # unique_together = ('name', 'country',)
 
     def __str__(self):
         return f"{self.name}{f', ({self.city.name})' if self.city.name != 'Не указан' else ''}"
@@ -400,9 +436,8 @@ class Manufacturer(EbaseModel):
 class MedDirection(models.Model):
     """Модель для перечьня направлений для оборудования: Гематологическое, Биохимическое и т.д."""
     name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Направление',
+        max_length=100, null=False, blank=False, unique=True, verbose_name='Направление',
         db_comment='Направление медицинского оборудования (Гематологическое, Биохимическое и т.д.)',
-        help_text='Направление медицинского оборудования (Гематологическое, Биохимическое и т.д.).'
     )
 
     class Meta:
@@ -411,6 +446,9 @@ class MedDirection(models.Model):
                             '\n\n-- BMatyushin')
         verbose_name = 'Направление мед.оборудования'
         verbose_name_plural = 'Направления мед.оборудования'
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self):
         return f'<MedDirection {self.name=!r}>'
@@ -446,12 +484,12 @@ class Position(models.Model):
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
     service_type = models.ForeignKey(
-        "ServiceType", on_delete=models.SET_NULL, null=True,
+        "ServiceType", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="service_service_type", verbose_name='ID Типа ремонта',
         db_comment='ID Типа ремонта', help_text='ID Типа ремонта из таблицы "Тип ремонта"'
     )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False,
+        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
         related_name="service_company_user", verbose_name='ID Пользователя',
         db_comment='ID Пользователя (сотрудника)',
         help_text='ID Пользователя (сотрудника) из таблицы "Пользователи"'
@@ -489,7 +527,7 @@ class Service(EbaseModel):
     )
     spare_part = models.ManyToManyField(
         "SparePart", related_name="service_spare_part", verbose_name='ID запчасти',
-        help_text="ID запчасти"
+        help_text="ID запчасти",
     )
 
     class Meta:
@@ -530,7 +568,7 @@ class SparePart(EbaseModel):
         db_comment='Наименование запчасти', help_text='Наименование запчасти'
     )
     unit = models.ForeignKey(
-        "Unit", on_delete=models.RESTRICT, null=False, default=1,
+        "Unit", on_delete=models.RESTRICT, null=False, blank=False, default=1,
         related_name="spare_part_unit", verbose_name='Единица измерения',
         db_comment='Единица измерения', help_text='Единица измерения'
     )
@@ -681,11 +719,13 @@ class Supplier(EbaseModel):
     inn = models.CharField(
         max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True
     )
-    country = models.CharField(
-        max_length=20, null=True, blank=True, verbose_name='Страна',
+    country = models.ForeignKey(
+        "Country", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="supplier_country", verbose_name='Страна',
+        db_comment='Страна производителя',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True,
+        "City", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="supplier_city", verbose_name='Город',
         db_comment='Город поставщика', help_text='Город поставщика',
         default=get_instance_city
@@ -694,7 +734,7 @@ class Supplier(EbaseModel):
         max_length=200, null=True, blank=True, verbose_name='Адрес',
         db_comment='Адрес поставщика', help_text='Адрес поставщика'
     )
-    contact_persone = models.CharField(
+    contact_person = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Контактное лицо',
         db_comment='Контактное лицо поставщика', help_text='Контактное лицо поставщика'
     )
@@ -702,8 +742,12 @@ class Supplier(EbaseModel):
         max_length=100, null=True, blank=True, verbose_name='Телефон',
         db_comment='Телефон поставщика', help_text='Контактные телефоны поставщика'
     )
+    email = models.EmailField(
+        max_length=100, null=True, blank=True, verbose_name='E-mail',
+        db_comment='E-mail поставщика'
+    )
     is_active = models.BooleanField(
-        null=False, blank=False, default=True, verbose_name='Активен',
+        null=False, blank=False, default=True, verbose_name='Действующий',
         db_comment='True, если поставщик активен',
         help_text='True, если активен. Для мягкого удаления поставщика.'
     )
