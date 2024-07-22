@@ -155,6 +155,7 @@ class Department(EbaseModel):
         db_table_comment = 'Подразделения, филиаы клиентов.\n\n-- BMatyushin'
         verbose_name = 'Подразделение / Филиал'
         verbose_name_plural = 'Подразделения / Филиалы'
+        unique_together = ('name', 'address',)
 
     def __str__(self):
         return f"{self.name} ({self.city.name})"
@@ -277,7 +278,7 @@ class EquipmentAccDepartment(EbaseModel):
     )
     department = models.ForeignKey(
         'Department', on_delete=models.RESTRICT, null=False, editable=False,
-        related_name='equipment_accounting_department_department', verbose_name='ID Подразделения',
+        related_name='equipment_accounting_department_department', verbose_name='Подразделение',
         db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
     )
     engineer = models.ForeignKey(
@@ -317,11 +318,10 @@ class EquipmentAccounting(EbaseModel):
     equipment_status = models.ForeignKey(
         'EquipmentStatus', on_delete=models.SET_NULL, null=True, editable=True,
         related_name='equipment_accounting_equipment_status',
-        verbose_name='ID Статус оборудования', db_comment="ID статуса оборудования",
-        help_text="ID статуса оборудования"
+        verbose_name='Статус', db_comment="ID статуса оборудования"
     )
     service = models.ManyToManyField(
-        'Service', related_name='equipment_accounting_service', verbose_name='ID Ремонта',
+        'Service', related_name='equipment_accounting_service', verbose_name='Ремонт',
         help_text='Заполняется, если оборудование было сдано в ремонт'
     )
     user = models.ForeignKey(

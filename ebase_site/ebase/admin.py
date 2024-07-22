@@ -14,7 +14,7 @@ class ClientAdmin(admin.ModelAdmin):
 
     @admin.display(description='Город')
     def city_name(self, obj):
-        return obj.city.name
+        return obj.city.name if obj.city else '-'
 
 
 @admin.register(City)
@@ -51,11 +51,11 @@ class DepartmentAdmin(admin.ModelAdmin):
 
     @admin.display(description='Клиент')
     def client_name(self, obj):
-        return obj.client.name
+        return obj.client.name if obj.client else '-'
 
     @admin.display(description='Город')
     def city_name(self, obj):
-        return obj.city.name
+        return obj.city.name if obj.client else '-'
 
 
 @admin.register(DeptContactPers)
@@ -123,17 +123,40 @@ class EquipmentAdmin(admin.ModelAdmin):
 
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
-    list_display = ('equipment', 'serial_number', 'equipment_status', 'is_our_service', 'is_our_supply', 'user', )
+    list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
+                    'is_our_service', 'is_our_supply', 'user_name', )
     search_fields = ('serial_number',)
     ordering = ('equipment', 'serial_number', 'user',)
+    # list_filter = ('dept_name',)
+    list_select_related = ('equipment', 'equipment_status', 'user', )
 
     fieldsets = (
-        ('Новый тип акта', {'fields': ('equipment', 'serial_number', 'equipment_status', 'is_our_service', 'is_our_supply')}),
+        ('Новый тип акта', {'fields': ('equipment', 'serial_number', 'equipment_status',
+                                       'is_our_service', 'is_our_supply')}),
     )
 
-    @admin.display(description='Оборудование')
-    def equipment_name(self, obj):
-        return f"{obj.equipment.full_name if obj.equipment else '-'}"
+    # @admin.display(description='Оборудование')
+    # def equipment_name(self, obj):
+    #     return f"{obj.equipment.full_name if obj.equipment else '-'}"
+
+    @admin.display(description='Установлено')
+    def dept_name(self, obj):
+        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        return instance.department
+
+    @admin.display(description='Инженер')
+    def engineer(self, obj):
+        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        return instance.engineer
+
+    @admin.display(description='Дата монтажа')
+    def install_dt(self, obj):
+        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '-'
+
+    @admin.display(description='Добавил')
+    def user_name(self, obj):
+        return obj.user.username
 
 
 @admin.register(EquipmentStatus)
@@ -228,11 +251,11 @@ class SupplierAdmin(admin.ModelAdmin):
 
     @admin.display(description='Город')
     def city_name(self, obj):
-        return obj.city.name
+        return obj.city.name if obj.city else '-'
 
     @admin.display(description='Страна')
     def country_name(self, obj):
-        return obj.country.name
+        return obj.country.name if obj.country else '-'
 
 
 @admin.register(Unit)

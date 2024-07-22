@@ -4,6 +4,8 @@ import os
 import logging
 import json
 import uuid
+from datetime import datetime
+
 import django
 
 from pathlib import Path
@@ -63,10 +65,20 @@ class InsertData:
                                                       short_name=equipment.get('Краткое название'))
                     return equipment
 
+    def get_instance_equipment_accounting(self, serial_namber: str) -> django.db.models:
+        """Получаем экземпляр учтенного оборудования из нашей БД"""
+        equipment_acc = EquipmentAccounting.objects.get(serial_number=serial_namber)
+        return equipment_acc
+
     def get_instance_equipment_status(self, status: str) -> django.db.models:
         """Получаем экземпляр статуса оборудования из нашей БД."""
         equipment_status = EquipmentStatus.objects.get(name=status)
         return equipment_status
+
+    def get_instance_engineer(self, engineer_name: str) -> django.db.models:
+        """Получаем экземпляр инженера из нашей БД"""
+        engineer = Engineer.objects.get(name=engineer_name)
+        return engineer
                 
     def get_instance_manufacturer(self, manufacturer_name_ms: str) -> django.db.models:
         """Получаем экземпляр производителя из нашей БД.
@@ -176,6 +188,8 @@ class InsertData:
                     client = self.get_instance_client(department.get('Клиент'))
                     city = self.get_instance_city(department['Город']) if department.get('Город') \
                         else City.objects.get(name='Не указан')
+                    if department.get('Код') == 125:
+                        print(department)
                     Department.objects.create(name=department.get('Наименование'),
                                               address=department.get('Адрес'),
                                               client=client, city=city)
@@ -221,6 +235,26 @@ class InsertData:
                     logger.info(f'Оборудование {equipment} добавлено.')
                 except Exception as e:
                     logger.error(e)
+
+    def equipment_acc_department(self) -> None:
+        """Добавляем подразделения в которых установлено оборудование"""
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                equipment_acc = self.get_instance_equipment_accounting(data.get('Серийный номер'))
+                department = self.get_instance_department(data.get('Подразделение'))
+                engineer = self.get_instance_engineer(data.get('Инженер')) if data.get('Инженер') else None
+                install_dt = datetime.strptime(data['Дата монтажа'], '%Y-%m-%d %H:%M:%S') \
+                    if data.get('Дата монтажа') else None
+                try:
+                    EquipmentAccDepartment.objects.create(equipment_accounting=equipment_acc,
+                                                          department=department,
+                                                          engineer=engineer,
+                                                          install_dt=install_dt)
+                    logger.info(f'Оборудование {equipment_acc} + {department} добавлено.')
+                    # TODO: Выпадает с ошибкой - несущесвующее подразделение
+                except Exception as e:
+                    logger.error(f"{department=}\n{e}")
 
     def equipment_status(self) -> None:
         """Добавляем фиксированные надоры статусов"""
@@ -321,12 +355,14 @@ def main():
     """Вставка из JSON файлов"""
     # insert.equipment_status()
     # insert.clients()
+    # TODO: Заменить у подразделения.json "Код":125,"Наименование":"Сланцевская межрайонная больница","Клиент":90 на 16 ! ! !
     # insert.departments()
     # insert.dept_contact_pers()
     # insert.manufacturer_supplier()
     # insert.equipment()
     # insert.engineers()
-    insert.equipment_accounting()
+    # insert.equipment_accounting()
+    insert.equipment_acc_department()
 
 
 if __name__ == '__main__':
