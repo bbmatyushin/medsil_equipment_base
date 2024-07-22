@@ -12,6 +12,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ebase_site.settings")
 django.setup()
 
 from ebase.models import *
+from users.models import CompanyUser
 
 logger = logging.getLogger('INSERT_DATA')
 
@@ -50,6 +51,22 @@ class InsertData:
                     dept_department = Department.objects.get(name=department.get('Наименование'),
                                                              address=department.get('Адрес'))
                     return dept_department
+
+    def get_instance_equipment(self, equipment_code_ms: int) -> django.db.models:
+        """Получаем экземпляр оборудования из нашей БД.
+        :params equipment_code_ms: Код оборудования из MS Access."""
+        with open(Path(json_dir, 'список_оборудования.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                equipment = json.loads(line)
+                if equipment.get('Код') == equipment_code_ms:
+                    equipment = Equipment.objects.get(full_name=equipment.get('Название полное'),
+                                                      short_name=equipment.get('Краткое название'))
+                    return equipment
+
+    def get_instance_equipment_status(self, status: str) -> django.db.models:
+        """Получаем экземпляр статуса оборудования из нашей БД."""
+        equipment_status = EquipmentStatus.objects.get(name=status)
+        return equipment_status
                 
     def get_instance_manufacturer(self, manufacturer_name_ms: str) -> django.db.models:
         """Получаем экземпляр производителя из нашей БД.
@@ -187,17 +204,34 @@ class InsertData:
                 except Exception as e:
                     logger.error(e)
 
+    def equipment_accounting(self) -> None:
+        """Добовляем обородования для ведения учета"""
+        user = CompanyUser.objects.get(username='admin')
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                equipment, status = None, None
+                data = json.loads(line)
+                if data.get('Наименование прибора'):
+                    equipment = self.get_instance_equipment(data.get('Наименование прибора'))
+                if data.get('Статус прибора'):
+                    status = self.get_instance_equipment_status(data.get('Статус прибора'))
+                try:
+                    EquipmentAccounting.objects.create(equipment=equipment, serial_number=data.get('Серийный номер'),
+                                                       equipment_status=status, user=user)
+                    logger.info(f'Оборудование {equipment} добавлено.')
+                except Exception as e:
+                    logger.error(e)
+
     def equipment_status(self) -> None:
         """Добавляем фиксированные надоры статусов"""
-        eqipment_status_list = [
-            EquipmentStatus(name='В ремонте'),
-            EquipmentStatus(name='Работает'),
-            EquipmentStatus(name='Подменный'),
-            EquipmentStatus(name='Апробация'),
-            EquipmentStatus(name='Неисправен'),
-            EquipmentStatus(name='Списание'),
-        ]
-        EquipmentStatus.objects.bulk_create(eqipment_status_list)
+        status_list: set = set()
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Статус прибора'):
+                    status_list.add(data.get('Статус прибора'))
+        status_list = [EquipmentStatus(name=s) for s in status_list]
+        EquipmentStatus.objects.bulk_create(status_list)
 
     def med_direction(self) -> None:
         """Добавляем направления"""
@@ -232,36 +266,71 @@ class InsertData:
                     except Exception as e:
                         logger.error(e)
 
+    def positions(self) -> None:
+        """Добавляем должность инженер компании"""
+        Position.objects.create(name='инженер', type=PositionType.employee.name)
+
     def units(self) -> None:
         """Добавляем единицы измерения"""
-        unit_list = [
-            Unit(short_name='шт', full_name='штука'),
-            Unit(short_name='упак', full_name='упаковка'),
-
-        ]
+        unit_list: set = set()
+        with open(Path(json_dir, 'запчасти.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Едизм'):
+                    unit_list.add(data.get('Едизм'))
+        unit_list = [Unit(short_name=u) for u in unit_list]
         Unit.objects.bulk_create(unit_list)
 
+    def engineers(self) -> None:
+        """Добавляем инженеров"""
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Инженер'):
+                    try:
+                        Engineer.objects.create(name=data.get('Инженер'))
+                    except Exception as e:
+                        logger.error(e)
 
+
+def get_json_keys() -> str:
+    """Возвращает список ключей JSON файлов."""
+    file_name = 'общая_база.json'
+    keys: set = set()
+    users: set = set()
+    with open(Path(json_dir, file_name), 'r', encoding='utf-8') as f:
+        for line in f:
+            data = json.loads(line)
+            for k in data.keys():
+                keys.add(k)
+                if k == 'Инженер':
+                    users.add(data.get(k))
+
+    return f"{sorted(keys)=}\n{sorted(users)=}"
 
 
 def main():
     insert = InsertData()
 
-    # insert.equipment_status()
     # insert.med_direction()
     # insert.units()
     # insert.cities()
     # insert.countries()
+    # insert.positions()
 
     """Вставка из JSON файлов"""
+    # insert.equipment_status()
     # insert.clients()
     # insert.departments()
     # insert.dept_contact_pers()
-    insert.manufacturer_supplier()
-    insert.equipment()
+    # insert.manufacturer_supplier()
+    # insert.equipment()
+    # insert.engineers()
+    insert.equipment_accounting()
 
 
 if __name__ == '__main__':
     main()
     # print(InsertData().get_instance_city(12).name)
     # python manage.py sqlsequencereset myapp | python manage.py dbshell - для сброса счетчика id
+    print(get_json_keys())

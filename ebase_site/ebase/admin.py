@@ -67,10 +67,16 @@ class DeptContactPersAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Новое контактное лицо', {
             'fields': ('surname', 'name', 'patron',
-                       'position', 'department', 'mob_phone', 'work_phone',
+                       'department', 'position', 'mob_phone', 'work_phone',
                        'email', 'comment')
         }),
     )
+
+    # Переопределяет метод для выбора должностей. Будут видны только должности типа "Клиент"
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "position":
+            kwargs["queryset"] = Position.objects.filter(type=PositionType.client.name)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='ФИО')
     def fio(self, obj):
@@ -115,6 +121,43 @@ class EquipmentAdmin(admin.ModelAdmin):
         return f"{obj.supplier.name if obj.supplier else '-'}"
 
 
+@admin.register(EquipmentAccounting)
+class EquipmentAccountingAdmin(admin.ModelAdmin):
+    list_display = ('equipment', 'serial_number', 'equipment_status', 'is_our_service', 'is_our_supply', 'user', )
+    search_fields = ('serial_number',)
+    ordering = ('equipment', 'serial_number', 'user',)
+
+    fieldsets = (
+        ('Новый тип акта', {'fields': ('equipment', 'serial_number', 'equipment_status', 'is_our_service', 'is_our_supply')}),
+    )
+
+    @admin.display(description='Оборудование')
+    def equipment_name(self, obj):
+        return f"{obj.equipment.full_name if obj.equipment else '-'}"
+
+
+@admin.register(EquipmentStatus)
+class EquipmentStatusAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name',)
+    search_fields = ('name',)
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новый статус', {'fields': ('name',)}),
+    )
+
+
+@admin.register(Engineer)
+class EngineerAdmin(admin.ModelAdmin):
+    list_display = ('name', 'user')
+    search_fields = ('name',)
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новый инженер', {'fields': ('name', 'user')}),
+    )
+
+
 @admin.register(Manufacturer)
 class ManufacturerAdmin(admin.ModelAdmin):
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
@@ -152,7 +195,7 @@ class MedDirectionAdmin(admin.ModelAdmin):
 class PositionAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'type',)
     search_fields = ('name',)
-    ordering = ('name',)
+    ordering = ('type', 'name',)
 
     fieldsets = (
         ('Новая должность', {'fields': ('name', 'type')}),

@@ -1,4 +1,6 @@
 from django.contrib import admin
+
+from ebase.models import PositionType
 from .models import *
 
 
@@ -18,10 +20,15 @@ class CompanyUserAdmin(admin.ModelAdmin):
     def email_new(self, obj):
         return obj.email
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "position":
+            kwargs["queryset"] = Position.objects.filter(type=PositionType.employee.name)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     # для добавления блоков с полями при заполнени таблицы через админку
     fieldsets = (
         ('Логин и пароль нового пользователя', {'fields': ('username', 'password')}),
         ('Персональная информация', {'fields': ('first_name', 'last_name', 'patron', 'sex', 'birth', 'phone', 'email')}),
-        ('Разрешения', {'fields': ('is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Разрешения', {'fields': ('position', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         # ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )

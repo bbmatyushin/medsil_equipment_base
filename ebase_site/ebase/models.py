@@ -257,16 +257,18 @@ class Equipment(EbaseModel):
         db_table = f'{company}."equipment"'
         db_table_comment = "Перечень моделей медициского оборудования.\n\n-- BMatyushin"
         verbose_name = 'Медицинское оборудование'
-        verbose_name_plural = 'Медицинских оборудований'
+        verbose_name_plural = 'Медицинское оборудование'
         unique_together = ('full_name', 'short_name',)
+
+    def __str__(self):
+        return self.full_name
 
     def __repr__(self):
         return f'<Equipment {self.full_name=!r}>'
 
 
 class EquipmentAccDepartment(EbaseModel):
-    """Учет поставленного оборудования в подразделения клиента.
-    Для полей с автоматическим заполнением, обязательно editable=False"""
+    """Учет поставленного оборудования в подразделения клиента"""
     equipment_accounting = models.ForeignKey(
         'EquipmentAccounting', on_delete=models.RESTRICT, null=False, editable=False,
         related_name='equipment_acc_department_equipment_accounting',
@@ -278,15 +280,20 @@ class EquipmentAccDepartment(EbaseModel):
         related_name='equipment_accounting_department_department', verbose_name='ID Подразделения',
         db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
     )
-    user = models.ManyToManyField(
-        'users.CompanyUser', verbose_name='ID инженера',
-        related_name='equipment_accounting_company_user',
-        help_text="ID сотрудника-ИНЖНЕРА, который запускал оборудование. Заполняется автоматически"
+    engineer = models.ForeignKey(
+        'Engineer', on_delete=models.SET_NULL, null=True, blank=False,
+        related_name='equipment_accounting_engineer', verbose_name='Инженер',
+        help_text="Инженер, который запускал оборудование"
     )
     is_active = models.BooleanField(
         default=True, verbose_name='У клиента',
         db_comment='Флаг, указывающий на то, что прибор установлен в подразделении клиента',
         help_text='Флаг, указывающий на то, что прибор установлен в подразделении клиента'
+    )
+    install_dt = models.DateField(
+        null=True, blank=False, verbose_name='Дата монтажа',
+        db_comment='Дата установки оборудования в подразделении клиента',
+        help_text='Дата установки оборудования в подразделении клиента'
     )
 
     class Meta:
@@ -294,7 +301,7 @@ class EquipmentAccDepartment(EbaseModel):
         db_table_comment = 'Учет поставленного оборудования в подразделения клиента.\n\n-- BMatyushin'
         verbose_name = 'Учет поставленного оборудования'
         verbose_name_plural = 'Учет поставленного оборудования'
-        
+
     def __repr__(self):
         return f"<EquipmentAccDepartment {self.id=!r}, {self.is_active=!r}>"
 
@@ -303,8 +310,8 @@ class EquipmentAccounting(EbaseModel):
     """Модель для учета оборудований.
     Для полей с автоматическим заполнением, обязательно editable=False"""
     equipment = models.ForeignKey(
-        'Equipment', on_delete=models.RESTRICT, null=False, editable=False,
-        related_name='equipment_accounting_equipment', verbose_name='ID Оборудования',
+        'Equipment', on_delete=models.RESTRICT, null=False, editable=True,
+        related_name='equipment_accounting_equipment', verbose_name='Оборудования',
         db_comment="ID оборудования", help_text="ID оборудования. Заполняется автоматически"
     )
     equipment_status = models.ForeignKey(
@@ -353,6 +360,12 @@ class EquipmentAccounting(EbaseModel):
                             'номеру.\n\n-- BMatyushin')
         verbose_name = 'Учёт оборудования'
         verbose_name_plural = 'Учёт оборудований'
+        unique_together = ('serial_number', 'equipment')
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.user = request.user
+            super().save_model(request, obj, form, change)
 
     def __repr__(self):
         return f'<EquipmentAccounting {self.serial_number=!r}>'
@@ -361,7 +374,7 @@ class EquipmentAccounting(EbaseModel):
 class EquipmentStatus(models.Model):
     """Модель для фиксированного набора статусов оборудования"""
     name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Статус',
+        max_length=50, null=False, blank=False, verbose_name='Статус', unique=True,
         db_comment='Статус оборудования', help_text='Статус оборудования'
     )
 
@@ -369,10 +382,46 @@ class EquipmentStatus(models.Model):
         db_table = f'{company}."equipment_status"'
         db_table_comment = 'Таблица с набором статусов оборудования. \n\n-- BMatyushin'
         verbose_name = 'Статус оборудования'
-        verbose_name_plural = 'Статусы оборудований'
+        verbose_name_plural = 'Статусы оборудования'
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self):
         return f'<EquipmentStatus {self.name=!r}>'
+
+
+class Engineer(models.Model):
+    """Инженеры. Отдельная сущность, чтобы не привязываться к пользователю в системе.
+    Через сигнал заполняется автоматически, если у нового пользователя должность инженер."""
+    # TODO: Настроить сигнал для заполнения модели
+    name = models.CharField(
+        max_length=100, null=False, blank=False, unique=True,
+        verbose_name='Инженер', db_comment='Имя инженера', help_text='Имя инженера'
+    )
+    user = models.OneToOneField(
+        "users.CompanyUser", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="engineer_company_user", verbose_name='Пользователь системы',
+        db_comment="ID пользователя", help_text="Зарегистрированный пользователь системы"
+    )
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
+        db_comment='Дата создания записи.',
+    )
+
+    class Meta:
+        db_table = f'{company}."engineer"'
+        db_table_comment = ("Инженеры. Отдельная сущность, чтобы не привязываться к пользователю в системе.\n"
+                            "Через сигнал заполняется автоматически, если у нового пользователя должность инженер."
+                            "\n\n-- BMatyushin")
+        verbose_name = 'Инженер'
+        verbose_name_plural = 'Инженеры'
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f'<Engineer {self.name=!r}>'
 
 
 class Manufacturer(EbaseModel):
@@ -465,6 +514,9 @@ class Position(models.Model):
         choices=[(t.name, t.value) for t in PositionType],
         db_comment='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений',
         help_text='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений'
+    )
+    user = models.ManyToManyField(
+        "users.CompanyUser", related_name="position_user", verbose_name='Сотрудник',
     )
 
     class Meta:
