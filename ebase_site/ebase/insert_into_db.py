@@ -273,7 +273,6 @@ class InsertData:
                                                           engineer=engineer,
                                                           install_dt=install_dt)
                     logger.info(f'Оборудование {equipment_acc} + {department} добавлено.')
-                    # TODO: Выпадает с ошибкой - несущесвующее подразделение
                 except Exception as e:
                     logger.error(f"{department=}\n{e}")
 
@@ -336,14 +335,16 @@ class InsertData:
                 reason = data['На основании'] if data.get('На основании') else None
                 job_content = data['Содержание работ']if data.get('Содержание работ') else None
                 beg_dt = datetime.strptime(data['Дата ремонта'], '%Y-%m-%d %H:%M:%S') \
-                    if data.get('Дата ремонта') else None
+                    if data.get('Дата ремонта') else '1970-01-01'
                 comment = data['Примечание'] if data.get('Примечание') else None
                 equipment_accounting = self.get_instance_equipment_accounting(data.get('Серийный номер'))
                 spare_part_instances = []
                 if data.get('Запчасти'):
                     parts = data['Запчасти'].split('\r\n')
-                    for part in parts:
-                        spare_part_instances.append(self.get_instance_spare_part(part, data['Серийный номер']))
+                    for p in parts:
+                        for part in p.split(','):
+                            if part.strip():
+                                spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
                 try:
                     service = Service(
                         service_type=service_type,
@@ -352,13 +353,14 @@ class InsertData:
                         job_content=job_content,
                         beg_dt=beg_dt,
                         comment=comment,
-                        user=user
+                        user=user,
+                        equipment_accounting=equipment_accounting,
                     )
                     pk = service.pk
                     service.save()
                     service_instance = Service.objects.get(pk=pk)
-                    if equipment_accounting:
-                        service_instance.equipment_accounting.set([equipment_accounting])
+                    # if equipment_accounting:
+                    #     service_instance.equipment_accounting.set([equipment_accounting])
                     if spare_part_instances:
                         for spare_part in spare_part_instances:
                             service_instance.spare_part.set([spare_part])
@@ -385,17 +387,19 @@ class InsertData:
                 equipment = self.get_instance_equipment_by_sn(data.get('Серийный номер'))
                 if equipment:
                     if data.get('Запчасти'):
-                        parts = data.get('Запчасти').split('\r\n')  # TODO: Нужно ещё разделять по запятым
-                        for part in parts:
-                            try:
-                                spare_part = SparePart(name=part, article=equipment.full_name[:50],)
-                                pr_key = spare_part.pk
-                                spare_part.save()
-                                part_instance = SparePart.objects.get(pk=pr_key)
-                                part_instance.equipment.set([equipment])
-                                logger.info(f'Запчасть {part} добавлена.')
-                            except Exception as e:
-                                logger.error(e)
+                        parts = data.get('Запчасти').split('\r\n')
+                        for p in parts:
+                            for part in p.split(','):
+                                if part.strip():  # возможно пустое значение
+                                    try:
+                                        spare_part = SparePart(name=part.strip(), article=equipment.full_name[:50],)
+                                        pr_key = spare_part.pk
+                                        spare_part.save()
+                                        part_instance = SparePart.objects.get(pk=pr_key)
+                                        part_instance.equipment.set([equipment])
+                                        logger.info(f'Запчасть {part} добавлена.')
+                                    except Exception as e:
+                                        logger.error(e)
 
     def units(self) -> None:
         """Добавляем единицы измерения"""
@@ -456,11 +460,12 @@ def main():
     # insert.engineers()
     # insert.equipment_accounting()
     # insert.equipment_acc_department()
-    # insert.spare_parts()  # TODO: Нужно исправить # TODO: Нужно ещё разделять по запятым
+    # insert.spare_parts()
     # insert.service_type()
-    # TODO: В таблице service_equipment_accounting слишком много записей по ремонты одного оборудования. Нужно проверить связи.
-    insert.service()
+    # insert.service()
 
+
+# TODO: Сделать отдельное приложение для Справочников (directory) (чтобы отделить их в админке)
 
 if __name__ == '__main__':
     main()

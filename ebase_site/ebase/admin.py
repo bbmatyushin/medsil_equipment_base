@@ -225,10 +225,24 @@ class PositionAdmin(admin.ModelAdmin):
     )
 
 
-# @admin.register(Service)
-# class ServiceAdmin(admin.ModelAdmin):
-#     list_display = ('id', 'name',)
-#     # TODO: Доделать
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_display = ('equipment_accounting', 'service_type', 'description',
+                    'reason', 'job_content_short', 'beg_dt',)
+    ordering = ('beg_dt',)
+    list_select_related = ('equipment_accounting', 'service_type',)
+
+    fieldsets = (
+        ('Новый ремонт', {'fields': ('equipment_accounting', 'spare_part', 'service_type',
+                                     'description', 'reason', 'job_content')}
+        ),
+        ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
+    )
+
+    @admin.display(description='Содержание работ')
+    def job_content_short(self, obj):
+        content = obj.job_content[:50] if obj.job_content else '-'
+        return content if len(content) < 50 else f'{content}...'
 
 
 @admin.register(ServiceType)
@@ -247,6 +261,7 @@ class SparePartAdmin(admin.ModelAdmin):
     list_display = ('article', 'name', 'unit', 'is_expiration', 'equipment_name')
     search_fields = ('name', 'article')
     ordering = ('name', 'article')
+    list_select_related = ('unit',)
 
     fieldsets = (
         ('Новая запчасть', {'fields': ('article', ('name', 'unit'), 'is_expiration', 'equipment')}),
@@ -255,7 +270,8 @@ class SparePartAdmin(admin.ModelAdmin):
 
     @admin.display(description='Оборудование')
     def equipment_name(self, obj):
-        return obj.equipment.first()
+        equipment_list = obj.equipment.values_list('full_name', flat=True)
+        return ", ".join(equipment_list)
 
 
 @admin.register(Supplier)
