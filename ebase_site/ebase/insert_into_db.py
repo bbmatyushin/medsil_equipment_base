@@ -4,6 +4,8 @@ import os
 import logging
 import json
 import uuid
+from datetime import datetime
+
 import django
 
 from pathlib import Path
@@ -12,6 +14,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ebase_site.settings")
 django.setup()
 
 from ebase.models import *
+from users.models import CompanyUser
 
 logger = logging.getLogger('INSERT_DATA')
 
@@ -50,6 +53,42 @@ class InsertData:
                     dept_department = Department.objects.get(name=department.get('Наименование'),
                                                              address=department.get('Адрес'))
                     return dept_department
+
+    def get_instance_equipment(self, equipment_code_ms: int) -> django.db.models:
+        """Получаем экземпляр оборудования из нашей БД.
+        :params equipment_code_ms: Код оборудования из MS Access."""
+        with open(Path(json_dir, 'список_оборудования.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                equipment = json.loads(line)
+                if equipment.get('Код') == equipment_code_ms:
+                    equipment = Equipment.objects.get(full_name=equipment.get('Название полное'),
+                                                      short_name=equipment.get('Краткое название'))
+                    return equipment
+
+    def get_instance_equipment_by_sn(self, serial_number: str) -> django.db.models:
+        """Получаем экземпляр оборудования из нашей БД.
+        :params serial_number: Серийный номер оборудования."""
+        try:
+            equipment = EquipmentAccounting.objects.get(serial_number=serial_number).equipment
+        except Exception as err:
+            logger.error(err)
+            equipment = None
+        return equipment
+
+    def get_instance_equipment_accounting(self, serial_namber: str) -> django.db.models:
+        """Получаем экземпляр учтенного оборудования из нашей БД"""
+        equipment_acc = EquipmentAccounting.objects.get(serial_number=serial_namber)
+        return equipment_acc
+
+    def get_instance_equipment_status(self, status: str) -> django.db.models:
+        """Получаем экземпляр статуса оборудования из нашей БД."""
+        equipment_status = EquipmentStatus.objects.get(name=status)
+        return equipment_status
+
+    def get_instance_engineer(self, engineer_name: str) -> django.db.models:
+        """Получаем экземпляр инженера из нашей БД"""
+        engineer = Engineer.objects.get(name=engineer_name)
+        return engineer
                 
     def get_instance_manufacturer(self, manufacturer_name_ms: str) -> django.db.models:
         """Получаем экземпляр производителя из нашей БД.
@@ -71,6 +110,17 @@ class InsertData:
         """Получаем экземпляр должности из нашей БД.
         :params post_name: Название должности."""
         return Position.objects.get(name=post_name)
+
+    def get_instance_service_type(self, type_name: str) -> django.db.models:
+        """Получаем экземпляр вида работ из нашей БД.
+        :params type_name: Название типа сервиса."""
+        return ServiceType.objects.get(name=type_name)
+
+    def get_instance_spare_part(self, spare_part_name: str, serial_number: str) -> django.db.models:
+        """Получаем экземпляр запчасти из нашей БД.
+        :params spare_part_name: Название запчасти."""
+        equipment = EquipmentAccounting.objects.get(serial_number=serial_number)
+        return SparePart.objects.get(name=spare_part_name, equipment=equipment.equipment_id)
     
     def get_instance_supplier(self, supplier_name_ms: str) -> django.db.models:
         """Получаем экземпляр поставщика из нашей БД.
@@ -159,6 +209,8 @@ class InsertData:
                     client = self.get_instance_client(department.get('Клиент'))
                     city = self.get_instance_city(department['Город']) if department.get('Город') \
                         else City.objects.get(name='Не указан')
+                    if department.get('Код') == 125:
+                        print(department)
                     Department.objects.create(name=department.get('Наименование'),
                                               address=department.get('Адрес'),
                                               client=client, city=city)
@@ -187,17 +239,53 @@ class InsertData:
                 except Exception as e:
                     logger.error(e)
 
+    def equipment_accounting(self) -> None:
+        """Добовляем обородования для ведения учета"""
+        user = CompanyUser.objects.get(username='admin')
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                equipment, status = None, None
+                data = json.loads(line)
+                if data.get('Наименование прибора'):
+                    equipment = self.get_instance_equipment(data.get('Наименование прибора'))
+                if data.get('Статус прибора'):
+                    status = self.get_instance_equipment_status(data.get('Статус прибора'))
+                try:
+                    EquipmentAccounting.objects.create(equipment=equipment, serial_number=data.get('Серийный номер'),
+                                                       equipment_status=status, user=user)
+                    logger.info(f'Оборудование {equipment} добавлено.')
+                except Exception as e:
+                    logger.error(e)
+
+    def equipment_acc_department(self) -> None:
+        """Добавляем подразделения в которых установлено оборудование"""
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                equipment_acc = self.get_instance_equipment_accounting(data.get('Серийный номер'))
+                department = self.get_instance_department(data.get('Подразделение'))
+                engineer = self.get_instance_engineer(data.get('Инженер')) if data.get('Инженер') else None
+                install_dt = datetime.strptime(data['Дата монтажа'], '%Y-%m-%d %H:%M:%S') \
+                    if data.get('Дата монтажа') else None
+                try:
+                    EquipmentAccDepartment.objects.create(equipment_accounting=equipment_acc,
+                                                          department=department,
+                                                          engineer=engineer,
+                                                          install_dt=install_dt)
+                    logger.info(f'Оборудование {equipment_acc} + {department} добавлено.')
+                except Exception as e:
+                    logger.error(f"{department=}\n{e}")
+
     def equipment_status(self) -> None:
         """Добавляем фиксированные надоры статусов"""
-        eqipment_status_list = [
-            EquipmentStatus(name='В ремонте'),
-            EquipmentStatus(name='Работает'),
-            EquipmentStatus(name='Подменный'),
-            EquipmentStatus(name='Апробация'),
-            EquipmentStatus(name='Неисправен'),
-            EquipmentStatus(name='Списание'),
-        ]
-        EquipmentStatus.objects.bulk_create(eqipment_status_list)
+        status_list: set = set()
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Статус прибора'):
+                    status_list.add(data.get('Статус прибора'))
+        status_list = [EquipmentStatus(name=s) for s in status_list]
+        EquipmentStatus.objects.bulk_create(status_list)
 
     def med_direction(self) -> None:
         """Добавляем направления"""
@@ -232,36 +320,155 @@ class InsertData:
                     except Exception as e:
                         logger.error(e)
 
+    def positions(self) -> None:
+        """Добавляем должность инженер компании"""
+        Position.objects.create(name='инженер', type=PositionType.employee.name)
+
+    def service(self) -> None:
+        """Добавляем записи о ремонте"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                user = CompanyUser.objects.get(username='admin')
+                service_type = self.get_instance_service_type(data.get('Вид работ')) if data.get('Вид работ') else None
+                description = data['Описание неисправности'] if data.get('Описание неисправности') else None
+                reason = data['На основании'] if data.get('На основании') else None
+                job_content = data['Содержание работ']if data.get('Содержание работ') else None
+                beg_dt = datetime.strptime(data['Дата ремонта'], '%Y-%m-%d %H:%M:%S') \
+                    if data.get('Дата ремонта') else '1970-01-01'
+                comment = data['Примечание'] if data.get('Примечание') else None
+                equipment_accounting = self.get_instance_equipment_accounting(data.get('Серийный номер'))
+                spare_part_instances = []
+                if data.get('Запчасти'):
+                    parts = data['Запчасти'].split('\r\n')
+                    for p in parts:
+                        for part in p.split(','):
+                            if part.strip():
+                                spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
+                try:
+                    service = Service(
+                        service_type=service_type,
+                        description=description,
+                        reason=reason,
+                        job_content=job_content,
+                        beg_dt=beg_dt,
+                        comment=comment,
+                        user=user,
+                        equipment_accounting=equipment_accounting,
+                    )
+                    pk = service.pk
+                    service.save()
+                    service_instance = Service.objects.get(pk=pk)
+                    # if equipment_accounting:
+                    #     service_instance.equipment_accounting.set([equipment_accounting])
+                    if spare_part_instances:
+                        for spare_part in spare_part_instances:
+                            service_instance.spare_part.set([spare_part])
+                    logger.info(f'Ремонт {data.get("Серийный номер")} добавлен.')
+                except Exception as e:
+                    logger.error(e)
+
+    def service_type(self) -> None:
+        """Добавляем виды работ"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Вид работ'):
+                    try:
+                        ServiceType.objects.create(name=data.get('Вид работ'))
+                    except Exception as e:
+                        logger.error(e)
+
+    def spare_parts(self) -> None:
+        """Добавляем запчасти"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                equipment = self.get_instance_equipment_by_sn(data.get('Серийный номер'))
+                if equipment:
+                    if data.get('Запчасти'):
+                        parts = data.get('Запчасти').split('\r\n')
+                        for p in parts:
+                            for part in p.split(','):
+                                if part.strip():  # возможно пустое значение
+                                    try:
+                                        spare_part = SparePart(name=part.strip(), article=equipment.full_name[:50],)
+                                        pr_key = spare_part.pk
+                                        spare_part.save()
+                                        part_instance = SparePart.objects.get(pk=pr_key)
+                                        part_instance.equipment.set([equipment])
+                                        logger.info(f'Запчасть {part} добавлена.')
+                                    except Exception as e:
+                                        logger.error(e)
+
     def units(self) -> None:
         """Добавляем единицы измерения"""
-        unit_list = [
-            Unit(short_name='шт', full_name='штука'),
-            Unit(short_name='упак', full_name='упаковка'),
-
-        ]
+        unit_list: set = set()
+        with open(Path(json_dir, 'запчасти.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Едизм'):
+                    unit_list.add(data.get('Едизм'))
+        unit_list = [Unit(short_name=u) for u in unit_list]
         Unit.objects.bulk_create(unit_list)
 
+    def engineers(self) -> None:
+        """Добавляем инженеров"""
+        with open(Path(json_dir, 'общая_база.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Инженер'):
+                    try:
+                        Engineer.objects.create(name=data.get('Инженер'))
+                    except Exception as e:
+                        logger.error(e)
 
+
+def get_json_keys() -> str:
+    """Возвращает список ключей JSON файлов."""
+    file_name = 'ремонт.json'
+    keys: set = set()
+    users: set = set()
+    with open(Path(json_dir, file_name), 'r', encoding='utf-8') as f:
+        for line in f:
+            data = json.loads(line)
+            for k in data.keys():
+                keys.add(k)
+                if k == 'Инженер':
+                    users.add(data.get(k))
+
+    return f"{sorted(keys)=}\n{sorted(users)=}"
 
 
 def main():
     insert = InsertData()
 
-    # insert.equipment_status()
     # insert.med_direction()
     # insert.units()
     # insert.cities()
     # insert.countries()
+    # insert.positions()
 
     """Вставка из JSON файлов"""
+    # insert.equipment_status()
     # insert.clients()
+    # TODO: Заменить у подразделения.json "Код":125,"Наименование":"Сланцевская межрайонная больница","Клиент":90 на 16 ! ! !
     # insert.departments()
     # insert.dept_contact_pers()
-    insert.manufacturer_supplier()
-    insert.equipment()
+    # insert.manufacturer_supplier()
+    # insert.equipment()
+    # insert.engineers()
+    # insert.equipment_accounting()
+    # insert.equipment_acc_department()
+    # insert.spare_parts()
+    # insert.service_type()
+    # insert.service()
 
+
+# TODO: Сделать отдельное приложение для Справочников (directory) (чтобы отделить их в админке)
 
 if __name__ == '__main__':
     main()
     # print(InsertData().get_instance_city(12).name)
     # python manage.py sqlsequencereset myapp | python manage.py dbshell - для сброса счетчика id
+    print(get_json_keys())

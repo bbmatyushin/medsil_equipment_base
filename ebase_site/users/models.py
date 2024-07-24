@@ -3,6 +3,8 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+from ebase.models import Position
+
 
 class CompanyUser(AbstractUser):
     """Модель пользователя."""
@@ -30,6 +32,10 @@ class CompanyUser(AbstractUser):
         verbose_name='Учет поставленного оборудования',
         help_text='Учет поставленного оборудования'
     )
+    position = models.ManyToManyField(
+        'ebase.Position', related_name='company_user_position',
+        verbose_name='Должность', help_text='Может быть несколько должностей',
+    )
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'first_name']
@@ -39,6 +45,12 @@ class CompanyUser(AbstractUser):
         db_table_comment = 'Таблица с пользователями. \n\n-- BMatyushin'
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+
+    def __str__(self):
+        return (f"{self.first_name if self.first_name else ''} "
+                f"{self.patron if self.patron else ''} " 
+                f"{self.last_name if self.last_name else ''} " 
+                f"{f'({self.username})' if self.username else ''}")
 
     def __repr__(self):
         return f"<CompanyUser {self.username=!r}>"
