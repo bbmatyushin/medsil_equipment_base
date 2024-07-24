@@ -225,6 +225,12 @@ class PositionAdmin(admin.ModelAdmin):
     )
 
 
+# @admin.register(Service)
+# class ServiceAdmin(admin.ModelAdmin):
+#     list_display = ('id', 'name',)
+#     # TODO: Доделать
+
+
 @admin.register(ServiceType)
 class ServiceTypeAdmin(admin.ModelAdmin):
     list_display = ('id', 'name',)
@@ -234,6 +240,22 @@ class ServiceTypeAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Новый тип ремоната / вида работ', {'fields': ('name',)}),
     )
+
+
+@admin.register(SparePart)
+class SparePartAdmin(admin.ModelAdmin):
+    list_display = ('article', 'name', 'unit', 'is_expiration', 'equipment_name')
+    search_fields = ('name', 'article')
+    ordering = ('name', 'article')
+
+    fieldsets = (
+        ('Новая запчасть', {'fields': ('article', ('name', 'unit'), 'is_expiration', 'equipment')}),
+
+    )
+
+    @admin.display(description='Оборудование')
+    def equipment_name(self, obj):
+        return obj.equipment.first()
 
 
 @admin.register(Supplier)

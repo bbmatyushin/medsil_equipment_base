@@ -20,6 +20,11 @@ def get_instance_country():
     return Country.objects.get(name='Россия')
 
 
+def get_instance_unit():
+    """Возвращает экземпляр модели Unit штука."""
+    return Unit.objects.get(short_name='шт.')
+
+
 class PositionType(Enum):
     """Тип должности."""
     employee = 'Сотрудник'
@@ -367,6 +372,9 @@ class EquipmentAccounting(EbaseModel):
             obj.user = request.user
             super().save_model(request, obj, form, change)
 
+    def __str__(self):
+        return f"{self.serial_number}".upper()
+
     def __repr__(self):
         return f'<EquipmentAccounting {self.serial_number=!r}>'
 
@@ -588,6 +596,14 @@ class Service(EbaseModel):
         verbose_name = 'Учет ремонта оборудования'
         verbose_name_plural = 'Учет ремонта оборудования'
 
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.user = request.user
+            super().save_model(request, obj, form, change)
+
+    def __str__(self):
+        return f"{self.service_type}, {self.equipment_accounting.first()}"
+
     def __repr__(self):
         return f'<Service {self.id=!r}, {self.user=!r}>'
 
@@ -595,8 +611,8 @@ class Service(EbaseModel):
 class ServiceType(models.Model):
     """Типы ремонта / Виды работ"""
     name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Тип ремонта',
-        db_comment='Тип ремонта', help_text='Тип ремонта'
+        max_length=100, null=False, blank=False, verbose_name='Тип ремонта',
+        db_comment='Тип ремонта', unique=True,
     )
 
     class Meta:
@@ -612,34 +628,33 @@ class ServiceType(models.Model):
 class SparePart(EbaseModel):
     """Запчасти."""
     article = models.CharField(
-        max_length=50, null=True, blank=True, verbose_name='Артикул',
-        db_comment='Артикул', help_text='Артикул'
+        max_length=50, null=True, blank=False, verbose_name='Артикул', db_comment='Артикул',
     )
     name = models.CharField(
-        max_length=100, null=False, blank=False,verbose_name='Наименование',
-        db_comment='Наименование запчасти', help_text='Наименование запчасти'
+        max_length=300, null=False, blank=False,verbose_name='Наименование',
+        db_comment='Наименование запчасти',
     )
     unit = models.ForeignKey(
-        "Unit", on_delete=models.RESTRICT, null=False, blank=False, default=1,
-        related_name="spare_part_unit", verbose_name='Единица измерения',
-        db_comment='Единица измерения', help_text='Единица измерения'
+        "Unit", on_delete=models.RESTRICT, null=False, blank=False,
+        related_name="spare_part_unit", verbose_name='Ед.изм.', db_comment='Ед.изм.',
+        default=get_instance_unit
     )
     comment = models.TextField(
         null=True, blank=True, verbose_name='Примечание',
         db_comment='Примечание к запчасти', help_text='Примечание к запчасти'
     )
     is_expiration = models.BooleanField(
-        default=False, verbose_name='Срок годности',
+        default=False, verbose_name='Срок годности', blank=False,
         db_comment='Отмечаются запчасти со сроками годности',
         help_text='Флаг указывающий, что у запчасти должен быть срок годности'
     )
     equipment = models.ManyToManyField(
-        "Equipment", related_name="spare_part_equipment", verbose_name='ID Оборудования',
-        help_text="ID оборудования, для которого предназначена эта запчасть"
+        "Equipment", related_name="spare_part_equipment", verbose_name='Оборудование',
+        help_text="Оборудование, для которого предназначена эта запчасть. ", blank=False,
     )
     service = models.ManyToManyField(
         "Service", related_name="spare_part_service", verbose_name='ID Ремонта',
-        help_text="ID ремонта, в котором использовалась запчасть"
+        help_text="В каком ремонте использовалась эта запчасть"
     )
 
     class Meta:
@@ -648,6 +663,9 @@ class SparePart(EbaseModel):
         verbose_name = 'Справочник запчастей'
         verbose_name_plural = 'Справочник запчастей'
         unique_together = ('article', 'name',)
+
+    def __str__(self):
+        return f'{self.name} {f"(арт. {self.article})"if self.article else ""}'
 
     def __repr__(self):
         return f'<SparePart {self.name=!r}>'
@@ -836,6 +854,9 @@ class Unit(models.Model):
         db_table_comment = 'Справочник с единицами измерения. \n\n-- BMatyushin'
         verbose_name = 'Единица измерения'
         verbose_name_plural = 'Единицы измерения'
+
+    def __str__(self):
+        return self.short_name
 
     def __repr__(self):
         return f'<Unit {self.short_name=!r}>'

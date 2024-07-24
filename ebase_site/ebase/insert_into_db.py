@@ -65,6 +65,16 @@ class InsertData:
                                                       short_name=equipment.get('Краткое название'))
                     return equipment
 
+    def get_instance_equipment_by_sn(self, serial_number: str) -> django.db.models:
+        """Получаем экземпляр оборудования из нашей БД.
+        :params serial_number: Серийный номер оборудования."""
+        try:
+            equipment = EquipmentAccounting.objects.get(serial_number=serial_number).equipment
+        except Exception as err:
+            logger.error(err)
+            equipment = None
+        return equipment
+
     def get_instance_equipment_accounting(self, serial_namber: str) -> django.db.models:
         """Получаем экземпляр учтенного оборудования из нашей БД"""
         equipment_acc = EquipmentAccounting.objects.get(serial_number=serial_namber)
@@ -100,6 +110,17 @@ class InsertData:
         """Получаем экземпляр должности из нашей БД.
         :params post_name: Название должности."""
         return Position.objects.get(name=post_name)
+
+    def get_instance_service_type(self, type_name: str) -> django.db.models:
+        """Получаем экземпляр вида работ из нашей БД.
+        :params type_name: Название типа сервиса."""
+        return ServiceType.objects.get(name=type_name)
+
+    def get_instance_spare_part(self, spare_part_name: str, serial_number: str) -> django.db.models:
+        """Получаем экземпляр запчасти из нашей БД.
+        :params spare_part_name: Название запчасти."""
+        equipment = EquipmentAccounting.objects.get(serial_number=serial_number)
+        return SparePart.objects.get(name=spare_part_name, equipment=equipment.equipment_id)
     
     def get_instance_supplier(self, supplier_name_ms: str) -> django.db.models:
         """Получаем экземпляр поставщика из нашей БД.
@@ -304,6 +325,78 @@ class InsertData:
         """Добавляем должность инженер компании"""
         Position.objects.create(name='инженер', type=PositionType.employee.name)
 
+    def service(self) -> None:
+        """Добавляем записи о ремонте"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                user = CompanyUser.objects.get(username='admin')
+                service_type = self.get_instance_service_type(data.get('Вид работ')) if data.get('Вид работ') else None
+                description = data['Описание неисправности'] if data.get('Описание неисправности') else None
+                reason = data['На основании'] if data.get('На основании') else None
+                job_content = data['Содержание работ']if data.get('Содержание работ') else None
+                beg_dt = datetime.strptime(data['Дата ремонта'], '%Y-%m-%d %H:%M:%S') \
+                    if data.get('Дата ремонта') else None
+                comment = data['Примечание'] if data.get('Примечание') else None
+                equipment_accounting = self.get_instance_equipment_accounting(data.get('Серийный номер'))
+                spare_part_instances = []
+                if data.get('Запчасти'):
+                    parts = data['Запчасти'].split('\r\n')
+                    for part in parts:
+                        spare_part_instances.append(self.get_instance_spare_part(part, data['Серийный номер']))
+                try:
+                    service = Service(
+                        service_type=service_type,
+                        description=description,
+                        reason=reason,
+                        job_content=job_content,
+                        beg_dt=beg_dt,
+                        comment=comment,
+                        user=user
+                    )
+                    pk = service.pk
+                    service.save()
+                    service_instance = Service.objects.get(pk=pk)
+                    if equipment_accounting:
+                        service_instance.equipment_accounting.set([equipment_accounting])
+                    if spare_part_instances:
+                        for spare_part in spare_part_instances:
+                            service_instance.spare_part.set([spare_part])
+                    logger.info(f'Ремонт {data.get("Серийный номер")} добавлен.')
+                except Exception as e:
+                    logger.error(e)
+
+    def service_type(self) -> None:
+        """Добавляем виды работ"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get('Вид работ'):
+                    try:
+                        ServiceType.objects.create(name=data.get('Вид работ'))
+                    except Exception as e:
+                        logger.error(e)
+
+    def spare_parts(self) -> None:
+        """Добавляем запчасти"""
+        with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                equipment = self.get_instance_equipment_by_sn(data.get('Серийный номер'))
+                if equipment:
+                    if data.get('Запчасти'):
+                        parts = data.get('Запчасти').split('\r\n')  # TODO: Нужно ещё разделять по запятым
+                        for part in parts:
+                            try:
+                                spare_part = SparePart(name=part, article=equipment.full_name[:50],)
+                                pr_key = spare_part.pk
+                                spare_part.save()
+                                part_instance = SparePart.objects.get(pk=pr_key)
+                                part_instance.equipment.set([equipment])
+                                logger.info(f'Запчасть {part} добавлена.')
+                            except Exception as e:
+                                logger.error(e)
+
     def units(self) -> None:
         """Добавляем единицы измерения"""
         unit_list: set = set()
@@ -329,7 +422,7 @@ class InsertData:
 
 def get_json_keys() -> str:
     """Возвращает список ключей JSON файлов."""
-    file_name = 'общая_база.json'
+    file_name = 'ремонт.json'
     keys: set = set()
     users: set = set()
     with open(Path(json_dir, file_name), 'r', encoding='utf-8') as f:
@@ -362,7 +455,11 @@ def main():
     # insert.equipment()
     # insert.engineers()
     # insert.equipment_accounting()
-    insert.equipment_acc_department()
+    # insert.equipment_acc_department()
+    # insert.spare_parts()  # TODO: Нужно исправить # TODO: Нужно ещё разделять по запятым
+    # insert.service_type()
+    # TODO: В таблице service_equipment_accounting слишком много записей по ремонты одного оборудования. Нужно проверить связи.
+    insert.service()
 
 
 if __name__ == '__main__':
