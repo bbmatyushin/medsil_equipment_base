@@ -3,8 +3,6 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
-from ebase.models import Position
-
 
 class CompanyUser(AbstractUser):
     """Модель пользователя."""
@@ -30,10 +28,9 @@ class CompanyUser(AbstractUser):
     equipment_acc_department = models.ManyToManyField(
         'ebase.EquipmentAccDepartment', related_name='company_user_equipment_acc_department',
         verbose_name='Учет поставленного оборудования',
-        help_text='Учет поставленного оборудования'
     )
     position = models.ManyToManyField(
-        'ebase.Position', related_name='company_user_position',
+        'directory.Position', related_name='company_user_position',
         verbose_name='Должность', help_text='Может быть несколько должностей',
     )
 

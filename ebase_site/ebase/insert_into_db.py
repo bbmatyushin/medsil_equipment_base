@@ -14,6 +14,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ebase_site.settings")
 django.setup()
 
 from ebase.models import *
+from directory.models import *
 from users.models import CompanyUser
 
 logger = logging.getLogger('INSERT_DATA')

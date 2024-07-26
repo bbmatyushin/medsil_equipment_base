@@ -1,5 +1,7 @@
 from django.contrib import admin
 from .models import *
+# from users.models import CompanyUser
+from directory.models import Position, PositionType
 
 
 @admin.register(Client)
@@ -15,28 +17,6 @@ class ClientAdmin(admin.ModelAdmin):
     @admin.display(description='Город')
     def city_name(self, obj):
         return obj.city.name if obj.city else '-'
-
-
-@admin.register(City)
-class CityAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'region', 'create_dt')
-    search_fields = ('name', 'region')
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый город', {'fields': ('name', 'region')}),
-    )
-
-
-@admin.register(Country)
-class CountryAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'create_dt')
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новая страна', {'fields': ('name',)}),
-    )
 
 
 @admin.register(Department)
@@ -159,28 +139,6 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
         return obj.user.username
 
 
-@admin.register(EquipmentStatus)
-class EquipmentStatusAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый статус', {'fields': ('name',)}),
-    )
-
-
-@admin.register(Engineer)
-class EngineerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user')
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый инженер', {'fields': ('name', 'user')}),
-    )
-
-
 @admin.register(Manufacturer)
 class ManufacturerAdmin(admin.ModelAdmin):
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
@@ -203,28 +161,6 @@ class ManufacturerAdmin(admin.ModelAdmin):
         return obj.country.name if obj.country else '-'
 
 
-@admin.register(MedDirection)
-class MedDirectionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новое направление', {'fields': ('name',)}),
-    )
-
-
-@admin.register(Position)
-class PositionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'type',)
-    search_fields = ('name',)
-    ordering = ('type', 'name',)
-
-    fieldsets = (
-        ('Новая должность', {'fields': ('name', 'type')}),
-    )
-
-
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     list_display = ('equipment_accounting', 'service_type', 'description',
@@ -243,35 +179,6 @@ class ServiceAdmin(admin.ModelAdmin):
     def job_content_short(self, obj):
         content = obj.job_content[:50] if obj.job_content else '-'
         return content if len(content) < 50 else f'{content}...'
-
-
-@admin.register(ServiceType)
-class ServiceTypeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый тип ремоната / вида работ', {'fields': ('name',)}),
-    )
-
-
-@admin.register(SparePart)
-class SparePartAdmin(admin.ModelAdmin):
-    list_display = ('article', 'name', 'unit', 'is_expiration', 'equipment_name')
-    search_fields = ('name', 'article')
-    ordering = ('name', 'article')
-    list_select_related = ('unit',)
-
-    fieldsets = (
-        ('Новая запчасть', {'fields': ('article', ('name', 'unit'), 'is_expiration', 'equipment')}),
-
-    )
-
-    @admin.display(description='Оборудование')
-    def equipment_name(self, obj):
-        equipment_list = obj.equipment.values_list('full_name', flat=True)
-        return ", ".join(equipment_list)
 
 
 @admin.register(Supplier)
@@ -294,14 +201,3 @@ class SupplierAdmin(admin.ModelAdmin):
     @admin.display(description='Страна')
     def country_name(self, obj):
         return obj.country.name if obj.country else '-'
-
-
-@admin.register(Unit)
-class UnitAdmin(admin.ModelAdmin):
-    list_display = ('id', 'short_name', 'full_name', )
-    search_fields = ('short_name', 'full_name')
-    ordering = ('short_name',)
-
-    fieldsets = (
-        ('Новая единица измерения', {'fields': ('short_name', 'full_name')}),
-    )

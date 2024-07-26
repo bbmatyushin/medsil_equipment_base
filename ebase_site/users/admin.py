@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from ebase.models import PositionType
+from directory.models import PositionType
 from .models import *
 
 
