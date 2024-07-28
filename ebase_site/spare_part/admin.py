@@ -35,8 +35,8 @@ class SparePartAdmin(admin.ModelAdmin):
 @admin.register(SparePartCount)
 class SparePartCountAdmin(admin.ModelAdmin):
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
-    search_fields = ('spare_part__name',)
-    search_help_text = 'Поиск по названию запчасти'
+    search_fields = ('spare_part__name', 'spare_part__article',)
+    search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('spare_part__name',)
 
     fieldsets = (
@@ -51,18 +51,24 @@ class SparePartCountAdmin(admin.ModelAdmin):
 
 @admin.register(SparePartSupply)
 class SparePartSupplyAdmin(admin.ModelAdmin):
-    list_display = ('spare_part', 'count_supply', 'doc_num', 'supply_dt', 'expiration_dt', 'user',)
-    search_fields = ('spare_part__name',)
-    search_help_text = 'Поиск по названию запчасти'
-    ordering = ('-supply_dt',)
+    list_display = ('spare_part', 'count_part', 'doc_num', 'supply_dt', 'expiration_dt', 'user',)
+    search_fields = ('spare_part__name', 'spare_part__article',)
+    search_help_text = 'Поиск по названию запчасти или её артикулу'
+    ordering = ('-supply_dt', 'spare_part__name')
 
     fieldsets = (
         ('Новая поставка', {'fields': ('spare_part', 'doc_num', ('count_supply', 'expiration_dt',),
                                        'supply_dt',)}),
     )
 
+    @admin.display(description='КОЛ-ВО')
+    def count_part(self, obj):
+        return obj.count_supply if obj.count_supply % 1 else int(obj.count_supply)
+
     def save_model(self, request, obj, form, change):
         if not change:
+            obj.user = request.user
+        elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
@@ -70,12 +76,11 @@ class SparePartSupplyAdmin(admin.ModelAdmin):
 @admin.register(SparePartShipment)
 class SparePartShipmentAdmin(admin.ModelAdmin):
     form = SparePartShipmentForm
-    readonly_fields = ('spare_part_amount',)
 
-    list_display = ('spare_part_name', 'count_shipment', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
-    search_fields = ('spare_part_count__spare_part.name',)
-    search_help_text = 'Поиск по названию запчасти'
-    ordering = ('-shipment_dt',)
+    list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
+    search_fields = ('spare_part_count__spare_part.name', 'spare_part_count__spare_part.article',)
+    search_help_text = 'Поиск по названию запчасти или её артикулу'
+    ordering = ('-shipment_dt', 'spare_part_count__spare_part__name',)
     list_select_related = True
 
     fieldsets = (
@@ -87,9 +92,9 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
     def spare_part_name(self, obj):
         return obj.spare_part_count.spare_part.name
 
-    @admin.display(description='Доступно')
-    def spare_part_amount(self, obj):
-        return obj.spare_part_count.spare_part.amount
+    @admin.display(description='Кол-во')
+    def count_shipment_part(self, obj):
+        return obj.count_shipment if obj.count_shipment % 1 else int(obj.count_shipment)
 
     @admin.display(description='Годен до')
     def exp_dt(self, obj):
@@ -97,5 +102,7 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change:
+            obj.user = request.user
+        elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)

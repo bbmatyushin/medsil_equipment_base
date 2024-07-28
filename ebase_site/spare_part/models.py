@@ -102,8 +102,8 @@ class SparePartCount(SparePartAbs):
     def __str__(self):
         exp_dt = self.expiration_dt.strftime("%d.%m.%Y") if self.expiration_dt else '-'
         sp_amount = self.amount if self.amount % 1 else int(self.amount)
-        # return f"{self.amount if self.amount else '-'}"
         return f"{self.spare_part.name}{f' (до {exp_dt})' if self.expiration_dt else ''}, остаток - {sp_amount}"
+        # return f"{self.amount if self.amount else '-'}"
 
     def __repr__(self):
         return f'<SparePartCount {self.spare_part=!r} {self.amount=!r}>'

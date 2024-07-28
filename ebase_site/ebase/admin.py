@@ -101,22 +101,33 @@ class EquipmentAdmin(admin.ModelAdmin):
         return f"{obj.supplier.name if obj.supplier else '-'}"
 
 
+class EquipmentAccDepartmentInline(admin.TabularInline):
+    model = EquipmentAccDepartment
+    fk_name = 'equipment_accounting'
+    extra = 1
+    # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
+    verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
+    # fields = ('department', ('engineer', 'install_dt'), 'is_active')
+    fieldsets = (
+        ('Подразделение', {'fields': ('department',)}),
+        ('Монтаж', {'fields': ('engineer', 'install_dt', 'is_active',)}),
+    )
+
+
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
+    inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
                     'is_our_service', 'is_our_supply', 'user_name', )
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',)
     search_help_text = 'Поиск по полному и краткому наименованию оборудования или по серийному номеру'
     ordering = ('equipment', 'serial_number', 'user',)
     list_per_page = 50
-    # list_max_show_all = 30
     list_select_related = True
-    # list_select_related = ('equipment', 'equipment_status', 'user', )
-    # list_filter = ('dept_name',)
-
+#
     fieldsets = (
-        ('Новый тип акта', {'fields': ('equipment', 'serial_number', 'equipment_status',
-                                       'is_our_service', 'is_our_supply')}),
+        ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
+                                               ('is_our_supply', 'is_our_service',),)}),
     )
 
     def get_instance(self, obj):
@@ -125,19 +136,16 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
-        # instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
         instance = self.get_instance(obj)
         return instance.department
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
-        # instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
         instance = self.get_instance(obj)
         return instance.engineer
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
-        # instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
         instance = self.get_instance(obj)
         return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '-'
 
@@ -147,6 +155,8 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change:
+            obj.user = request.user
+        elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
@@ -194,6 +204,8 @@ class ServiceAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change:
+            obj.user = request.user
+        elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
