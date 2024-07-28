@@ -12,19 +12,19 @@ class PositionType(Enum):
     client = 'Клиент'
 
 
-# def get_instance_city():
-#     """Возвращает экземпляр модели City."""
-#     return City.objects.get(name='Не указан')
-#
-#
-# def get_instance_country():
-#     """Возвращает экземпляр модели Country."""
-#     return Country.objects.get(name='Россия')
-#
-#
-# def get_instance_unit():
-#     """Возвращает экземпляр модели Unit штука."""
-#     return Unit.objects.get(short_name='шт.')
+def get_instance_city():
+    """Возвращает экземпляр модели City."""
+    return City.objects.get(name='Не указан')
+
+
+def get_instance_country():
+    """Возвращает экземпляр модели Country."""
+    return Country.objects.get(name='Россия')
+
+
+def get_instance_unit():
+    """Возвращает экземпляр модели Unit штука."""
+    return Unit.objects.get(short_name='шт.')
 
 
 class City(models.Model):

@@ -15,6 +15,7 @@ django.setup()
 
 from ebase.models import *
 from directory.models import *
+from spare_part.models import *
 from users.models import CompanyUser
 
 logger = logging.getLogger('INSERT_DATA')
@@ -427,7 +428,7 @@ class InsertData:
 
 def get_json_keys() -> str:
     """Возвращает список ключей JSON файлов."""
-    file_name = 'ремонт.json'
+    file_name = 'маршрутники.json'
     keys: set = set()
     users: set = set()
     with open(Path(json_dir, file_name), 'r', encoding='utf-8') as f:
@@ -456,20 +457,18 @@ def main():
     # TODO: Заменить у подразделения.json "Код":125,"Наименование":"Сланцевская межрайонная больница","Клиент":90 на 16 ! ! !
     # insert.departments()
     # insert.dept_contact_pers()
-    # insert.manufacturer_supplier()
+    # insert.manufacturer_supplier()  # TODO: перед выполнением раскомментировать default в моделях Manufacturer и Supplier
     # insert.equipment()
     # insert.engineers()
     # insert.equipment_accounting()
     # insert.equipment_acc_department()
-    # insert.spare_parts()
+    # insert.spare_parts()  # TODO: перед выполнением раскомментировать default в моделе SparePart
     # insert.service_type()
-    # insert.service()
+    insert.service()
 
-
-# TODO: Сделать отдельное приложение для Справочников (directory) (чтобы отделить их в админке)
 
 if __name__ == '__main__':
     main()
     # print(InsertData().get_instance_city(12).name)
     # python manage.py sqlsequencereset myapp | python manage.py dbshell - для сброса счетчика id
-    print(get_json_keys())
+    # print(get_json_keys())

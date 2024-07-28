@@ -4,7 +4,7 @@ from enum import Enum
 from django.db import models
 # from django.contrib.postgres.fields import ArrayField
 from django.utils.timezone import now
-# from directory.models import get_instance_city
+from directory.models import get_instance_city
 
 
 company = '"medsil"'  # название схемы для таблиц
@@ -291,11 +291,6 @@ class EquipmentAccounting(EbaseModel):
         verbose_name_plural = 'Учёт оборудований'
         unique_together = ('serial_number', 'equipment')
 
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.user = request.user
-            super().save_model(request, obj, form, change)
-
     def __str__(self):
         return f"{self.equipment} [{self.serial_number.upper()}]"
 
@@ -322,7 +317,7 @@ class Manufacturer(EbaseModel):
         'directory.City', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="manufacturer_city", verbose_name='Город',
         db_comment='Город производителя', help_text='Город производителя',
-        # default=get_instance_city
+        default=get_instance_city
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
@@ -416,11 +411,6 @@ class Service(EbaseModel):
         verbose_name = 'Ремонт оборудования'
         verbose_name_plural = 'Ремонт оборудования'
 
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.user = request.user
-            super().save_model(request, obj, form, change)
-
     def __str__(self):
         return f"{self.equipment_accounting} - {self.service_type}"
 
@@ -445,7 +435,7 @@ class Supplier(EbaseModel):
         'directory.City', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="supplier_city", verbose_name='Город',
         db_comment='Город поставщика', help_text='Город поставщика',
-        # default=get_instance_city
+        default=get_instance_city
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
