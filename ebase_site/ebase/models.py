@@ -2,34 +2,12 @@ import uuid
 from enum import Enum
 
 from django.db import models
-from django.core.validators import MinValueValidator, EmailValidator
-from django.contrib.postgres.fields import ArrayField
+# from django.contrib.postgres.fields import ArrayField
 from django.utils.timezone import now
-# from users.models import CompanyUser
+from directory.models import get_instance_city
 
 
 company = '"medsil"'  # название схемы для таблиц
-
-
-def get_instance_city():
-    """Возвращает экземпляр модели City."""
-    return City.objects.get(name='Не указан')
-
-
-def get_instance_country():
-    """Возвращает экземпляр модели Country."""
-    return Country.objects.get(name='Россия')
-
-
-def get_instance_unit():
-    """Возвращает экземпляр модели Unit штука."""
-    return Unit.objects.get(short_name='шт.')
-
-
-class PositionType(Enum):
-    """Тип должности."""
-    employee = 'Сотрудник'
-    client = 'Клиент'
 
 
 class EbaseModel(models.Model):
@@ -43,36 +21,6 @@ class EbaseModel(models.Model):
 
     class Meta:
         abstract = True
-
-
-class City(models.Model):
-    """Модель для перечьня городов."""
-    name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Город',
-        db_comment='Город', help_text='Город'
-    )
-    region = models.CharField(
-        max_length=100, null=True, blank=True, verbose_name='Регион',
-        db_comment='Регион', help_text='Регион, Область в которой расположен город'
-    )
-    create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-        help_text='Дата создания записи. Заполняется автоматически'
-    )
-
-    class Meta:
-        db_table = f'{company}."city"'
-        db_table_comment = 'Таблица с перечнем городов. \n\n-- BMatyushin'
-        verbose_name = 'Город'
-        verbose_name_plural = 'Города'
-        unique_together = ('name', 'region')
-
-    def __str__(self):  # в админ панели будет видно название города, вместо City object(1)
-        return f"{self.name} {f'({self.region})' if self.region else ''}"
-
-    def __repr__(self):
-        return f"<City {self.name=!r}, {self.region=!r}>"
 
 
 class Client(EbaseModel):
@@ -90,7 +38,7 @@ class Client(EbaseModel):
         db_comment='Адрес клиента'
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.City', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="client_city", verbose_name='Город',
         db_comment='Город клиента', help_text='Город клиента',
     )
@@ -109,31 +57,6 @@ class Client(EbaseModel):
         return f"<Client {self.name=!r}, {self.inn=!r}>"
 
 
-class Country(models.Model):
-    """Модель для перечьня городов."""
-    name = models.CharField(
-        max_length=50, null=False, blank=False, unique=True, verbose_name='Страна',
-        db_comment='Страна', help_text='Используется для Производителей и поставщиков'
-    )
-    create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-        help_text='Дата создания записи. Заполняется автоматически'
-    )
-
-    class Meta:
-        db_table = f'{company}."country"'
-        db_table_comment = 'Таблица с перечнем стран. \n\n-- BMatyushin'
-        verbose_name = 'Страна'
-        verbose_name_plural = 'Страны'
-
-    def __str__(self):  # в админ панели будет видно название города, вместо City object(1)
-        return f"{self.name}"
-
-    def __repr__(self):
-        return f"<Country {self.name=!r}"
-
-
 class Department(EbaseModel):
     """Подразделения, филиалы клиентов"""
     name = models.CharField(
@@ -150,7 +73,7 @@ class Department(EbaseModel):
         db_comment='Клиент подразделения', help_text='Клиент, к которому относится подразделение',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.City', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="department_city", verbose_name='Город',
         db_comment='ID Города подразделения',
         help_text='Города в котором расположено подразделение',
@@ -164,7 +87,8 @@ class Department(EbaseModel):
         unique_together = ('name', 'address',)
 
     def __str__(self):
-        return f"{self.name} ({self.city.name})"
+        return f"{self.name} ({self.city.name})"  # сильно замедляет выдачу
+        # return f"{self.name}"
 
     def __repr__(self):
         return f"<Department {self.name=!r}"
@@ -190,7 +114,7 @@ class DeptContactPers(EbaseModel):
         db_comment='Имя контактного лица',
     )
     position = models.ForeignKey(
-        "Position", on_delete=models.SET_NULL, null=True,
+        'directory.Position', on_delete=models.SET_NULL, null=True,
         related_name="dept_contactpers_position", verbose_name='Должность',
         db_comment='Должность контактного лица',
     )
@@ -221,7 +145,7 @@ class DeptContactPers(EbaseModel):
         db_table = f'{company}."dept_contact_pers"'
         db_table_comment = 'Контактные лица подразделения.\n\n-- BMatyushin'
         verbose_name = 'Контактное лицо подразделения'
-        verbose_name_plural = 'Контактные лица подразделения'
+        verbose_name_plural = 'Контактные лица подразделений'
 
     def __repr__(self):
         return f"<DeptContactPers {self.name}>"
@@ -241,7 +165,7 @@ class Equipment(EbaseModel):
         help_text="Полное наименование + краткое должно быть уникальным сочетанием"
     )
     med_direction = models.ForeignKey(
-        "MedDirection", on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.MedDirection', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="equipment_med_equipment", verbose_name="Направление",
         db_comment="ID направления", help_text="ID из таблицы Направления."
     )
@@ -256,15 +180,15 @@ class Equipment(EbaseModel):
         db_comment="ID поставщика",
     )
     spare_part = models.ManyToManyField(
-        "SparePart", related_name="equipment_spare_part", verbose_name="ID Запасных частей",
+        "spare_part.SparePart", related_name="equipment_spare_part", verbose_name="ID Запасных частей",
         help_text="ID из таблицы Запасных частей."
     )
 
     class Meta:
         db_table = f'{company}."equipment"'
         db_table_comment = "Перечень моделей медициского оборудования.\n\n-- BMatyushin"
-        verbose_name = 'Медицинское оборудование'
-        verbose_name_plural = 'Медицинское оборудование'
+        verbose_name = 'Мед. оборудование'
+        verbose_name_plural = 'Мед. оборудование'
         unique_together = ('full_name', 'short_name',)
 
     def __str__(self):
@@ -274,21 +198,77 @@ class Equipment(EbaseModel):
         return f'<Equipment {self.full_name=!r}>'
 
 
+class EquipmentAccounting(EbaseModel):
+    """Модель для учета оборудований.
+    Для полей с автоматическим заполнением, обязательно editable=False"""
+    equipment = models.ForeignKey(
+        'Equipment', on_delete=models.RESTRICT, null=False, editable=True,
+        related_name='equipment_accounting_equipment', verbose_name='Оборудования',
+        db_comment="ID оборудования",
+    )
+    equipment_status = models.ForeignKey(
+        'directory.EquipmentStatus', on_delete=models.SET_NULL, null=True, editable=True,
+        related_name='equipment_accounting_equipment_status',
+        verbose_name='Статус', db_comment="ID статуса оборудования"
+    )
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.SET_NULL, null=True, editable=False,
+        related_name='equipment_accounting_user', verbose_name='Пользователь',
+        db_comment='Пользователь, который добавил запись в таблицу "Учёт оборудования"',
+        help_text=('Пользователь, который добавил запись в таблицу "Учёт оборудования". '
+                  'Заполняется автоматически')
+    )
+    serial_number = models.CharField(
+        max_length=50, null=False, blank=False, verbose_name='Серийный номер',
+        db_comment='Серийный номер оборудования', help_text='Серийный номер оборудования'
+    )
+    is_our_service = models.BooleanField(
+        null=False, blank=False, default=False, verbose_name='Обслужан нами',
+        db_comment='True, если оборудование обслуживалось нами',
+    )
+    is_our_supply = models.BooleanField(
+        null=False, blank=False, default=True, verbose_name='Поставлен нами',
+        db_comment='True, если оборудование было поставлено нами',
+    )
+    row_update_dt = models.DateTimeField(
+        auto_now=True, editable=False, verbose_name='Дата обновления строки',
+        db_comment='Дата обновления строки.',
+        help_text='Дата обновления строки. Заполняется автоматически'
+    )
+
+    class Meta:
+        db_table = f'{company}."equipment_accounting"'
+        indexes = [
+            models.Index(fields=['serial_number'], name='serial_number_idx'),
+        ]
+        db_table_comment = ('Таблица с учёт оборудования. Для отслеживаия оборудования по его серийному '
+                            'номеру.\n\n-- BMatyushin')
+        verbose_name = 'Учёт оборудования'
+        verbose_name_plural = '1. Учёт оборудований'
+        unique_together = ('serial_number', 'equipment')
+
+    def __str__(self):
+        return f"{self.equipment} [{self.serial_number.upper()}]"
+
+    def __repr__(self):
+        return f'<EquipmentAccounting {self.serial_number=!r}>'
+
+
 class EquipmentAccDepartment(EbaseModel):
     """Учет поставленного оборудования в подразделения клиента"""
     equipment_accounting = models.ForeignKey(
-        'EquipmentAccounting', on_delete=models.RESTRICT, null=False, editable=False,
+        'EquipmentAccounting', on_delete=models.CASCADE, null=False, editable=True,
         related_name='equipment_acc_department_equipment_accounting',
-        verbose_name='ID Учёта оборудования', db_comment="ID Учёта оборудования",
-        help_text="ID Учёта оборудования. Заполняется автоматически"
+        verbose_name='Оборудование', db_comment="ID Учёта оборудования",
+        help_text="Поставленное оборудование"
     )
     department = models.ForeignKey(
-        'Department', on_delete=models.RESTRICT, null=False, editable=False,
+        'Department', on_delete=models.RESTRICT, null=False, editable=True,
         related_name='equipment_accounting_department_department', verbose_name='Подразделение',
-        db_comment="ID подразделения", help_text="ID подразделения. Заполняется автоматически"
+        db_comment="ID подразделения", help_text="Подразделение или филиал клиента"
     )
     engineer = models.ForeignKey(
-        'Engineer', on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.Engineer', on_delete=models.SET_NULL, null=True, blank=False,
         related_name='equipment_accounting_engineer', verbose_name='Инженер',
         help_text="Инженер, который запускал оборудование"
     )
@@ -306,131 +286,14 @@ class EquipmentAccDepartment(EbaseModel):
     class Meta:
         db_table = f'{company}."equipment_acc_department"'
         db_table_comment = 'Учет поставленного оборудования в подразделения клиента.\n\n-- BMatyushin'
-        verbose_name = 'Учет поставленного оборудования'
-        verbose_name_plural = 'Учет поставленного оборудования'
+        verbose_name = 'Оборудование по клиентам'
+        verbose_name_plural = 'Оборудование по клиентам'
+
+    def __str__(self):
+        return f"{self.department} - {self.equipment_accounting}"
 
     def __repr__(self):
         return f"<EquipmentAccDepartment {self.id=!r}, {self.is_active=!r}>"
-
-
-class EquipmentAccounting(EbaseModel):
-    """Модель для учета оборудований.
-    Для полей с автоматическим заполнением, обязательно editable=False"""
-    equipment = models.ForeignKey(
-        'Equipment', on_delete=models.RESTRICT, null=False, editable=True,
-        related_name='equipment_accounting_equipment', verbose_name='Оборудования',
-        db_comment="ID оборудования", help_text="ID оборудования. Заполняется автоматически"
-    )
-    equipment_status = models.ForeignKey(
-        'EquipmentStatus', on_delete=models.SET_NULL, null=True, editable=True,
-        related_name='equipment_accounting_equipment_status',
-        verbose_name='Статус', db_comment="ID статуса оборудования"
-    )
-    # service = models.ManyToManyField(
-    #     'Service', related_name='equipment_accounting_service', verbose_name='Ремонт',
-    #     help_text='Заполняется, если оборудование было сдано в ремонт'
-    # )
-    user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.SET_NULL, null=True, editable=False,
-        related_name='equipment_accounting_user', verbose_name='Пользователь',
-        db_comment='Пользователь, который добавил запись в таблицу "Учёт оборудования"',
-        help_text=('Пользователь, который добавил запись в таблицу "Учёт оборудования". '
-                  'Заполняется автоматически')
-    )
-    serial_number = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Серийный номер',
-        db_comment='Серийный номер оборудования', help_text='Серийный номер оборудования'
-    )
-    is_our_service = models.BooleanField(
-        null=False, blank=False, default=False, verbose_name='Обслужан нами',
-        db_comment='True, если оборудование обслуживалось нами',
-        help_text='True, если оборудование обслуживалось нами'
-    )
-    is_our_supply = models.BooleanField(
-        null=False, blank=False, default=True, verbose_name='Поставлен нами',
-        db_comment='True, если оборудование было поставлено нами',
-        help_text='True, если оборудование было поставлено нами'
-    )
-    row_update_dt = models.DateTimeField(
-        auto_now=True, editable=False, verbose_name='Дата обновления строки',
-        db_comment='Дата обновления строки.',
-        help_text='Дата обновления строки. Заполняется автоматически'
-    )
-
-    class Meta:
-        db_table = f'{company}."equipment_accounting"'
-        indexes = [
-            models.Index(fields=['serial_number'], name='serial_number_idx'),
-        ]
-        db_table_comment = ('Таблица с учёт оборудования. Для отслеживаия оборудования по его серийному '
-                            'номеру.\n\n-- BMatyushin')
-        verbose_name = 'Учёт оборудования'
-        verbose_name_plural = 'Учёт оборудований'
-        unique_together = ('serial_number', 'equipment')
-
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.user = request.user
-            super().save_model(request, obj, form, change)
-
-    def __str__(self):
-        return f"{self.equipment} [{self.serial_number.upper()}]"
-
-    def __repr__(self):
-        return f'<EquipmentAccounting {self.serial_number=!r}>'
-
-
-class EquipmentStatus(models.Model):
-    """Модель для фиксированного набора статусов оборудования"""
-    name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Статус', unique=True,
-        db_comment='Статус оборудования', help_text='Статус оборудования'
-    )
-
-    class Meta:
-        db_table = f'{company}."equipment_status"'
-        db_table_comment = 'Таблица с набором статусов оборудования. \n\n-- BMatyushin'
-        verbose_name = 'Статус оборудования'
-        verbose_name_plural = 'Статусы оборудования'
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<EquipmentStatus {self.name=!r}>'
-
-
-class Engineer(models.Model):
-    """Инженеры. Отдельная сущность, чтобы не привязываться к пользователю в системе.
-    Через сигнал заполняется автоматически, если у нового пользователя должность инженер."""
-    # TODO: Настроить сигнал для заполнения модели
-    name = models.CharField(
-        max_length=100, null=False, blank=False, unique=True,
-        verbose_name='Инженер', db_comment='Имя инженера', help_text='Имя инженера'
-    )
-    user = models.OneToOneField(
-        "users.CompanyUser", on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="engineer_company_user", verbose_name='Пользователь системы',
-        db_comment="ID пользователя", help_text="Зарегистрированный пользователь системы"
-    )
-    create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-    )
-
-    class Meta:
-        db_table = f'{company}."engineer"'
-        db_table_comment = ("Инженеры. Отдельная сущность, чтобы не привязываться к пользователю в системе.\n"
-                            "Через сигнал заполняется автоматически, если у нового пользователя должность инженер."
-                            "\n\n-- BMatyushin")
-        verbose_name = 'Инженер'
-        verbose_name_plural = 'Инженеры'
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<Engineer {self.name=!r}>'
 
 
 class Manufacturer(EbaseModel):
@@ -444,12 +307,12 @@ class Manufacturer(EbaseModel):
         db_comment='ИНН производителя', help_text='ИНН производителя'
     )
     country = models.ForeignKey(
-        "Country", on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.Country', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="manufacturer_country", verbose_name='Страна',
         db_comment='Страна производителя',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True, blank=True,
+        'directory.City', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="manufacturer_city", verbose_name='Город',
         db_comment='Город производителя', help_text='Город производителя',
         default=get_instance_city
@@ -491,61 +354,10 @@ class Manufacturer(EbaseModel):
         return f'<Manufacturer {self.name=!r}, {self.city=!r}>'
 
 
-class MedDirection(models.Model):
-    """Модель для перечьня направлений для оборудования: Гематологическое, Биохимическое и т.д."""
-    name = models.CharField(
-        max_length=100, null=False, blank=False, unique=True, verbose_name='Направление',
-        db_comment='Направление медицинского оборудования (Гематологическое, Биохимическое и т.д.)',
-    )
-
-    class Meta:
-        db_table = f'{company}."med_direction"'
-        db_table_comment = ('Направления медицинского оборудования (Гематологическое, Биохимическое и т.д.).'
-                            '\n\n-- BMatyushin')
-        verbose_name = 'Направление мед.оборудования'
-        verbose_name_plural = 'Направления мед.оборудования'
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<MedDirection {self.name=!r}>'
-
-
-class Position(models.Model):
-    """Справочник должностей."""
-    name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Должность',
-        db_comment='Должность',
-    )
-    type = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Тип', default=PositionType.client.name,
-        choices=[(t.name, t.value) for t in PositionType],
-        db_comment='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений',
-        help_text='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений'
-    )
-    user = models.ManyToManyField(
-        "users.CompanyUser", related_name="position_user", verbose_name='Сотрудник',
-    )
-
-    class Meta:
-        db_table = f'{company}."position"'
-        db_table_comment = 'Должности сотрудников и клиентов. \n\n-- BMatyushin'
-        verbose_name = 'Должность'
-        verbose_name_plural = 'Должности'
-        unique_together = ('name', 'type')
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<Position {self.name=!r}>'
-
-
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
     service_type = models.ForeignKey(
-        "ServiceType", on_delete=models.SET_NULL, null=True, blank=False,
+        'directory.ServiceType', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="service_service_type", verbose_name='Типа ремонта',
         db_comment='ID Типа ремонта',
     )
@@ -587,7 +399,7 @@ class Service(EbaseModel):
         help_text='Примечание, комментарии по ремонту'
     )
     spare_part = models.ManyToManyField(
-        "SparePart", related_name="service_spare_part", verbose_name='Запчасти',
+        "spare_part.SparePart", related_name="service_spare_part", verbose_name='Запчасти',
         help_text='Запчасти, которые используются в ремонте. ', blank=True,
     )
 
@@ -597,192 +409,11 @@ class Service(EbaseModel):
         verbose_name = 'Ремонт оборудования'
         verbose_name_plural = 'Ремонт оборудования'
 
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.user = request.user
-            super().save_model(request, obj, form, change)
-
     def __str__(self):
         return f"{self.equipment_accounting} - {self.service_type}"
 
     def __repr__(self):
         return f'<Service {self.id=!r}, {self.user=!r}>'
-
-
-class ServiceType(models.Model):
-    """Типы ремонта / Виды работ"""
-    name = models.CharField(
-        max_length=100, null=False, blank=False, verbose_name='Тип ремонта',
-        db_comment='Тип ремонта', unique=True,
-    )
-
-    class Meta:
-        db_table = f'{company}."service_type"'
-        db_table_comment = 'Типы ремонтов / Виды работ. \n\n-- BMatyushin'
-        verbose_name = 'Справочник с типом ремонта'
-        verbose_name_plural = 'Справочник с типом ремонтов'
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<ServiceType {self.name=!r}>'
-
-
-class SparePart(EbaseModel):
-    """Запчасти."""
-    article = models.CharField(
-        max_length=50, null=True, blank=False, verbose_name='Артикул', db_comment='Артикул',
-    )
-    name = models.CharField(
-        max_length=300, null=False, blank=False,verbose_name='Наименование',
-        db_comment='Наименование запчасти',
-    )
-    unit = models.ForeignKey(
-        "Unit", on_delete=models.RESTRICT, null=False, blank=False,
-        related_name="spare_part_unit", verbose_name='Ед.изм.', db_comment='Ед.изм.',
-        default=get_instance_unit
-    )
-    comment = models.TextField(
-        null=True, blank=True, verbose_name='Примечание',
-        db_comment='Примечание к запчасти', help_text='Примечание к запчасти'
-    )
-    is_expiration = models.BooleanField(
-        default=False, verbose_name='Срок годности', blank=False,
-        db_comment='Отмечаются запчасти со сроками годности',
-        help_text='Флаг указывающий, что у запчасти должен быть срок годности'
-    )
-    equipment = models.ManyToManyField(
-        "Equipment", related_name="spare_part_equipment", verbose_name='Оборудование',
-        help_text="Оборудование, для которого предназначена эта запчасть. ", blank=False,
-    )
-    service = models.ManyToManyField(
-        "Service", related_name="spare_part_service", verbose_name='ID Ремонта',
-        help_text="В каком ремонте использовалась эта запчасть"
-    )
-
-    class Meta:
-        db_table = f'{company}."spare_part"'
-        db_table_comment = 'Справочник запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Справочник запчастей'
-        verbose_name_plural = 'Справочник запчастей'
-        unique_together = ('article', 'name',)
-
-    def __str__(self):
-        return f'{self.name} {f"(арт. {self.article})"if self.article else ""}'
-
-    def __repr__(self):
-        return f'<SparePart {self.name=!r}>'
-
-
-class SparePartCount(EbaseModel):
-    """Общее количество запчастей (чтобы не делать сложные запросы для вывода этой инфы)"""
-    spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name="spare_part_count_spare_part", verbose_name='ID запчасти',
-        db_comment="ID запчасти", help_text="ID запчасти"
-    )
-    amount = models.FloatField(
-        verbose_name='Кол-во', db_comment='Кол-во запчастей',
-        help_text='Кол-во запчастей. Заполняется автоматически',
-        validators=[MinValueValidator(0)], null=False, blank=False,
-    )
-    expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
-        help_text='Годен до. Срок годности для запчастей со сроком годности.',
-    )
-    is_overdue = models.BooleanField(
-        default=False, verbose_name='Просрочено',
-        db_comment='Флаг указывающий, что запчасть просрочена',
-        help_text='Флаг указывающий, что запчасть просрочена'
-    )
-
-    class Meta:
-        db_table = f'{company}."spare_part_count"'
-        db_table_comment = 'Общее количество запчастей на остатке.\n\n-- BMatyushin'
-        verbose_name = 'Количество запчастей'
-        verbose_name_plural = 'Количество запчастей'
-        unique_together = ('spare_part', 'expiration_dt')
-
-    def __repr__(self):
-        return f'<SparePartCount {self.spare_part=!r} {self.amount=!r}>'
-
-
-class SparePartShipment(EbaseModel):
-    """Отслеживание отгрузок запчастей"""
-    spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="spare_part_shipment_spare_part", verbose_name='ID запчасти',
-        db_comment="ID запчасти", help_text="ID запчасти"
-    )
-    count_shipment = models.FloatField(
-        verbose_name='Кол-во', db_comment='Кол-во отгруженной запчасти',
-        help_text='Кол-во отгруженной запчасти', null=False, blank=False,
-        validators=[MinValueValidator(0)]
-    )
-    expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
-        help_text='Годен до. Срок годности для запчастей со сроком годности.',
-    )
-    shipment_dt = models.DateField(
-        null=False, blank=False, verbose_name='Дата отгрузки',
-        db_comment='Дата отгрузки', help_text='Дата отгрузки.'
-    )
-    user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name='spare_part_shipment_company_user', verbose_name='ID сотрудника',
-        db_comment="ID сотрудника, который оформил отгрузку",
-        help_text="ID сотрудника, который оформил отгрузку. Заполняется автоматически"
-    )
-
-    class Meta:
-        db_table = f'{company}."spare_part_shipment"'
-        db_table_comment = 'Отслеживание отгрузок запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Отгрузка запчастей'
-        verbose_name_plural = 'Отгрузки запчастей'
-
-    def __repr__(self):
-        return f"<SparePartShipment: {self.spare_part=!r}, {self.count_shipment=!r}>"
-
-
-class SparePartSupply(EbaseModel):
-    """Отслеживание поставок запчастей"""
-    spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="spare_part_supply_spare_part", verbose_name='ID запчасти',
-        db_comment="ID запчасти", help_text="ID запчасти"
-    )
-    count_supply = models.FloatField(
-        verbose_name='Кол-во', db_comment='Кол-во поставленой запчасти',
-        help_text='Кол-во поставленой запчасти', null=False, blank=False,
-        validators=[MinValueValidator(0)],
-    )
-    expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
-        help_text='Годен до. Срок годности для запчастей со сроком годности.',
-    )
-    supply_dt = models.DateField(
-        null=False, blank=False, verbose_name='Дата поставки',
-        db_comment='Дата поставки', help_text='Дата поставки.'
-    )
-    user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name='spare_part_supply_company_user', verbose_name='ID сотрудника',
-        db_comment="ID сотрудника, который оформил поставку",
-        help_text="ID сотрудника, который оформил поставку. Заполняется автоматически"
-    )
-
-    class Meta:
-        db_table = f'{company}."spare_part_supply"'
-        db_table_comment = 'Отслеживание поставок запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Поставка запчастей'
-        verbose_name_plural = 'Поставки запчастей'
-
-    def __repr__(self):
-        return f"<SparePartSupply: {self.spare_part=!r}, {self.count_supply=!r}>"
 
 
 class Supplier(EbaseModel):
@@ -794,12 +425,12 @@ class Supplier(EbaseModel):
         max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True
     )
     country = models.ForeignKey(
-        "Country", on_delete=models.SET_NULL, null=True, blank=True,
+        'directory.Country', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="supplier_country", verbose_name='Страна',
         db_comment='Страна производителя',
     )
     city = models.ForeignKey(
-        "City", on_delete=models.SET_NULL, null=True, blank=True,
+        'directory.City', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="supplier_city", verbose_name='Город',
         db_comment='Город поставщика', help_text='Город поставщика',
         default=get_instance_city
@@ -838,30 +469,3 @@ class Supplier(EbaseModel):
 
     def __repr__(self):
         return f'<Supplier {self.name=!r}, {self.city=!r}>'
-
-
-class Unit(models.Model):
-    """Единицы измерения."""
-    short_name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Сокращенное наименование',
-        db_comment='Единица измерения', help_text='Единица измерения',
-        unique=True,
-    )
-    full_name = models.CharField(
-        max_length=100, null=True, blank=True, verbose_name='Полное наименование',
-        db_comment='Полное наименование единицы измерения',
-        help_text='Полное наименование единицы измерения'
-    )
-
-    class Meta:
-        db_table = f'{company}."unit"'
-        db_table_comment = 'Справочник с единицами измерения. \n\n-- BMatyushin'
-        verbose_name = 'Единица измерения'
-        verbose_name_plural = 'Единицы измерения'
-
-    def __str__(self):
-        return self.short_name
-
-    def __repr__(self):
-        return f'<Unit {self.short_name=!r}>'
-

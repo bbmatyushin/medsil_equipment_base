@@ -1,5 +1,7 @@
 from django.contrib import admin
 from .models import *
+# from users.models import CompanyUser
+from directory.models import Position, PositionType
 
 
 @admin.register(Client)
@@ -15,28 +17,6 @@ class ClientAdmin(admin.ModelAdmin):
     @admin.display(description='Город')
     def city_name(self, obj):
         return obj.city.name if obj.city else '-'
-
-
-@admin.register(City)
-class CityAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'region', 'create_dt')
-    search_fields = ('name', 'region')
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый город', {'fields': ('name', 'region')}),
-    )
-
-
-@admin.register(Country)
-class CountryAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'create_dt')
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новая страна', {'fields': ('name',)}),
-    )
 
 
 @admin.register(Department)
@@ -121,64 +101,64 @@ class EquipmentAdmin(admin.ModelAdmin):
         return f"{obj.supplier.name if obj.supplier else '-'}"
 
 
-@admin.register(EquipmentAccounting)
-class EquipmentAccountingAdmin(admin.ModelAdmin):
-    list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
-                    'is_our_service', 'is_our_supply', 'user_name', )
-    search_fields = ('serial_number',)
-    ordering = ('equipment', 'serial_number', 'user',)
-    # list_filter = ('dept_name',)
-    list_select_related = ('equipment', 'equipment_status', 'user', )
-
+class EquipmentAccDepartmentInline(admin.TabularInline):
+    model = EquipmentAccDepartment
+    fk_name = 'equipment_accounting'
+    extra = 1
+    # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
+    verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
+    # fields = ('department', ('engineer', 'install_dt'), 'is_active')
     fieldsets = (
-        ('Новый тип акта', {'fields': ('equipment', 'serial_number', 'equipment_status',
-                                       'is_our_service', 'is_our_supply')}),
+        ('Подразделение', {'fields': ('department',)}),
+        ('Монтаж', {'fields': ('engineer', 'install_dt', 'is_active',)}),
     )
 
-    # @admin.display(description='Оборудование')
-    # def equipment_name(self, obj):
-    #     return f"{obj.equipment.full_name if obj.equipment else '-'}"
+
+@admin.register(EquipmentAccounting)
+class EquipmentAccountingAdmin(admin.ModelAdmin):
+    inlines = (EquipmentAccDepartmentInline,)
+    list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
+                    'is_our_service', 'is_our_supply', 'user_name', )
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',)
+    search_help_text = 'Поиск по полному и краткому наименованию оборудования или по серийному номеру'
+    ordering = ('equipment', 'serial_number', 'user',)
+    list_per_page = 50
+    list_select_related = True
+#
+    fieldsets = (
+        ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
+                                               ('is_our_supply', 'is_our_service',),)}),
+    )
+
+    def get_instance(self, obj):
+        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        return instance
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
-        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        instance = self.get_instance(obj)
         return instance.department
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
-        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        instance = self.get_instance(obj)
         return instance.engineer
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
-        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        instance = self.get_instance(obj)
         return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '-'
 
     @admin.display(description='Добавил')
     def user_name(self, obj):
-        return obj.user.username
+        return obj.user.username if obj.user else '-'
 
-
-@admin.register(EquipmentStatus)
-class EquipmentStatusAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый статус', {'fields': ('name',)}),
-    )
-
-
-@admin.register(Engineer)
-class EngineerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user')
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый инженер', {'fields': ('name', 'user')}),
-    )
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+        elif not obj.pk:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Manufacturer)
@@ -203,28 +183,6 @@ class ManufacturerAdmin(admin.ModelAdmin):
         return obj.country.name if obj.country else '-'
 
 
-@admin.register(MedDirection)
-class MedDirectionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новое направление', {'fields': ('name',)}),
-    )
-
-
-@admin.register(Position)
-class PositionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'type',)
-    search_fields = ('name',)
-    ordering = ('type', 'name',)
-
-    fieldsets = (
-        ('Новая должность', {'fields': ('name', 'type')}),
-    )
-
-
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     list_display = ('equipment_accounting', 'service_type', 'description',
@@ -244,34 +202,12 @@ class ServiceAdmin(admin.ModelAdmin):
         content = obj.job_content[:50] if obj.job_content else '-'
         return content if len(content) < 50 else f'{content}...'
 
-
-@admin.register(ServiceType)
-class ServiceTypeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name',)
-    search_fields = ('name',)
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый тип ремоната / вида работ', {'fields': ('name',)}),
-    )
-
-
-@admin.register(SparePart)
-class SparePartAdmin(admin.ModelAdmin):
-    list_display = ('article', 'name', 'unit', 'is_expiration', 'equipment_name')
-    search_fields = ('name', 'article')
-    ordering = ('name', 'article')
-    list_select_related = ('unit',)
-
-    fieldsets = (
-        ('Новая запчасть', {'fields': ('article', ('name', 'unit'), 'is_expiration', 'equipment')}),
-
-    )
-
-    @admin.display(description='Оборудование')
-    def equipment_name(self, obj):
-        equipment_list = obj.equipment.values_list('full_name', flat=True)
-        return ", ".join(equipment_list)
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+        elif not obj.pk:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Supplier)
@@ -294,14 +230,3 @@ class SupplierAdmin(admin.ModelAdmin):
     @admin.display(description='Страна')
     def country_name(self, obj):
         return obj.country.name if obj.country else '-'
-
-
-@admin.register(Unit)
-class UnitAdmin(admin.ModelAdmin):
-    list_display = ('id', 'short_name', 'full_name', )
-    search_fields = ('short_name', 'full_name')
-    ordering = ('short_name',)
-
-    fieldsets = (
-        ('Новая единица измерения', {'fields': ('short_name', 'full_name')}),
-    )
