@@ -87,7 +87,7 @@ class Department(EbaseModel):
         unique_together = ('name', 'address',)
 
     def __str__(self):
-        return f"{self.name} ({self.city.name})"  # сильно замедляет выдачу
+        return f"{self.name} ({self.city.name})"  # сильно замедляет выдачу на странице
         # return f"{self.name}"
 
     def __repr__(self):
@@ -135,7 +135,7 @@ class DeptContactPers(EbaseModel):
         max_length=300, null=True, blank=True, verbose_name='Комментарий',
         db_comment='Комментарий контактного лица',
     )
-    is_active = models.BooleanField(
+    is_active = models.BooleanField(blank=False, null=True,
         default=True, verbose_name='Работает',
         db_comment='Для отметки работает ли ещё контактное лицо',
         help_text='Для отметки работает ли ещё контактное лицо'

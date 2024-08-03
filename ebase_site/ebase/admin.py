@@ -113,6 +113,12 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
         ('Монтаж', {'fields': ('engineer', 'install_dt', 'is_active',)}),
     )
 
+    # Модно переопределить get_formsets_with_inlines или get_formset для вывода поля город
+    # def get_formset(self, request, obj=None, **kwargs):
+    #     formset = super().get_formset(request, obj, **kwargs)
+    #     # formset.form.base_fields['department'].queryset = Department.objects.filter(client=obj.client)
+    #     return formset
+
 
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
@@ -122,7 +128,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',)
     search_help_text = 'Поиск по полному и краткому наименованию оборудования или по серийному номеру'
     ordering = ('equipment', 'serial_number', 'user',)
-    list_per_page = 50
+    list_per_page = 30
     list_select_related = True
 #
     fieldsets = (
