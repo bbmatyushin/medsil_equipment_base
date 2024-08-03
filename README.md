@@ -41,16 +41,25 @@ pip3 install -r requirements.txt
 python3 manage.py makemigrations
 python3 manage.py migrate
 ```
+Объедините все static файлы в одну директорию, указанную в STATIC_ROOT в **settings.py**:
+```shell
+python3 manage.py collectstatic
+```
+Создайте суперпользователя для управления админкой Django:
+```shell
+python3 manage.py createsuperuser
+```
 #### Шаг 5: Настройка веб-сервера
 **Установите и настройте Gunicorn:** Установите Gunicorn и создайте файл конфигурации, например, gunicorn_config.py.
 ```shell
 pip3 install gunicorn
 ```
-Файл конфигурации, для удобства, можно раположить, например, в корневой папке проекта рядом с settings.py.\
+Файл конфигурации, для удобства, можно раположить, например, в корневой папке проекта.\
 Пример файла gunicorn_config.py:
 ```python
 bind = "127.0.0.1:8000"
 workers = 3
+worker_class = 'gevent'
 timeout = 30
 loglevel = "info"
 ```
@@ -74,12 +83,17 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    location /static/ {
+        alias /path/to/your/static/files/;
+    }
 }
 ```
 * `listen 80;` - указывает Nginx слушать входящие запросы на порту 80.
 * `server_name your_domain_or_IP;` - замените your_domain_or_IP на ваш доменное имя или IP адрес сервера.
 * `proxy_pass http://127.0.0.1:8000;` - указывает Nginx перенаправлять запросы на Gunicorn, который работает на 127.0.0.1:8000.
 * Настройки `proxy_set_header` используются для передачи заголовков.
+* `location /static/` путь до static файлов.
 Создайте символическую ссылку на ваш файл конфигурации в папке sites-enabled:
 ```shell
 sudo ln -s /etc/nginx/sites-available/myproject /etc/nginx/sites-enabled/
@@ -92,18 +106,19 @@ sudo systemctl restart nginx
 
 #### Шаг 6: Запуск приложения
 **Запуск Gunicorn для Django приложения**\
-Перейдите в директорию вашего проекта Django. Запустите Gunicorn, указав путь к файлу WSGI вашего проекта. Например, если ваш файл WSGI называется myproject.wsgi, выполните:
+Перейдите в директорию вашего проекта Django. Запустите Gunicorn:
 ```shell
-gunicorn --config gunicorn_config.py myproject.wsgi
+gunicorn --config gunicorn_config.py ebase_site.wsgi:application
 ```
 __Пример запуска Gunicorn__
-Если ваш проект Django находится в директории /home/user/myproject/, и ваш файл WSGI называется myproject.wsgi, то команда запуска Gunicorn будет выглядеть так:
+Если ваш проект Django находится в директории /home/user/myproject/, то команда запуска Gunicorn будет выглядеть так:
 ```shell
-gunicorn --bind 0.0.0.0:8000 myproject.wsgi
+gunicorn --bind 0.0.0.0:8000 myproject.wsgi:application
 ```
-**Примечания**
-* `--bind 0.0.0.0:8000` указывает Gunicorn слушать все интерфейсы на порту 8000.
-* `myproject.wsgi` - это путь к файлу WSGI вашего Django проекта.
+**Здесь**
+* `ebase_site` — это имя вашего Django-проекта.
+* `wsgi:application` указывает на файл wsgi.py, который содержит объект application, необходимый для работы Gunicorn.
+* `--bind 0.0.0.0:8000` указывает адрес и порт, на котором будет работать сервер.
 * Параметры `workers`, `timeout`, `loglevel` в файле конфигурации могут быть настроены в зависимости от ваших потребностей.
 #### Шаг 7: Настройка брандмауэра
 **Настройте брандмауэр:** Если у вас есть брандмауэр, разрешите доступ к порту 80 (или другому порту, который использует Nginx) для входящих соединений.
@@ -145,6 +160,10 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /static/ {
+            alias /path/to/your/static/files/;
         }
     }
 }
