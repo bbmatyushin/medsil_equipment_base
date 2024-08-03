@@ -14,16 +14,19 @@ class PositionType(Enum):
 
 def get_instance_city():
     """Возвращает экземпляр модели City."""
+    # return None  # расскомментировать перед миграцией
     return City.objects.get(name='Не указан')
 
 
 def get_instance_country():
     """Возвращает экземпляр модели Country."""
+    # return None  # расскомментировать перед миграцией
     return Country.objects.get(name='Россия')
 
 
 def get_instance_unit():
     """Возвращает экземпляр модели Unit штука."""
+    # return None  # расскомментировать перед миграцией
     return Unit.objects.get(short_name='шт.')
 
 
