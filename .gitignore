@@ -9,7 +9,6 @@ ER-diagrams/*.drawio.bkp
 ER-diagrams/*.drawio.dtmp
 ER-diagrams/equipment_medsil.drawio
 ER-diagrams/equipment_medsil_dj_orm.drawio
-ebase_site/ebase_site/*.py
 ebase_site/*/migrations/0*.py
 _venv/
 
