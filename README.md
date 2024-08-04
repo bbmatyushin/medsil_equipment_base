@@ -64,6 +64,8 @@ worker_class = 'gevent'
 timeout = 30
 loglevel = "info"
 ```
+* Параметры `workers`, `timeout`, `loglevel` в файле конфигурации могут быть настроены в зависимости от ваших потребностей.
+
 
 **Настройте Nginx:** Установите Nginx.
 ```shell
@@ -111,16 +113,28 @@ sudo systemctl restart nginx
 ```shell
 gunicorn --config gunicorn_config.py ebase_site.wsgi:application
 ```
-__Пример запуска Gunicorn__
-Если ваш проект Django находится в директории /home/user/myproject/, то команда запуска Gunicorn будет выглядеть так:
+
+**Создание юнит-файла для запуска gunicorn:**
 ```shell
-gunicorn --bind 0.0.0.0:8000 myproject.wsgi:application
+printf "[Unit]
+Description=gunicorn daemon
+After=network.target nginx.service
+
+[Service]
+User=$USER
+WorkingDirectory=/home/medsil/medsil_equipment_base/ebase_site
+ExecStart=/home/medsil/medsil_equipment_base/venv/bin/gunicorn --config gunicorn_conf.py ebase_site.wsgi:application
+
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/gunicorn.service
 ```
-**Здесь**
-* `ebase_site` — это имя вашего Django-проекта.
-* `wsgi:application` указывает на файл wsgi.py, который содержит объект application, необходимый для работы Gunicorn.
-* `--bind 0.0.0.0:8000` указывает адрес и порт, на котором будет работать сервер.
-* Параметры `workers`, `timeout`, `loglevel` в файле конфигурации могут быть настроены в зависимости от ваших потребностей.
+Запускаем службу:
+```shell
+systemctl daemon-reload
+systemctl enable gunicorn.service
+systemctl restart gunicorn.service
+```
+
 #### Шаг 7: Настройка брандмауэра
 **Настройте брандмауэр:** Если у вас есть брандмауэр, разрешите доступ к порту 80 (или другому порту, который использует Nginx) для входящих соединений.
 После завершения этих шагов ваше веб-приложение Django должно быть развернуто на сервере Linux и готово к использованию через веб-браузер.
