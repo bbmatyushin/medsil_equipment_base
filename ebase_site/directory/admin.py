@@ -5,6 +5,7 @@ from .models import *
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'region', 'create_dt')
+    list_display_links = ('name',)
     search_fields = ('name', 'region')
     ordering = ('name',)
 
@@ -16,6 +17,7 @@ class CityAdmin(admin.ModelAdmin):
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'create_dt')
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
 
@@ -27,6 +29,7 @@ class CountryAdmin(admin.ModelAdmin):
 @admin.register(EquipmentStatus)
 class EquipmentStatusAdmin(admin.ModelAdmin):
     list_display = ('id', 'name',)
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
 
@@ -38,6 +41,7 @@ class EquipmentStatusAdmin(admin.ModelAdmin):
 @admin.register(Engineer)
 class EngineerAdmin(admin.ModelAdmin):
     list_display = ('name', 'user')
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
 
@@ -49,6 +53,7 @@ class EngineerAdmin(admin.ModelAdmin):
 @admin.register(MedDirection)
 class MedDirectionAdmin(admin.ModelAdmin):
     list_display = ('id', 'name',)
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
 
@@ -60,6 +65,7 @@ class MedDirectionAdmin(admin.ModelAdmin):
 @admin.register(Position)
 class PositionAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'type',)
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('type', 'name',)
 
@@ -71,6 +77,7 @@ class PositionAdmin(admin.ModelAdmin):
 @admin.register(ServiceType)
 class ServiceTypeAdmin(admin.ModelAdmin):
     list_display = ('id', 'name',)
+    list_display_links = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
 
@@ -82,6 +89,7 @@ class ServiceTypeAdmin(admin.ModelAdmin):
 @admin.register(Unit)
 class UnitAdmin(admin.ModelAdmin):
     list_display = ('id', 'short_name', 'full_name', )
+    list_display_links = ('short_name',)
     search_fields = ('short_name', 'full_name')
     ordering = ('short_name',)
 
