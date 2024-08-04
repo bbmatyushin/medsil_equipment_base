@@ -53,6 +53,7 @@ python3 manage.py createsuperuser
 **Установите и настройте Gunicorn:** Установите Gunicorn и создайте файл конфигурации, например, gunicorn_config.py.
 ```shell
 pip3 install gunicorn
+pip3 install gevent  # для обработки соединений асинхронно
 ```
 Файл конфигурации, для удобства, можно раположить, например, в корневой папке проекта.\
 Пример файла gunicorn_config.py:
@@ -93,7 +94,7 @@ server {
 * `server_name your_domain_or_IP;` - замените your_domain_or_IP на ваш доменное имя или IP адрес сервера.
 * `proxy_pass http://127.0.0.1:8000;` - указывает Nginx перенаправлять запросы на Gunicorn, который работает на 127.0.0.1:8000.
 * Настройки `proxy_set_header` используются для передачи заголовков.
-* `location /static/` путь до static файлов.
+* `location /static/` путь до static файлов.\
 Создайте символическую ссылку на ваш файл конфигурации в папке sites-enabled:
 ```shell
 sudo ln -s /etc/nginx/sites-available/myproject /etc/nginx/sites-enabled/
