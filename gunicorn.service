@@ -1,0 +1,11 @@
+[Unit]
+Description=gunicorn daemon
+After=network.target nginx.service
+
+[Service]
+User=medsil
+WorkingDirectory=/home/medsil/medsil_equipment_base/ebase_site
+ExecStart=/home/medsil/medsil_equipment_base/venv/bin/gunicorn --config gunicorn_conf.py ebase_site.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
