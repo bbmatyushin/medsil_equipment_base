@@ -8,6 +8,7 @@ from directory.models import Position, PositionType
 class ClientAdmin(admin.ModelAdmin):
     list_display = ('name', 'inn', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'inn')
+    search_help_text = 'Поиск по Наименованию или ИНН'
     ordering = ('name',)
 
     fieldsets = (
@@ -23,6 +24,7 @@ class ClientAdmin(admin.ModelAdmin):
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'client_name', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'client__name')
+    search_help_text = 'Поиск по подразделению или клиенту'
     ordering = ('name',)
 
     fieldsets = (
@@ -41,7 +43,9 @@ class DepartmentAdmin(admin.ModelAdmin):
 @admin.register(DeptContactPers)
 class DeptContactPersAdmin(admin.ModelAdmin):
     list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
-    search_fields = ('surname', 'name', 'patron')
+    list_filter = ('position',)
+    search_fields = ('surname', 'name', 'patron', 'department__name')
+    search_help_text = 'Поиск по фамилии/имени/отчеству или по подразделению'
     ordering = ('name',)
 
     fieldsets = (
@@ -55,7 +59,7 @@ class DeptContactPersAdmin(admin.ModelAdmin):
     # Переопределяет метод для выбора должностей. Будут видны только должности типа "Клиент"
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "position":
-            kwargs["queryset"] = Position.objects.filter(type=PositionType.client.name)
+            kwargs["queryset"] = Position.objects.filter(type='client')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='ФИО')
@@ -81,6 +85,7 @@ class EquipmentAdmin(admin.ModelAdmin):
     list_display = ('full_name', 'short_name', 'med_direction_name',
                     'manufacturer_name', 'supplier_name',)
     search_fields = ('short_name', 'full_name')
+    search_help_text = 'Поиск по полному/краткому наименованию оборудования'
     ordering = ('full_name',)
 
     fieldsets = (
@@ -130,6 +135,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     ordering = ('equipment', 'serial_number', 'user',)
     list_per_page = 30
     list_select_related = True
+    list_filter = ('equipment_status__name',)
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
@@ -172,6 +178,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
     search_fields = ('name', 'inn')
+    search_help_text = 'Поиск по Производителю или ИНН'
     ordering = ('name',)
 
     fieldsets = (
@@ -191,10 +198,16 @@ class ManufacturerAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ('equipment_accounting', 'service_type', 'description',
-                    'reason', 'job_content_short', 'beg_dt',)
-    ordering = ('beg_dt',)
+    list_display = ('equipment_accounting', 'dept_name', 'service_type',
+                    'description_short', 'spare_part_used',
+                    'reason_short', 'job_content_short', 'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
+    list_per_page = 30
+    search_fields = ('equipment_accounting__equipment__full_name',
+                     'equipment_accounting__equipment__short_name',
+                     'equipment_accounting__serial_number',)
+    search_help_text = 'Поиск по полному/краткому наименованию оборудования или по серийному номеру'
+    ordering = ('-beg_dt', 'equipment_accounting',)
 
     fieldsets = (
         ('Новый ремонт', {'fields': ('equipment_accounting', 'spare_part', 'service_type',
@@ -207,6 +220,29 @@ class ServiceAdmin(admin.ModelAdmin):
     def job_content_short(self, obj):
         content = obj.job_content[:50] if obj.job_content else '-'
         return content if len(content) < 50 else f'{content}...'
+
+    @admin.display(description='Описание неисправности')
+    def description_short(self, obj):
+        descr = obj.description[:50] if obj.description else '-'
+        return descr if len(descr) < 50 else f'{descr}...'
+
+    @admin.display(description='Причина')
+    def reason_short(self, obj):
+        reason = obj.reason[:50] if obj.reason else '-'
+        return reason if len(reason) < 50 else f'{reason}...'
+
+    @admin.display(description='Запчасти')
+    def spare_part_used(self, obj):
+        spare_parts_list = list(obj.spare_part.values_list('name', flat=True))
+        return "; ".join(spare_parts_list) if spare_parts_list else '-'
+
+    @admin.display(description='Подразделение')
+    def dept_name(self, obj):
+        dept_id_list = obj.equipment_accounting.equipment_acc_department_equipment_accounting\
+            .filter(is_active=True)\
+            .values_list('department', flat=True)
+        dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
+        return "; ".join(dept) if dept else '-'
 
     def save_model(self, request, obj, form, change):
         if not change:
@@ -221,6 +257,7 @@ class SupplierAdmin(admin.ModelAdmin):
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
     search_fields = ('name', 'inn')
+    search_help_text = 'Поиск по Поставщику или ИНН'
     ordering = ('name',)
 
     fieldsets = (

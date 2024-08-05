@@ -52,6 +52,7 @@ class City(models.Model):
         verbose_name = 'Город'
         verbose_name_plural = 'Города'
         unique_together = ('name', 'region')
+        # indexes = ['name', 'region']
 
     def __str__(self):  # в админ панели будет видно название города, вместо City object(1)
         return f"{self.name} {f'({self.region})' if self.region else ''}"
@@ -121,8 +122,8 @@ class Engineer(models.Model):
 class EquipmentStatus(models.Model):
     """Модель для фиксированного набора статусов оборудования"""
     name = models.CharField(
-        max_length=50, null=False, blank=False, verbose_name='Статус', unique=True,
-        db_comment='Статус оборудования', help_text='Статус оборудования'
+        max_length=50, null=False, blank=False, verbose_name='Статус оборудования', unique=True,
+        db_comment='Статус оборудования', help_text='Статус оборудования',
     )
 
     class Meta:
@@ -161,13 +162,27 @@ class MedDirection(models.Model):
 
 class Position(models.Model):
     """Справочник должностей."""
+    POST_GROUPS = (
+        ('Group 1', (
+            ('employee', 'Сотрудник'),
+        )),
+        ('Group 2', (
+            ('client', 'Клиент'),
+        ))
+    )
+    POST = (
+        ('employee', 'Сотрудник'),
+        ('client', 'Клиент'),
+    )
+
     name = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Должность',
         db_comment='Должность',
     )
     type = models.CharField(
         max_length=50, null=False, blank=False, verbose_name='Тип', default=PositionType.client.name,
-        choices=[(t.name, t.value) for t in PositionType],
+        # choices=[(t.name, t.value) for t in PositionType],
+        choices=POST,
         db_comment='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений',
         help_text='Тип должности. Cотрудник - для компании, организации. Клиент - для учреждений'
     )
