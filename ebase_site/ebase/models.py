@@ -85,6 +85,10 @@ class Department(EbaseModel):
         verbose_name = 'Подразделение / Филиал'
         verbose_name_plural = 'Подразделения / Филиалы'
         unique_together = ('name', 'address',)
+        indexes = [
+            models.Index(models.F('name'), models.F('city'), name='department_name_city')
+        ]
+        # indexes = [models.Index(fields=['name', 'city'])]
 
     def __str__(self):
         return f"{self.name} ({self.city.name})"  # сильно замедляет выдачу на странице

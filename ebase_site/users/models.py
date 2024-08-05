@@ -11,7 +11,7 @@ class CompanyUser(AbstractUser):
                           help_text='ID пользователя')
     patron = models.CharField(
         max_length=50, null=True, blank=True, verbose_name='Отчество',
-        db_comment='Отчество', help_text='Отчество'
+        db_comment='Отчество',
     )
     sex = models.IntegerField(
         null=True, blank=True, verbose_name='Пол',
@@ -30,8 +30,8 @@ class CompanyUser(AbstractUser):
         verbose_name='Учет поставленного оборудования',
     )
     position = models.ManyToManyField(
-        'directory.Position', related_name='company_user_position',
-        verbose_name='Должность', help_text='Может быть несколько должностей',
+        'directory.Position', related_name='company_user_position', blank=True,
+        verbose_name='Должность', help_text='Можно выбрать несколько должностей. ',
     )
 
     USERNAME_FIELD = 'username'
