@@ -11,7 +11,7 @@ class CompanyUserAdmin(admin.ModelAdmin):
                     'user_position',
                     'email_new', 'is_staff_new', 'date_joined', 'last_login', 'is_active',)
     list_display_links = ('username', 'first_name')
-    list_filter = ('is_staff', 'is_active')
+    # list_filter = ('is_staff', 'is_active')
     search_fields = ('username', 'email')
     search_help_text = 'Поиск по имени пользователи или эл.почте'
     ordering = ('last_name',)

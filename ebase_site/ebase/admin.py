@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import *
 # from users.models import CompanyUser
-from directory.models import Position, PositionType
+from directory.models import Position
+from .forms import *
 
 
 @admin.register(Client)
@@ -84,6 +85,7 @@ class DeptContactPersAdmin(admin.ModelAdmin):
 class EquipmentAdmin(admin.ModelAdmin):
     list_display = ('full_name', 'short_name', 'med_direction_name',
                     'manufacturer_name', 'supplier_name',)
+    list_filter = ('med_direction__name',)
     search_fields = ('short_name', 'full_name')
     search_help_text = 'Поиск по полному/краткому наименованию оборудования'
     ordering = ('full_name',)
@@ -113,6 +115,7 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
     # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
     verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
     # fields = ('department', ('engineer', 'install_dt'), 'is_active')
+
     fieldsets = (
         ('Подразделение', {'fields': ('department',)}),
         ('Монтаж', {'fields': ('engineer', 'install_dt', 'is_active',)}),
@@ -124,9 +127,20 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
     #     # formset.form.base_fields['department'].queryset = Department.objects.filter(client=obj.client)
     #     return formset
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "department":
+            city = request.GET.get('city')
+            if city:
+                kwargs["queryset"] = Department.objects.filter(city__name__iexact=city)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
+    # form = EquipmentAccountingForm
+    # подставляет в шаблон ссылку на сайт
+    add_form_template = 'ebase/admin/equipment_accounting/form.html'
+
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
                     'is_our_service', 'is_our_supply', 'user_name', )
@@ -171,6 +185,13 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
         elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'equipment':
+            condition = request.GET.get('med_direction')
+            if condition:
+                kwargs["queryset"] = Equipment.objects.filter(med_direction__name=condition)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Manufacturer)
