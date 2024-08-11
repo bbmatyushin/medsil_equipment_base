@@ -241,6 +241,25 @@ class InsertData:
                 except Exception as e:
                     logger.error(e)
 
+    def equipment_upd_med_direction(self) -> None:
+        """Обновление направлений"""
+        with open(Path(json_dir, 'список_оборудования.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                equipment = json.loads(line)
+                try:
+                    med_direction = self.get_instance_med_direction(equipment['Направление']) \
+                        if equipment.get('Направление') else None
+                    eq = Equipment.objects.get(full_name=equipment.get('Название полное'),
+                                                  short_name=equipment.get('Краткое название'),
+                                                  )
+                    eq.med_direction = med_direction
+                    eq.save()
+                    logger.info(f'Направление для {equipment.get("Название полное")} обновлено.')
+                except Exception as e:
+                    logger.error(e)
+
+
+
     def equipment_accounting(self) -> None:
         """Добовляем обородования для ведения учета"""
         user = CompanyUser.objects.get(username='admin')
@@ -295,7 +314,8 @@ class InsertData:
         with open(Path(json_dir, 'направление.json'), 'r', encoding='utf-8') as f:
             for line in f:
                 data = json.loads(line)
-                med_dir_list.append(MedDirection(name=data.get('НаименованиеНаправления')))
+                med_dir_list.append(MedDirection(name=data.get('НаименованиеНаправления'),
+                                slug_name=data.get('НаименованиеНаправления').replace(' ', '+')))
         MedDirection.objects.bulk_create(med_dir_list)
 
     def manufacturer_supplier(self) -> None:
@@ -464,11 +484,13 @@ def main():
     # insert.equipment_acc_department()
     # insert.spare_parts()  # TODO: перед выполнением раскомментировать default в моделе SparePart
     # insert.service_type()
-    insert.service()
+    # insert.service()
+
+    insert.equipment_upd_med_direction()  # обновление направления
 
 
 if __name__ == '__main__':
     main()
-    # print(InsertData().get_instance_city(12).name)
+    # print(InsertData().get_instance_med_direction(6).name)
     # python manage.py sqlsequencereset myapp | python manage.py dbshell - для сброса счетчика id
     # print(get_json_keys())

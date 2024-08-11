@@ -85,10 +85,10 @@ class Department(EbaseModel):
         verbose_name = 'Подразделение / Филиал'
         verbose_name_plural = 'Подразделения / Филиалы'
         unique_together = ('name', 'address',)
+        ordering = ('city',)
         indexes = [
             models.Index(models.F('name'), models.F('city'), name='department_name_city')
         ]
-        # indexes = [models.Index(fields=['name', 'city'])]
 
     def __str__(self):
         return f"{self.name} ({self.city.name})"  # сильно замедляет выдачу на странице
@@ -151,8 +151,13 @@ class DeptContactPers(EbaseModel):
         verbose_name = 'Контактное лицо подразделения'
         verbose_name_plural = 'Контактные лица подразделений'
 
+    def __str__(self):
+        return f"{self.name if self.name else ''} " \
+            + f"{self.patron if self.patron else ''} " \
+            + f"{self.surname if self.surname else ''}"
+
     def __repr__(self):
-        return f"<DeptContactPers {self.name}>"
+        return f"<DeptContactPers {self.name=!r}>"
 
 
 class Equipment(EbaseModel):
@@ -250,6 +255,10 @@ class EquipmentAccounting(EbaseModel):
         verbose_name = 'Учёт оборудования'
         verbose_name_plural = '1. Учёт оборудований'
         unique_together = ('serial_number', 'equipment')
+
+    def get_absolute_url(self):
+        return 'http://109.172.114.134/%s/' % self.pk
+        # return reverse('equipment_accounting_detail', kwargs={'pk': self.pk})
 
     def __str__(self):
         return f"{self.equipment} [{self.serial_number.upper()}]"

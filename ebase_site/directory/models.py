@@ -1,7 +1,7 @@
 from enum import Enum
 
 from django.db import models
-
+from django.utils.text import slugify
 
 company = '"medsil"'  # название схемы для таблиц
 
@@ -145,6 +145,10 @@ class MedDirection(models.Model):
         max_length=100, null=False, blank=False, unique=True, verbose_name='Направление',
         db_comment='Направление медицинского оборудования (Гематологическое, Биохимическое и т.д.)',
     )
+    slug_name = models.SlugField(
+        max_length=100, null=False, editable=False, unique=False,
+        db_comment='Slug для названия направления мед.оборудования'
+    )
 
     class Meta:
         db_table = f'{company}."med_direction"'
@@ -152,6 +156,11 @@ class MedDirection(models.Model):
                             '\n\n-- BMatyushin')
         verbose_name = 'Направление мед.оборудования'
         verbose_name_plural = 'Направления мед.оборудования'
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.name:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

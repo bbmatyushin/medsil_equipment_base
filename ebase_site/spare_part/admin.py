@@ -37,7 +37,7 @@ class SparePartCountAdmin(admin.ModelAdmin):
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
-    ordering = ('spare_part__name',)
+    ordering = ('spare_part__name', '-amount',)
 
     fieldsets = (
         ('Новый остаток', {'fields': ('spare_part', ('amount', 'expiration_dt'),)}),
@@ -47,6 +47,13 @@ class SparePartCountAdmin(admin.ModelAdmin):
     @admin.display(description='Количество')
     def amount_field(self, obj):
         return obj.amount if obj.amount % 1 else int(obj.amount)
+
+    # def get_queryset(self, request):
+    #     """
+    #     Получаем queryset для текущего запроса, исключая объекты, где amount равен 0.
+    #     """
+    #     qs = super().get_queryset(request).filter(amount__gt=0)
+    #     return qs
 
 
 @admin.register(SparePartSupply)
@@ -78,7 +85,7 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
     form = SparePartShipmentForm
 
     list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
-    search_fields = ('spare_part_count__spare_part.name', 'spare_part_count__spare_part.article',)
+    search_fields = ('spare_part_count__spare_part__name', 'spare_part_count__spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-shipment_dt', 'spare_part_count__spare_part__name',)
     list_select_related = True
