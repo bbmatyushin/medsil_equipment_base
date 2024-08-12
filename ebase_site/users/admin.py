@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
 
 from directory.models import PositionType
 from .models import *
@@ -6,11 +7,12 @@ from directory.models import Position
 
 
 @admin.register(CompanyUser)
-class CompanyUserAdmin(admin.ModelAdmin):
+class CompanyUserAdmin(UserAdmin):
     list_display = ('last_name', 'first_name', 'patron', 'username', 'birth', 'phone',
                     'user_position',
                     'email_new', 'is_staff_new', 'date_joined', 'last_login', 'is_active',)
     list_display_links = ('username', 'first_name')
+    # autocomplete_fields = ('position',)
     # list_filter = ('is_staff', 'is_active')
     search_fields = ('username', 'email')
     search_help_text = 'Поиск по имени пользователи или эл.почте'

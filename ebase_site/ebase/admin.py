@@ -139,7 +139,7 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
 class EquipmentAccountingAdmin(admin.ModelAdmin):
     # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
-    add_form_template = 'ebase/admin/equipment_accounting/form.html'
+    add_form_template = 'ebase/admin/equipment_accounting/equipment_acc_change_form.html'
 
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
@@ -219,6 +219,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
+    filter_horizontal = ('spare_part',)
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'description_short', 'spare_part_used',
                     'reason_short', 'job_content_short', 'beg_dt', 'end_dt',)

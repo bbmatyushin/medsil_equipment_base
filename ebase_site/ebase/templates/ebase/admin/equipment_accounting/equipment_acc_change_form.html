@@ -1,0 +1,44 @@
+{% extends "admin/change_form.html" %}
+
+{% load static %}
+{% load ebase_tags %}
+
+{% block after_field_sets %}
+<link rel="stylesheet" href="{% static "ebase/admin/css/form.css" %}">
+
+<div id="filter-style-eqipment" style="margin-bottom: 30px; margin-left: 10px;">
+    {% get_med_direction as md %}
+    <h2>Фильтр оборудования по направлениям</h2>
+    {% with city=request.GET.city %}
+    <nav>
+    {% for m in md %}
+        {% if city %}
+            <a href="?med_direction={{ m.slug_name }}&city={{ city }}">{{ m.name }}</a>{% if not forloop.last%} | {% endif %}
+        {% else %}
+            <a href="?med_direction={{ m.slug_name }}">{{ m.name }}</a>{% if not forloop.last%} | {% endif %}
+        {% endif %}
+    {% endfor %}
+    </nav>
+    {% endwith %}
+    <hr>
+</div>
+{% endblock %}
+
+{% block after_related_objects %}
+<div id="filter-style-dept" style="margin-bottom: 30px; margin-left: 10px;">
+    {% get_cities as cities%}
+    <h2>Фильтр по городам</h2>
+    {% with  med_dir=request.GET.med_direction %}
+    <nav>
+        {% for c in cities %}
+        {% if med_dir %}
+            <a href="?med_direction={{ med_dir }}&city={{ c }}">{{ c }}</a>{% if not forloop.last%} | {% endif %}
+        {% else %}
+            <a href="?city={{ c }}">{{ c }}</a>{% if not forloop.last%} | {% endif %}
+        {% endif %}
+        {% endfor %}
+    </nav>
+    {% endwith %}
+    <hr>
+</div>
+{% endblock %}
