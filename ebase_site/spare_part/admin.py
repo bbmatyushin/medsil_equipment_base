@@ -11,6 +11,7 @@ class SparePartAdmin(admin.ModelAdmin):
     search_fields = ('name', 'article', 'equipment__full_name',)
     search_help_text = 'Поиск по названию, артикулу запчасти или по оборудованию'
     ordering = ('name', 'article')
+    filter_horizontal = ('equipment',)
     # list_select_related = ('unit',)
     list_select_related = True
     list_filter = ('is_expiration',)

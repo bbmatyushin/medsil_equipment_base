@@ -1,20 +1,45 @@
-.my-object-my-tools {
-    font-size: 0.625rem;
-    font-weight: bold;
-    padding-left: 0;
-    float: right;
-    position: relative;
-    margin-top: -48px;
+#filter-style-eqipment {
+    order: 1;
+    background: #f8f8f8;
+    border-left: none;
+    margin: 0 0 0 0;
 }
 
-.my-object-tools a:link, .object-tools a:visited {
-    display: block;
-    float: left;
-    padding: 3px 12px;
-    background: var(--object-tools-bg);
-    color: var(--object-tools-fg);
-    font-weight: 400;
-    font-size: 0.6875rem;
+#filter-style-eqipment h2 {
+    color: white;
+    background: #264b5d;
+    font-size: 0.775rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    padding: 5px 15px;
+    margin-bottom: 12px;
+    border-bottom: none;
+}
+
+#filter-style-eqipment nav {
+    padding: 5px 15px;
+    margin-bottom: 12px;
+}
+
+#filter-style-dept {
+    order: 1;
+    background: #f8f8f8;
+    border-left: none;
+    margin: 0 0 0 0;
+}
+
+#filter-style-dept h2 {
+    color: white;
+    background: #264b5d;
+    font-size: 0.775rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 5px 15px;
+    margin-bottom: 12px;
+    border-bottom: none;
+}
+
+#filter-style-dept nav {
+    padding: 5px 15px;
+    margin-bottom: 12px;
 }
