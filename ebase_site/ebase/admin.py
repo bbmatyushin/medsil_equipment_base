@@ -44,7 +44,7 @@ class DepartmentAdmin(admin.ModelAdmin):
 
 @admin.register(DeptContactPers)
 class DeptContactPersAdmin(admin.ModelAdmin):
-    autocomplete_fields = ('department', 'position',)
+    autocomplete_fields = ('department',)
     list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
     list_filter = ('position',)
     search_fields = ('surname', 'name', 'patron', 'department__name')
