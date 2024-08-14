@@ -7,6 +7,7 @@ from .forms import *
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'inn')
     search_help_text = 'Поиск по Наименованию или ИНН'
@@ -43,6 +44,7 @@ class DepartmentAdmin(admin.ModelAdmin):
 
 @admin.register(DeptContactPers)
 class DeptContactPersAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('department', 'position',)
     list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
     list_filter = ('position',)
     search_fields = ('surname', 'name', 'patron', 'department__name')
@@ -83,6 +85,7 @@ class DeptContactPersAdmin(admin.ModelAdmin):
 
 @admin.register(Equipment)
 class EquipmentAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('manufacturer','supplier',)
     list_display = ('full_name', 'short_name', 'med_direction_name',
                     'manufacturer_name', 'supplier_name',)
     list_filter = ('med_direction__name',)
@@ -112,9 +115,9 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
     model = EquipmentAccDepartment
     fk_name = 'equipment_accounting'
     extra = 1
+    # autocomplete_fields = ('department',)  # С ним не отрабатывает def formfield_for_foreignkey
     # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
     verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
-    # fields = ('department', ('engineer', 'install_dt'), 'is_active')
 
     fieldsets = (
         ('Подразделение', {'fields': ('department',)}),
@@ -140,6 +143,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_accounting/equipment_acc_change_form.html'
+    # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
 
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
@@ -196,6 +200,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
 
 @admin.register(Manufacturer)
 class ManufacturerAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
     search_fields = ('name', 'inn')
@@ -219,6 +224,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('equipment_accounting',)
     filter_horizontal = ('spare_part',)
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'description_short', 'spare_part_used',
@@ -232,8 +238,14 @@ class ServiceAdmin(admin.ModelAdmin):
     ordering = ('-beg_dt', 'equipment_accounting',)
 
     fieldsets = (
-        ('Новый ремонт', {'fields': ('equipment_accounting', 'spare_part', 'service_type',
-                                     'description', 'reason', 'job_content')}
+        (
+            'Новый ремонт', {'fields': ('equipment_accounting', 'service_type', 'spare_part',)}
+        ),
+        (
+            'Описание работ', {
+                'classes': ('collapse',),
+                'fields': ('reason', 'description', 'job_content',),
+            }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
     )
@@ -276,6 +288,7 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
     search_fields = ('name', 'inn')
