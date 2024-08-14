@@ -11,6 +11,7 @@
     <h2>Фильтр оборудования по направлениям</h2>
     {% with city=request.GET.city %}
     <nav>
+    {% if city %}<a href="?city={{ city }}">{% else %}<a href="">{% endif %}Все</a> |
     {% for m in md %}
         {% if city %}
             <a href="?med_direction={{ m.slug_name }}&city={{ city }}">{{ m.name }}</a>{% if not forloop.last%} | {% endif %}
@@ -30,6 +31,7 @@
     <h2>Фильтр по городам</h2>
     {% with  med_dir=request.GET.med_direction %}
     <nav>
+        {% if med_dir %}<a href="?med_direction={{ med_dir }}">{% else %}<a href="">{% endif %}Все</a> |
         {% for c in cities %}
         {% if med_dir %}
             <a href="?med_direction={{ med_dir }}&city={{ c }}">{{ c }}</a>{% if not forloop.last%} | {% endif %}

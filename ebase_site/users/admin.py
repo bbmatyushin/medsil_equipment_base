@@ -42,6 +42,9 @@ class CompanyUserAdmin(UserAdmin):
         ('Логин и пароль нового пользователя', {'fields': ('username', 'password'),}),
         ('Персональная информация', {'fields': (('first_name', 'patron'), 'last_name', 'sex',
                                                 'birth', ('phone', 'email'), 'position', )}),
-        ('Разрешения', {'fields': ('is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Разрешения', {
+            'classes': ('collapse',),
+            'fields': ('is_staff', 'is_superuser', 'groups', 'user_permissions'),
+        }),
         # ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )

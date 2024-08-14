@@ -7,6 +7,7 @@ from .forms import *
 
 @admin.register(SparePart)
 class SparePartAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('unit',)
     list_display = ('article', 'name', 'amount', 'unit', 'is_expiration', 'equipment_name',)
     search_fields = ('name', 'article', 'equipment__full_name',)
     search_help_text = 'Поиск по названию, артикулу запчасти или по оборудованию'
@@ -35,6 +36,7 @@ class SparePartAdmin(admin.ModelAdmin):
 
 @admin.register(SparePartCount)
 class SparePartCountAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('spare_part',)
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
@@ -59,14 +61,19 @@ class SparePartCountAdmin(admin.ModelAdmin):
 
 @admin.register(SparePartSupply)
 class SparePartSupplyAdmin(admin.ModelAdmin):
+    autocomplete_fields = ('spare_part',)
     list_display = ('spare_part', 'count_part', 'doc_num', 'supply_dt', 'expiration_dt', 'user',)
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-supply_dt', 'spare_part__name')
 
     fieldsets = (
-        ('Новая поставка', {'fields': ('spare_part', 'doc_num', ('count_supply', 'expiration_dt',),
-                                       'supply_dt',)}),
+        (
+            'Новая поставка', {
+                # 'classes': ('wide',),
+                'fields': ('spare_part', 'doc_num', ('count_supply', 'expiration_dt',),
+                                       'supply_dt',)
+            }),
     )
 
     @admin.display(description='КОЛ-ВО')
@@ -85,6 +92,7 @@ class SparePartSupplyAdmin(admin.ModelAdmin):
 class SparePartShipmentAdmin(admin.ModelAdmin):
     form = SparePartShipmentForm
 
+    autocomplete_fields = ('spare_part_count',)
     list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
     search_fields = ('spare_part_count__spare_part__name', 'spare_part_count__spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'

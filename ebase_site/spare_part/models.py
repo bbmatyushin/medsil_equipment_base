@@ -167,7 +167,7 @@ class SparePartShipment(SparePartAbs):
 class SparePartSupply(SparePartAbs):
     """Отслеживание поставок запчастей"""
     spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.SET_NULL, null=True, blank=True,
+        'SparePart', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="spare_part_supply_spare_part", verbose_name='Запчасть',
         db_comment="ID запчасти",
     )
