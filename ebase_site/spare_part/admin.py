@@ -51,6 +51,10 @@ class SparePartCountAdmin(admin.ModelAdmin):
     def amount_field(self, obj):
         return obj.amount if obj.amount % 1 else int(obj.amount)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        obj.check_expiration()
+
     # def get_queryset(self, request):
     #     """
     #     Получаем queryset для текущего запроса, исключая объекты, где amount равен 0.
