@@ -18,7 +18,6 @@ def spare_part_supply_post_save(sender, instance, created, **kwargs):
             if part.exists():
                 SparePartCount.objects.filter(spare_part=instance.spare_part, expiration_dt=instance.expiration_dt,)\
                     .update(amount=F('amount') + instance.count_supply)
-                part.check_expiration()
                 logger.info('New Supply spare part. Updated amount for spare_part_id %s',
                             instance.spare_part)
             else:
@@ -34,7 +33,7 @@ def spare_part_supply_post_delete(sender, instance, **kwargs):
         part = SparePartCount.objects.filter(spare_part=instance.spare_part, expiration_dt=instance.expiration_dt,)
         if part.exists():
             SparePartCount.objects.filter(spare_part=instance.spare_part, expiration_dt=instance.expiration_dt,)\
-                .update(amount=F('amount') - instance.count_supply, is_overdue=False)
+                .update(amount=F('amount') - instance.count_supply)
             logger.info('Deleted Supply spare part. Updated amount for spare_part_id %s',
                         instance.spare_part)
 

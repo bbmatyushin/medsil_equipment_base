@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from django.contrib import admin
+from django.utils import timezone
 from django.db.models import Sum
 
 from .models import *
@@ -38,6 +41,7 @@ class SparePartAdmin(admin.ModelAdmin):
 class SparePartCountAdmin(admin.ModelAdmin):
     autocomplete_fields = ('spare_part',)
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
+    list_filter = ('is_overdue',)
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('spare_part__name', '-amount',)
@@ -51,16 +55,20 @@ class SparePartCountAdmin(admin.ModelAdmin):
     def amount_field(self, obj):
         return obj.amount if obj.amount % 1 else int(obj.amount)
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        obj.check_expiration()
+    def get_queryset(self, request):
+        """Обноление состояни просроченности при отображение страницы"""
+        today = timezone.now().date()
+        qs = super().get_queryset(request)
+        qs.filter(expiration_dt__lt=today).update(is_overdue=False)
+        return qs
 
-    # def get_queryset(self, request):
-    #     """
-    #     Получаем queryset для текущего запроса, исключая объекты, где amount равен 0.
-    #     """
-    #     qs = super().get_queryset(request).filter(amount__gt=0)
-    #     return qs
+    def get_search_results(self, request, queryset, search_term):
+        """Переопределяем выдачу для autocomplete_fields"""
+        if request.GET.get('model_name') == 'sparepartshipment':
+            # При добавлении отгрузки запчасти, покажется только список с кол-вом больше 0
+            qs = queryset.filter(amount__gt=0)
+            return qs, False
+        return super().get_search_results(request, queryset, search_term)
 
 
 @admin.register(SparePartSupply)
@@ -119,6 +127,13 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
     @admin.display(description='Годен до')
     def exp_dt(self, obj):
         return obj.spare_part_count.expiration_dt if obj.spare_part_count.expiration_dt else '-'
+
+    # def get_search_results(self, request, queryset, search_term):
+    #     """Переопределяем выдачу для autocomplete_fields"""
+    #     if search_term:
+    #         qs = queryset.filter(spare_part_count__spare_part__name='CaTr')
+    #         return qs, False
+    #     return super().get_search_results(request, queryset, search_term)
 
     def save_model(self, request, obj, form, change):
         if not change:
