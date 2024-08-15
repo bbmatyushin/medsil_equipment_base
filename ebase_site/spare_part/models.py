@@ -106,7 +106,7 @@ class SparePartCount(SparePartAbs):
         """Проверка окончания срока годности у запчасти"""
         today = datetime.today().date()
         if self.expiration_dt:
-            self.is_over = self.expiration_dt < today
+            self.is_overdue = self.expiration_dt < today
             self.save(update_fields=['is_overdue'])
 
     def __str__(self):
