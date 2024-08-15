@@ -1,4 +1,6 @@
+from datetime import datetime
 import uuid
+import logging
 
 from django.db import models
 from django.core.validators import MinValueValidator
@@ -6,6 +8,7 @@ from django.core.validators import MinValueValidator
 from directory.models import get_instance_unit
 
 
+logger = logging.getLogger('SPARE_PART_SIGNALS')
 company = '"medsil"'  # название схемы для таблиц
 
 
@@ -87,7 +90,7 @@ class SparePartCount(SparePartAbs):
         # choices=(SparePartShipment.objects.)
     )
     is_overdue = models.BooleanField(
-        default=False, verbose_name='Просрочено',
+        default=True, verbose_name='Не просрочено',
         db_comment='Флаг указывающий, что запчасть просрочена',
         help_text='Флаг указывающий, что запчасть просрочена'
     )
@@ -98,6 +101,13 @@ class SparePartCount(SparePartAbs):
         verbose_name = 'Остаток запчастей'
         verbose_name_plural = 'Остаток запчастей'
         unique_together = ('spare_part', 'expiration_dt')
+
+    def check_expiration(self):
+        """Проверка окончания срока годности у запчасти"""
+        today = datetime.today().date()
+        if self.expiration_dt:
+            self.is_over = self.expiration_dt < today
+            self.save(update_fields=['is_overdue'])
 
     def __str__(self):
         exp_dt = self.expiration_dt.strftime("%d.%m.%Y") if self.expiration_dt else '-'
