@@ -28,3 +28,15 @@ class SparePartShipmentForm(forms.ModelForm):
 
         return cleaned_data
 
+
+class SparePartSupplyForm(forms.ModelForm):
+    class Meta:
+        model = SparePartSupply
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data['spare_part'].is_expiration and not cleaned_data['expiration_dt']:
+            self.add_error('expiration_dt',
+                           f'Для "{cleaned_data["spare_part"].name}" неоходимо указать срок годности')
+        return cleaned_data

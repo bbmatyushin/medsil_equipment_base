@@ -150,7 +150,8 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
                     'is_our_service', 'is_our_supply', 'user_name', )
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',)
     search_help_text = 'Поиск по полному и краткому наименованию оборудования или по серийному номеру'
-    ordering = ('equipment', 'serial_number', 'user',)
+    ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
+                'equipment', 'serial_number', 'user',)
     list_per_page = 30
     list_select_related = True
     list_filter = ('equipment_status__name',)
