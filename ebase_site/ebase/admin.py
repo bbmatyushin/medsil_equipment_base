@@ -3,6 +3,7 @@ from .models import *
 # from users.models import CompanyUser
 from directory.models import Position
 from .forms import *
+from .admin_filters import *
 
 
 @admin.register(Client)
@@ -154,7 +155,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
                 'equipment', 'serial_number', 'user',)
     list_per_page = 30
     list_select_related = True
-    list_filter = ('equipment_status__name',)
+    list_filter = (InstallDtFilter, 'equipment_status__name',)
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
