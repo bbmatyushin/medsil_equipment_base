@@ -11,7 +11,7 @@ ER-diagrams/equipment_medsil.drawio
 ER-diagrams/equipment_medsil_dj_orm.drawio
 ebase_site/*/migrations/0*.py
 _venv/
-
+ebase_dump_20240825.sql
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

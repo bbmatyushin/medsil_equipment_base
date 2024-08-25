@@ -2,10 +2,10 @@
 
 import subprocess
 import re
-from logger.logger import get_logger
+import logging
 
 
-logger = get_logger('ACCESS')
+logger = logging.getLogger('ACCESS')
 
 db_path = r'/home/human/Coding/Sites/medsil_equipment_base/accembler_db/general_db.accdb'
 

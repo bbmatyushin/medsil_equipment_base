@@ -364,13 +364,13 @@ class InsertData:
                     if data.get('Дата ремонта') else '1970-01-01'
                 comment = data['Примечание'] if data.get('Примечание') else None
                 equipment_accounting = self.get_instance_equipment_accounting(data.get('Серийный номер'))
-                spare_part_instances = []
-                if data.get('Запчасти'):
-                    parts = data['Запчасти'].split('\r\n')
-                    for p in parts:
-                        for part in p.split(','):
-                            if part.strip():
-                                spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
+                # spare_part_instances = []
+                # if data.get('Запчасти'):
+                #     parts = data['Запчасти'].split('\r\n')
+                #     for p in parts:
+                #         for part in p.split(','):
+                #             if part.strip():
+                #                 spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
                 try:
                     service = Service(
                         service_type=service_type,
@@ -387,9 +387,9 @@ class InsertData:
                     service_instance = Service.objects.get(pk=pk)
                     # if equipment_accounting:
                     #     service_instance.equipment_accounting.set([equipment_accounting])
-                    if spare_part_instances:
-                        for spare_part in spare_part_instances:
-                            service_instance.spare_part.set([spare_part])
+                    # if spare_part_instances:
+                    #     for spare_part in spare_part_instances:
+                    #         service_instance.spare_part.set([spare_part])
                     logger.info(f'Ремонт {data.get("Серийный номер")} добавлен.')
                 except Exception as e:
                     logger.error(e)
@@ -507,16 +507,16 @@ def main():
     # TODO: Заменить у подразделения.json "Код":125,"Наименование":"Сланцевская межрайонная больница","Клиент":90 на 16 ! ! !
     # insert.departments()
     # insert.dept_contact_pers()
-    # insert.manufacturer_supplier()  # TODO: перед выполнением раскомментировать default в моделях Manufacturer и Supplier
+    # insert.manufacturer_supplier()
     # insert.equipment()
     # insert.engineers()
     # insert.equipment_accounting()
     # insert.equipment_acc_department()
-    insert.spare_parts()  # TODO: перед выполнением раскомментировать default в моделе SparePart
+    # insert.spare_parts()
     # insert.service_type()
     # insert.service()
 
-    # insert.equipment_upd_med_direction()  # обновление направления
+    insert.equipment_upd_med_direction()  # обновление направления
 
 
 if __name__ == '__main__':
