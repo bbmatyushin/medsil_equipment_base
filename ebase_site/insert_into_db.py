@@ -130,6 +130,10 @@ class InsertData:
         supplier = Supplier.objects.get(name=supplier_name_ms)
         return supplier
 
+    def get_instance_unit(self, unit_name: str) -> django.db.models:
+        """Получаем экземпляр единицы измерения"""
+        return Unit.objects.get(short_name=unit_name)
+
     def cities(self) -> None:
         """Заполняем таблицу City."""
         City.objects.create(name='Не указан')
@@ -360,13 +364,13 @@ class InsertData:
                     if data.get('Дата ремонта') else '1970-01-01'
                 comment = data['Примечание'] if data.get('Примечание') else None
                 equipment_accounting = self.get_instance_equipment_accounting(data.get('Серийный номер'))
-                spare_part_instances = []
-                if data.get('Запчасти'):
-                    parts = data['Запчасти'].split('\r\n')
-                    for p in parts:
-                        for part in p.split(','):
-                            if part.strip():
-                                spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
+                # spare_part_instances = []
+                # if data.get('Запчасти'):
+                #     parts = data['Запчасти'].split('\r\n')
+                #     for p in parts:
+                #         for part in p.split(','):
+                #             if part.strip():
+                #                 spare_part_instances.append(self.get_instance_spare_part(part.strip(), data['Серийный номер']))
                 try:
                     service = Service(
                         service_type=service_type,
@@ -383,9 +387,9 @@ class InsertData:
                     service_instance = Service.objects.get(pk=pk)
                     # if equipment_accounting:
                     #     service_instance.equipment_accounting.set([equipment_accounting])
-                    if spare_part_instances:
-                        for spare_part in spare_part_instances:
-                            service_instance.spare_part.set([spare_part])
+                    # if spare_part_instances:
+                    #     for spare_part in spare_part_instances:
+                    #         service_instance.spare_part.set([spare_part])
                     logger.info(f'Ремонт {data.get("Серийный номер")} добавлен.')
                 except Exception as e:
                     logger.error(e)
@@ -401,7 +405,7 @@ class InsertData:
                     except Exception as e:
                         logger.error(e)
 
-    def spare_parts(self) -> None:
+    def spare_parts_old(self) -> None:
         """Добавляем запчасти"""
         with open(Path(json_dir, 'ремонт.json'), 'r', encoding='utf-8') as f:
             for line in f:
@@ -422,6 +426,32 @@ class InsertData:
                                         logger.info(f'Запчасть {part} добавлена.')
                                     except Exception as e:
                                         logger.error(e)
+
+    def spare_parts(self) -> None:
+        """Добавляем запчасти"""
+        with open(Path(json_dir, 'запчасти.json'), 'r', encoding='utf-8') as f:
+            for line in f:
+                data = json.loads(line)
+                equipment = self.get_instance_equipment(data.get('Прибор'))
+                try:
+                    unit = self.get_instance_unit(data.get('Едизм'))
+                except Exception as e:
+                    logger.warnind(f"Unit ERROR:  {e}")
+                    unit = None
+
+                try:
+                    spare_part = SparePart(article=data.get('Артикул'),
+                                           name=data.get('Наименование'),
+                                           unit=unit,
+                                           comment=data.get('Примечание'),
+                                           )
+                    pr_key = spare_part.pk
+                    spare_part.save()
+                    part_instance = SparePart.objects.get(pk=pr_key)
+                    part_instance.equipment.set([equipment])
+                    logger.info(f'Запчасть {data.get("Наименование")} добавлена.')
+                except Exception as e:
+                    logger.error(e)
 
     def units(self) -> None:
         """Добавляем единицы измерения"""
@@ -477,12 +507,12 @@ def main():
     # TODO: Заменить у подразделения.json "Код":125,"Наименование":"Сланцевская межрайонная больница","Клиент":90 на 16 ! ! !
     # insert.departments()
     # insert.dept_contact_pers()
-    # insert.manufacturer_supplier()  # TODO: перед выполнением раскомментировать default в моделях Manufacturer и Supplier
+    # insert.manufacturer_supplier()
     # insert.equipment()
     # insert.engineers()
     # insert.equipment_accounting()
     # insert.equipment_acc_department()
-    # insert.spare_parts()  # TODO: перед выполнением раскомментировать default в моделе SparePart
+    # insert.spare_parts()
     # insert.service_type()
     # insert.service()
 
