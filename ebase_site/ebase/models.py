@@ -412,7 +412,8 @@ class Service(EbaseModel):
         help_text='Примечание, комментарии по ремонту'
     )
     spare_part = models.ManyToManyField(
-        "spare_part.SparePart", related_name="service_spare_part", verbose_name='Запчасти',
+        "spare_part.SparePart", related_name="service_spare_part",
+        verbose_name='Запчасти',
         help_text='Запчасти, которые используются в ремонте. ', blank=True,
     )
 

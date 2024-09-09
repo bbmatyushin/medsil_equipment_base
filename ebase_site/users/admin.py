@@ -38,7 +38,7 @@ class CompanyUserAdmin(UserAdmin):
 
     @admin.display(description='Должность')
     def user_position(self, obj):
-        return obj.position.name
+        return ", ".join(obj.position.values_list('name', flat=True))
 
     @admin.action(description='Назначить права администратора')
     def set_admin(self, request, queryset):
