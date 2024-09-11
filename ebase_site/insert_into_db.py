@@ -254,8 +254,8 @@ class InsertData:
                     med_direction = self.get_instance_med_direction(equipment['Направление']) \
                         if equipment.get('Направление') else None
                     eq = Equipment.objects.get(full_name=equipment.get('Название полное'),
-                                                  short_name=equipment.get('Краткое название'),
-                                                  )
+                                               short_name=equipment.get('Краткое название'),
+                                               )
                     eq.med_direction = med_direction
                     eq.save()
                     logger.info(f'Направление для {equipment.get("Название полное")} обновлено.')

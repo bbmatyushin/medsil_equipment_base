@@ -149,8 +149,11 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
                     'is_our_service', 'is_our_supply', 'user_name', )
-    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',)
-    search_help_text = 'Поиск по полному и краткому наименованию оборудования или по серийному номеру'
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',
+                     'equipment_acc_department_equipment_accounting__department__name',)  # поиск по названию подразделения
+                     # 'equipment_acc_department_equipment_accounting__department__city__name',)  # поиск по городу подразделения
+    search_help_text = ('Поиск по полному и краткому наименованию оборудования, по его серийному номеру или '
+                        'по названию Подразделения клиента (где установлено)')
     ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
                 'equipment', 'serial_number', 'user',)
     list_per_page = 30
