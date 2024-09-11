@@ -244,6 +244,11 @@ class EquipmentAccounting(EbaseModel):
         db_comment='Дата обновления строки.',
         help_text='Дата обновления строки. Заполняется автоматически'
     )
+    url_youjail = models.URLField(max_length=2000, verbose_name='Ссылка YouJail',
+                                  null=True, blank=True, default=None,
+                                  help_text='Ссылка для связи с сервисом YouJail',
+                                  db_comment='Ссылка для связи с сервисом YouJail'
+    )
 
     class Meta:
         db_table = f'{company}."equipment_accounting"'
