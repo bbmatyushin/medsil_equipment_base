@@ -141,6 +141,7 @@ class EquipmentAccDepartmentInline(admin.TabularInline):
 
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
+    actions = ('set_is_our_service',)
     # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_accounting/equipment_acc_change_form.html'
@@ -163,6 +164,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
                                                ('is_our_supply', 'is_our_service',),)}),
+        ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
 
     def get_instance(self, obj):
@@ -187,6 +189,11 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     @admin.display(description='Добавил')
     def user_name(self, obj):
         return obj.user.username if obj.user else '-'
+
+    @admin.action(description='Установить - Обслужен нами')
+    def set_is_our_service(self, request, queryset):
+        count_set = queryset.update(is_our_service=True)
+        self.message_user(request, message=f'Успешно изменено {count_set} записей')
 
     def save_model(self, request, obj, form, change):
         if not change:
