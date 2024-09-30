@@ -159,7 +159,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
                 'equipment', 'serial_number', 'user',)
     list_per_page = 30
     list_select_related = True
-    list_filter = (InstallDtFilter, 'equipment_status__name',)
+    list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply',)
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
@@ -208,6 +208,22 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
             if condition:
                 kwargs["queryset"] = Equipment.objects.filter(med_direction__name=condition)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        # Проверяем, что у сотрудника установлена должность менеджер
+        user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
+        if user_position:
+            # Для менеджреров не отображаем оборудование посталенное не нами
+            queryset = queryset.filter(is_our_supply__exact=1)
+        return queryset
+
+    def get_list_filter(self, request):
+        list_filter = super().get_list_filter(request)
+        user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
+        if user_position:
+            list_filter = (InstallDtFilter, 'equipment_status__name',)
+        return list_filter
 
 
 @admin.register(Manufacturer)
