@@ -306,6 +306,14 @@ class ServiceAdmin(admin.ModelAdmin):
         dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
         return "; ".join(dept) if dept else '-'
 
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context)
+
+    #     response.context_data['cl'].list_display = [
+    #         f'<div style="width:200px">{col}</div>' for col in response.context_data['cl'].list_display
+    #     ]
+        return response
+
     def save_model(self, request, obj, form, change):
         if not change:
             obj.user = request.user

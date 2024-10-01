@@ -1,0 +1,11 @@
+
+table th,
+table td {
+    width: auto !important;
+    max-width: 180px !important;
+}
+
+
+.nowrap {
+    white-space: normal!important;
+}
