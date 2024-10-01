@@ -144,7 +144,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
     actions = ('set_is_our_service',)
     # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
-    add_form_template = 'ebase/admin/equipment_accounting/equipment_acc_change_form.html'
+    add_form_template = 'ebase/admin/equipment_acc_change_form.html'
     # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
 
     inlines = (EquipmentAccDepartmentInline,)
@@ -252,6 +252,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
+    add_form_template = 'ebase/admin/service_change_form.html'
     autocomplete_fields = ('equipment_accounting',)
     filter_horizontal = ('spare_part',)
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
