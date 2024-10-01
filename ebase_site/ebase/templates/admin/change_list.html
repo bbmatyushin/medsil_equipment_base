@@ -2,7 +2,7 @@
 {% load i18n admin_urls static admin_list %}
 
 {% block extrastyle %}
-{% if 'admin/ebase/' in request.path %}
+{% if 'admin/ebase/' in request.path or 'admin/spare_part/' in request.path %}
   <link rel="stylesheet" href="{% static "ebase/admin/css/custom_admin.css" %}">
 {% endif %}
   {{ block.super }}
