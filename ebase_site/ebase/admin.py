@@ -315,6 +315,15 @@ class ServiceAdmin(admin.ModelAdmin):
     #     ]
         return response
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs): #     ]
+        if db_field.name =='spare_part':
+            eq_id = request.GET.getlist('eq_select')
+            if eq_id:
+                # TODO: Сформировать QuerySet запчастей для оборудования с eq_id
+                print(eq_id[0])
+                pass
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):
         if not change:
             obj.user = request.user

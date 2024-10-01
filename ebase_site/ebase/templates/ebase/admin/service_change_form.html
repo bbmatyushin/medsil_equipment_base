@@ -1,8 +1,21 @@
 {% extends "admin/change_form.html" %}
 
-{% load static %}
+{% load static service_tags %}
 
 {% block before_field_sets %}
 <link rel="stylesheet" href="{% static "ebase/admin/css/form.css" %}">
-<!--<p>Hello!</p>-->
+
+{% get_equipment_list as eq_list %}
+
+<div>
+<select id="eqList">
+    <option value="">Выбор оборудования</option>
+{% for eq in eq_list %}
+    <option value="{{ eq.id }}">{{ eq.short_name }}</option>
+{% endfor %}
+</select>
+</div>
+
+
+<script src="{% static 'js/scripts.js' %}"></script>
 {% endblock %}
