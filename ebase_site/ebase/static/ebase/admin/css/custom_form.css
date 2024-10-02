@@ -43,3 +43,23 @@
     padding: 5px 15px;
     margin-bottom: 12px;
 }
+
+.custom-aligned label {
+    display: block;
+    padding: 4px 10px 0 0;
+    min-width: 160px;
+    width: 160px;
+    word-wrap: break-word;
+    line-height: 1;
+}
+.custom-form-row {
+    overflow: hidden;
+    padding: 10px;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--hairline-color);
+}
+
+.custopm-form-row label input[type="checkbox"] {
+    margin-top: 0;
+    vertical-align: 0;
+}

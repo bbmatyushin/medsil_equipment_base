@@ -1,4 +1,6 @@
 from django.contrib import admin
+
+from spare_part.models import SparePart
 from .models import *
 # from users.models import CompanyUser
 from directory.models import Position
@@ -253,7 +255,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     add_form_template = 'ebase/admin/service_change_form.html'
-    autocomplete_fields = ('equipment_accounting',)
+    # autocomplete_fields = ('equipment_accounting',)
     filter_horizontal = ('spare_part',)
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'description_short', 'spare_part_used',
@@ -268,7 +270,7 @@ class ServiceAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (
-            'Новый ремонт', {'fields': ('equipment_accounting', 'service_type', 'spare_part',)}
+            'Данные на оборудования', {'fields': ('equipment_accounting', 'service_type', 'spare_part',)}
         ),
         (
             'Описание работ', {
@@ -314,6 +316,24 @@ class ServiceAdmin(admin.ModelAdmin):
     #         f'<div style="width:200px">{col}</div>' for col in response.context_data['cl'].list_display
     #     ]
         return response
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Формируем список оборудования с серийными номера на основе
+        id полученного из get-запроса"""
+        if db_field.name == 'equipment_accounting':
+            eq_id = request.GET.getlist('eq_select')
+            if eq_id:
+                kwargs["queryset"] = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Формируем список запчастей для оборудования на основе
+        его id полученного из get-запроса"""
+        if db_field.name =='spare_part':
+            eq_id = request.GET.getlist('eq_select')
+            if eq_id:
+                kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         if not change:
