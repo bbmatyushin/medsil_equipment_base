@@ -2,20 +2,32 @@
 
 {% load static service_tags %}
 
-{% block before_field_sets %}
-<link rel="stylesheet" href="{% static "ebase/admin/css/form.css" %}">
+{% block before_change_form %}
+<link rel="stylesheet" href="{% static "ebase/admin/css/custom_form.css" %}">
 
 {% get_equipment_list as eq_list %}
 
 <div>
-<select id="eqList">
-    <option value="">Выбор оборудования</option>
-{% for eq in eq_list %}
-    <option value="{{ eq.id }}">{{ eq.short_name }}</option>
-{% endfor %}
+    <fieldset class="module custom-aligned"><h2>Выберите медицинское оборудование</h2>
+<div class="custom-form-row">
+<input type="text" id="searchInput" placeholder="Поиск по короткому названию">
+<select id="eqSelectList" style="display: '';">
+    {% if request.GET.eq_select %}
+        <option value="{{ request.GET.eq_select }}" title="{{ request.GET.eq_title }}">{{ request.GET.eq_title }}</option>
+    {% else %}
+        <option value="">Выбор оборудования</option>
+    {% endif %}
+    {% for eq in eq_list %}
+    <option value="{{ eq.id }}" title="{{ eq.short_name }}">{{ eq.short_name }}</option>
+    {% endfor %}
 </select>
 </div>
-
+</fieldset>
+</div>
 
 <script src="{% static 'js/scripts.js' %}"></script>
+{% endblock %}
+
+
+{% block js_scripts_load %}
 {% endblock %}
