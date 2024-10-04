@@ -9,7 +9,7 @@
 
 <div>
     <fieldset class="module custom-aligned"><h2>Выберите медицинское оборудование</h2>
-<div class="custom-form-row">
+<div class="custom-action">
 <input type="text" id="searchInput" placeholder="Поиск по короткому названию">
 <select id="eqSelectList" style="display: '';">
     {% if request.GET.eq_select %}
@@ -21,6 +21,10 @@
     <option value="{{ eq.id }}" title="{{ eq.short_name }}">{{ eq.short_name }}</option>
     {% endfor %}
 </select>
+    <a href="{{ request.path}}">
+    <input type="submit" value="Отменить выбор">
+    </a>
+    <div class="help">Введите часть из короткого названия оборудования для быстрого поиска</div>
 </div>
 </fieldset>
 </div>
