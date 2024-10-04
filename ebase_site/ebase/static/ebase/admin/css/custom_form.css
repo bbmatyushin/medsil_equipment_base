@@ -63,3 +63,43 @@
     margin-top: 0;
     vertical-align: 0;
 }
+
+
+/* TOOLBAR */
+
+.custom-action {
+    padding: 8px 10px;
+    margin-bottom: 15px;
+    border-top: 1px solid var(--hairline-color);
+    border-bottom: 1px solid var(--hairline-color);
+    background: var(--darkened-bg);
+    color: var(--body-quiet-color);
+}
+
+.custom-action form input {
+    border-radius: 4px;
+    font-size: 0.875rem;
+    padding: 5px;
+    color: var(--body-fg);
+}
+
+.custom-action form input[type="submit"] {
+    border: 1px solid var(--border-color);
+    font-size: 0.8125rem;
+    padding: 4px 8px;
+    margin: 0;
+    vertical-align: middle;
+    background: var(--body-bg);
+    box-shadow: 0 -15px 20px -10px rgba(0, 0, 0, 0.15) inset;
+    cursor: pointer;
+    color: var(--body-fg);
+}
+
+.custom-action form input[type="submit"]:focus,
+.custom-action form input[type="submit"]:hover {
+    border-color: var(--body-quiet-color);
+}
+
+.custom-action .help {
+    word-break: break-word;
+}
