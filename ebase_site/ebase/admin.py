@@ -1,5 +1,6 @@
-from django.contrib import admin
+import re
 
+from django.contrib import admin
 from spare_part.models import SparePart
 from .models import *
 # from users.models import CompanyUser
@@ -320,8 +321,10 @@ class ServiceAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Формируем список оборудования с серийными номера на основе
         id полученного из get-запроса"""
+        eq_id: list = []
         if db_field.name == 'equipment_accounting':
-            eq_id = request.GET.getlist('eq_select')
+            if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+                eq_id = request.GET.getlist('eq_select')
             if eq_id:
                 kwargs["queryset"] = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -329,8 +332,14 @@ class ServiceAdmin(admin.ModelAdmin):
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         """Формируем список запчастей для оборудования на основе
         его id полученного из get-запроса"""
+        eq_id: list = []
         if db_field.name =='spare_part':
-            eq_id = request.GET.getlist('eq_select')
+            if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+                eq_id = request.GET.getlist('eq_select')
+            elif re.search(r'\/service\/.*\/change\/', request.path):
+                # Фильтруем запчасти на странице изменения по ремонту оборудования
+                service_id = request.path.strip().split('/')[-3]
+                eq_id.append(Service.objects.get(pk=service_id).equipment_accounting.equipment.pk)
             if eq_id:
                 kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id)
         return super().formfield_for_manytomany(db_field, request, **kwargs)

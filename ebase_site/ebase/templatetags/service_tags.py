@@ -1,9 +1,9 @@
 from django import template
-from ebase.models import Service, Equipment
-from spare_part.models import SparePart
+from ebase.models import Equipment
 
 
 register = template.Library()
+
 
 @register.simple_tag()
 def get_equipment_list():
