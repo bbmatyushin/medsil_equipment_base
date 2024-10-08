@@ -135,6 +135,8 @@ STATICFILES_DIR = [
     BASE_DIR / "ebase/static", # путь к папке с static файлами
 ]
 
+# ICON_PATH = os.path.join(BASE_DIR, 'static', 'img', 'icon_2.png')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
