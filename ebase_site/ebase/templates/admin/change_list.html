@@ -25,6 +25,7 @@
 {{ block.super }}
 {{ media.js }}
 <script src="{% static 'admin/js/filters.js' %}" defer></script>
+<script src="{% static 'ebase/js/scripts.js' %}" defer></script>
 {% endblock %}
 
 {% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-list{% endblock %}
@@ -76,7 +77,8 @@
       </div>
       {% block filters %}
         {% if cl.has_filters %}
-          <div id="changelist-filter">
+        <link rel="stylesheet" href="{% static "ebase/admin/css/custom_filter.css" %}">
+          <div id="changelist-filter" style="display: block;">
             <h2>{% translate 'Filter' %}</h2>
             {% if cl.is_facets_optional or cl.has_active_filters %}<div id="changelist-filter-extra-actions">
               {% if cl.is_facets_optional %}<h3>
@@ -88,6 +90,8 @@
               </h3>{% endif %}
             </div>{% endif %}
             {% for spec in cl.filter_specs %}{% admin_list_filter cl spec %}{% endfor %}
+            <div id="hidden-filters">
+              <button class="toggle-filter" id="hidden-filter-button"></button></div>
           </div>
         {% endif %}
       {% endblock %}
