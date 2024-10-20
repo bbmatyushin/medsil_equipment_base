@@ -34,3 +34,9 @@ document.getElementById('searchInput').addEventListener('input', function() {
             });
         });
 
+
+// Скрываем блок с фильтрами
+document.getElementById('hide-filters').addEventListener('click', function() {
+    document.getElementById('changelist-filter').style.display = 'none';
+});
+
