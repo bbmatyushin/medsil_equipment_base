@@ -40,6 +40,8 @@ class SparePartAdmin(admin.ModelAdmin):
 
 @admin.register(SparePartCount)
 class SparePartCountAdmin(admin.ModelAdmin):
+    form = SparePartCountForm
+
     autocomplete_fields = ('spare_part',)
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
     list_filter = ('is_overdue',)
@@ -89,7 +91,7 @@ class SparePartSupplyAdmin(admin.ModelAdmin):
             'Новая поставка', {
                 # 'classes': ('wide',),
                 'fields': ('spare_part', 'doc_num', ('count_supply', 'expiration_dt',),
-                                       'supply_dt',)
+                                       'supply_dt', 'new_spare_part',)
             }),
     )
 

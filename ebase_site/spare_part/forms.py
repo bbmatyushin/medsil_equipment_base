@@ -2,6 +2,19 @@ from django import forms
 from .models import *
 
 
+class SparePartCountForm(forms.ModelForm):
+    class Meta:
+        model = SparePartCount
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data['spare_part'].is_expiration and not cleaned_data['expiration_dt']:
+            self.add_error('expiration_dt',
+                           f'Для "{cleaned_data["spare_part"].name}" неоходимо указать срок годности')
+        return cleaned_data
+
+
 class SparePartShipmentForm(forms.ModelForm):
     # spare_part_available = forms.CharField(label='Доступно')
     class Meta:
