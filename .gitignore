@@ -14,6 +14,7 @@ _venv/
 ebase_dump_20240825.sql
 requirements_hp.txt
 ebase_site/media/
+pg_medsil_backup/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
