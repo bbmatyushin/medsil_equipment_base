@@ -13,6 +13,7 @@ ebase_site/*/migrations/0*.py
 _venv/
 ebase_dump_20240825.sql
 requirements_hp.txt
+ebase_site/media/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

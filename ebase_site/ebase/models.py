@@ -435,6 +435,37 @@ class Service(EbaseModel):
         return f'<Service {self.id=!r}, {self.user=!r}>'
 
 
+class ServicePhotos(EbaseModel):
+    """Набор фото связанных с ремонтом"""
+    service = models.ForeignKey(
+        'Service', on_delete=models.CASCADE, null=False, blank=False,
+        related_name="service_photos", verbose_name='Ремонт',
+        db_comment='ID Ремонта',
+    )
+    photo = models.ImageField(upload_to='service/%Y/', blank=True, null=True,
+                              verbose_name='Фото ремонта',
+                              db_comment='Ссылка на поле для фото связанных с ремонтом')
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.CASCADE, null=True, blank=True,
+        related_name="service_photo_user", verbose_name='ID Пользователя',
+        db_comment='ID Пользователя (сотрудника)',
+        help_text='Пользователь из таблицы "Пользователи"'
+    )
+    create_dt = models.DateTimeField(auto_now_add=True, verbose_name='Когда было добавлено фото')
+
+    class Meta:
+        db_table = f'{company}."service_photos"'
+        db_table_comment = 'Фотографии ремонта оборудования. \n\n-- BMatyushin'
+        verbose_name = 'Фото ремонта'
+        verbose_name_plural = 'Фото ремонта'
+
+    def __str__(self):
+        return f"{self.service} - {self.photo}"
+
+    def __repr__(self):
+        return f'<ServicePhotos {self.id=!r}, {self.service=!r}>'
+
+
 class Supplier(EbaseModel):
     """Поставщики оборудования."""
     name = models.CharField(

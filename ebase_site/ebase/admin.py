@@ -1,6 +1,8 @@
 import re
 
 from django.contrib import admin
+from django.utils.safestring import mark_safe
+
 from spare_part.models import SparePart
 from .models import *
 # from users.models import CompanyUser
@@ -118,7 +120,7 @@ class EquipmentAdmin(admin.ModelAdmin):
 class EquipmentAccDepartmentInline(admin.TabularInline):
     model = EquipmentAccDepartment
     fk_name = 'equipment_accounting'
-    extra = 1
+    extra = 0
     # autocomplete_fields = ('department',)  # С ним не отрабатывает def formfield_for_foreignkey
     # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
     verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
@@ -253,12 +255,39 @@ class ManufacturerAdmin(admin.ModelAdmin):
         return obj.country.name if obj.country else '-'
 
 
+class ServicePhotosInline(admin.TabularInline):
+    model = ServicePhotos
+    # classes = ['wide',]
+    fk_name = 'service'
+    extra = 1
+    readonly_fields = ('eq_service_photo',)
+    verbose_name = 'ФОТО РЕМОНТА'
+    verbose_name_plural = 'ФОТО РЕМОНТА'
+
+    fieldsets = (
+        ('Фото', {
+            'classes': ('collapse',),
+            'fields': (('photo', 'eq_service_photo'),)
+        }),
+    )
+
+    @admin.display(description='Изображение')
+    def eq_service_photo(self, obj):
+        if obj.photo:
+            return mark_safe(f"<a href='{obj.photo.url}' target='_blank'>"
+                             f"<img src='{obj.photo.url}' width=50>"
+                             f"</a>")
+        return f"Нет изображения"
+
+
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
     filter_horizontal = ('spare_part',)
+    inlines = (ServicePhotosInline, )
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
+                    'photos',
                     'description_short', 'spare_part_used',
                     'reason_short', 'job_content_short', 'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
@@ -271,7 +300,9 @@ class ServiceAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (
-            'Данные на оборудования', {'fields': ('equipment_accounting', 'service_type', 'spare_part',)}
+            'Данные на оборудование', {'fields':
+                                           ('equipment_accounting', 'service_type', 'spare_part',)
+                                       }
         ),
         (
             'Описание работ', {
@@ -309,6 +340,10 @@ class ServiceAdmin(admin.ModelAdmin):
             .values_list('department', flat=True)
         dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
         return "; ".join(dept) if dept else '-'
+
+    @admin.display(description='Фото', boolean=True)
+    def photos(self, obj):
+        return True if obj.service_photos.values() else False
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
