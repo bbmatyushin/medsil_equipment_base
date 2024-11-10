@@ -459,6 +459,10 @@ class ServicePhotos(EbaseModel):
         verbose_name = 'Фото ремонта'
         verbose_name_plural = 'Фото ремонта'
 
+    def delete(self, using=None, keep_parents=False):
+        self.photo.delete(save=False)
+        super().delete(using=None, keep_parents=False)
+
     def __str__(self):
         return f"{self.service} - {self.photo}"
 

@@ -14,5 +14,5 @@ if settings.DEBUG:
     urlpatterns += debug_toolbar_urls()
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-admin.site.site_header = 'ООО "Фирма МЕДСИЛ":  Сервис'
+admin.site.site_header = 'ООО "Фирма МЕДСИЛ" - Сервис'
 admin.site.index_title = 'Администрирование учета сервисного оборудования'
