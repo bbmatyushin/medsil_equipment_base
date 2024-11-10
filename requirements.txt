@@ -4,6 +4,7 @@ black==24.4.2
 click==8.1.7
 decorator==5.1.1
 Django==5.0.6
+django-cleanup
 django-debug-toolbar==4.4.5
 django-extensions==3.2.3
 django-shell-plus==1.1.7
