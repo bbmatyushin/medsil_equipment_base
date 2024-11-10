@@ -117,17 +117,18 @@ class EquipmentAdmin(admin.ModelAdmin):
         return f"{obj.supplier.name if obj.supplier else '-'}"
 
 
-class EquipmentAccDepartmentInline(admin.TabularInline):
+class EquipmentAccDepartmentInline(admin.StackedInline):
     model = EquipmentAccDepartment
     fk_name = 'equipment_accounting'
     extra = 0
     # autocomplete_fields = ('department',)  # С ним не отрабатывает def formfield_for_foreignkey
     # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
     verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
+    verbose_name_plural = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
 
     fieldsets = (
-        ('Подразделение', {'fields': ('department',)}),
-        ('Монтаж', {'fields': ('engineer', 'install_dt', 'is_active',)}),
+        (None, {'fields': (('department', 'is_active',), ('engineer', 'install_dt',),),}),
+        # ('Монтаж', {'fields': (('engineer', 'install_dt',),),}),
     )
 
     # Модно переопределить get_formsets_with_inlines или get_formset для вывода поля город
@@ -255,7 +256,7 @@ class ManufacturerAdmin(admin.ModelAdmin):
         return obj.country.name if obj.country else '-'
 
 
-class ServicePhotosInline(admin.TabularInline):
+class ServicePhotosInline(admin.StackedInline):
     model = ServicePhotos
     # classes = ['wide',]
     fk_name = 'service'
@@ -265,8 +266,8 @@ class ServicePhotosInline(admin.TabularInline):
     verbose_name_plural = 'ФОТО РЕМОНТА'
 
     fieldsets = (
-        ('Фото', {
-            'classes': ('collapse',),
+        ('', {
+            # 'classes': ('collapse',),
             'fields': (('photo', 'eq_service_photo'),)
         }),
     )
@@ -284,6 +285,7 @@ class ServicePhotosInline(admin.TabularInline):
 class ServiceAdmin(admin.ModelAdmin):
     add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
+    date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
     inlines = (ServicePhotosInline, )
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
@@ -378,6 +380,11 @@ class ServiceAdmin(admin.ModelAdmin):
             if eq_id:
                 kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    # def get_inline_instances(self, request, obj=None):
+        # TODO: В зависимости от устройства (компьютер или мобильный) возвращать
+        # TODO: class ServicePhotosInline(admin.TabularInline) - для компьютеров
+        # TODO: class ServicePhotosInline(admin.StackedInline) - для мобильных
 
     def save_model(self, request, obj, form, change):
         if not change:
