@@ -148,6 +148,7 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(admin.ModelAdmin):
     actions = ('set_is_our_service',)
+    date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
     # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
