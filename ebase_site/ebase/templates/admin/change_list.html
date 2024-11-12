@@ -63,7 +63,11 @@
 
         {% block date_hierarchy %}
           {% if cl.date_hierarchy %}
-            <div class="help">Быстрый фильтр по дате начала ремонта:</div>
+            {% if 'admin/ebase/service/' in request.path %}
+            <div class="help" style="padding-bottom: 5px;">Быстрый фильтр по дате начала ремонта:</div>
+            {% elif 'admin/ebase/equipmentaccounting/' in request.path%}
+            <div class="help" style="padding-bottom: 5px;">Быстрый фильтр по дате монтажа:</div>
+            {% endif %}
             {% date_hierarchy cl %}
           {% endif %}
         {% endblock %}
