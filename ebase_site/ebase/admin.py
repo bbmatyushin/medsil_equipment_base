@@ -1,6 +1,8 @@
 import re
+from lib2to3.fixes.fix_input import context
 
 from django.contrib import admin
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from spare_part.models import SparePart
@@ -318,18 +320,27 @@ class ServiceAdmin(admin.ModelAdmin):
 
     @admin.display(description='Содержание работ')
     def job_content_short(self, obj):
-        content = obj.job_content[:50] if obj.job_content else '-'
-        return content if len(content) < 50 else f'{content}...'
+        job_content = obj.job_content
+        content = '-' if not job_content else job_content if len(job_content) < 50 \
+            else f"{job_content[:50]}..."
+        return f"{content}" if len(content) < 50 \
+                else mark_safe(f"<p title='{job_content}'>{content}</p>")
 
     @admin.display(description='Описание неисправности')
     def description_short(self, obj):
-        descr = obj.description[:50] if obj.description else '-'
-        return descr if len(descr) < 50 else f'{descr}...'
+        description = obj.description
+        descr = '-' if not description else description if len(description) < 50 \
+            else f"{description[:50]}..."
+        return f"{descr}" if len(descr) < 50 \
+                else mark_safe(f"<p title='{description}'>{descr}</p>")
 
     @admin.display(description='Причина')
     def reason_short(self, obj):
-        reason = obj.reason[:50] if obj.reason else '-'
-        return reason if len(reason) < 50 else f'{reason}...'
+        service_reason = obj.reason
+        reason = '-' if not service_reason else service_reason if len(service_reason) < 50 \
+            else f"{service_reason[:50]}..."
+        return f"{reason}" if len(reason) < 50 \
+                else mark_safe(f"<p title='{service_reason}'>{reason}</p>")
 
     @admin.display(description='Запчасти')
     def spare_part_used(self, obj):
