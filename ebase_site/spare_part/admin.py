@@ -112,6 +112,7 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
     form = SparePartShipmentForm
 
     autocomplete_fields = ('spare_part_count',)
+    date_hierarchy = 'shipment_dt'
     list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
     list_per_page = 30
     search_fields = ('spare_part_count__spare_part__name', 'spare_part_count__spare_part__article',)

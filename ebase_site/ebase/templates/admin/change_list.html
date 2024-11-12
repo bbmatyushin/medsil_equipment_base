@@ -67,6 +67,8 @@
             <div class="help" style="padding-bottom: 5px;">Быстрый фильтр по дате начала ремонта:</div>
             {% elif 'admin/ebase/equipmentaccounting/' in request.path%}
             <div class="help" style="padding-bottom: 5px;">Быстрый фильтр по дате монтажа:</div>
+            {% elif 'admin/ebase/spare_part/sparepartsupply/' in request.path%}
+            <div class="help" style="padding-bottom: 5px;">Быстрый фильтр по дате поставки:</div>
             {% endif %}
             {% date_hierarchy cl %}
           {% endif %}
