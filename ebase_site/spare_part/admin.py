@@ -82,6 +82,7 @@ class SparePartSupplyAdmin(admin.ModelAdmin):
     autocomplete_fields = ('spare_part',)
     date_hierarchy = 'supply_dt'
     list_display = ('spare_part', 'count_part', 'doc_num', 'supply_dt', 'expiration_dt', 'user',)
+    list_per_page = 30
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-supply_dt', 'spare_part__name')
