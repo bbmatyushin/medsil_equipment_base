@@ -11,7 +11,7 @@ class SparePartCountForm(forms.ModelForm):
         cleaned_data = super().clean()
         if cleaned_data['spare_part'].is_expiration and not cleaned_data['expiration_dt']:
             self.add_error('expiration_dt',
-                           f'Для "{cleaned_data["spare_part"].name}" неоходимо указать срок годности')
+                           f'Для "{cleaned_data["spare_part"].name}" необходимо указать срок годности')
         return cleaned_data
 
 
@@ -51,5 +51,5 @@ class SparePartSupplyForm(forms.ModelForm):
         cleaned_data = super().clean()
         if cleaned_data['spare_part'].is_expiration and not cleaned_data['expiration_dt']:
             self.add_error('expiration_dt',
-                           f'Для "{cleaned_data["spare_part"].name}" неоходимо указать срок годности')
+                           f'Для "{cleaned_data["spare_part"].name}" необходимо указать срок годности')
         return cleaned_data

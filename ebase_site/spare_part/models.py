@@ -13,6 +13,8 @@ company = '"medsil"'  # название схемы для таблиц
 
 
 class SparePartAbs(models.Model):
+    list_per_page = 30
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
                           verbose_name='ID', db_comment='ID записи', help_text='ID записи')
     create_dt = models.DateTimeField(
