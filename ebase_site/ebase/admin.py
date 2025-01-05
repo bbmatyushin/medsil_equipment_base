@@ -367,8 +367,9 @@ class ServiceAdmin(admin.ModelAdmin):
     @admin.display(description='Акт о проведении работ')
     def service_akt_url(self, obj):
         if obj.service_akt:
+            url = re.sub('var/www/ebase_media', 'media', obj.service_akt)
             akt_name = obj.service_akt.split('/')[-1]
-            return mark_safe(f"<a href='{obj.service_akt}' target='_blank'>{akt_name}</a>")
+            return mark_safe(f"<a href='{url}' target='_blank'>{akt_name}</a>")
         return f"--"
 
     @admin.action(description='Создать - Акт о проведении работ')
