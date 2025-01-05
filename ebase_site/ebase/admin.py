@@ -387,7 +387,7 @@ class ServiceAdmin(admin.ModelAdmin):
                 '{{ KPP }}': 'КПП ',
                 '{{ EQUIPMENT }}': qs.equipment_accounting.equipment.full_name,
                 '{{ SERIAL_NUM }}': qs.equipment_accounting.serial_number,
-                '{{ DATE }}': qs.end_dt if qs.end_dt else '',
+                '{{ DATE }}': qs.end_dt.strftime('%d.%m.%Y') if qs.end_dt else '',
             }
             description = qs.description if qs.description else ''
             job_content = qs.job_content if qs.job_content else ''
