@@ -1,7 +1,9 @@
 import uuid
-from enum import Enum
+from pathlib import Path
 
 from django.db import models
+from django.conf import settings
+from django.core import validators
 # from django.contrib.postgres.fields import ArrayField
 from django.utils.timezone import now
 from directory.models import get_instance_city
@@ -420,6 +422,11 @@ class Service(EbaseModel):
         "spare_part.SparePart", related_name="service_spare_part",
         verbose_name='Запчасти',
         help_text='Запчасти, которые используются в ремонте. ', blank=True,
+    )
+    service_akt = models.CharField(
+        max_length=2056, null=True, blank=True, verbose_name='Акт',
+        db_comment='Акт о проведении работ', help_text='Акт о проведении работ',
+        validators=[validators.RegexValidator(regex=r'\.docs$')]
     )
 
     class Meta:

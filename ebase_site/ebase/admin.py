@@ -1,16 +1,13 @@
 import re
-from lib2to3.fixes.fix_input import context
-
-from django.contrib import admin
-from django.utils.html import escape
+from pathlib import Path
+from django.conf import settings
 from django.utils.safestring import mark_safe
 
 from spare_part.models import SparePart
-from .models import *
-# from users.models import CompanyUser
 from directory.models import Position
 from .forms import *
 from .admin_filters import *
+from .docx_create import CreateServiceAkt
 
 
 @admin.register(Client)
@@ -286,6 +283,7 @@ class ServicePhotosInline(admin.StackedInline):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
+    actions = ('create_service_akt',)
     add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
     date_hierarchy = 'beg_dt'
@@ -294,9 +292,11 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'photos',
                     'description_short', 'spare_part_used',
-                    'reason_short', 'job_content_short', 'beg_dt', 'end_dt',)
+                    'reason_short', 'job_content_short', 'akt',
+                    'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
     list_per_page = 30
+    readonly_fields = ('service_akt_url',)
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
                      'equipment_accounting__serial_number',)
@@ -312,7 +312,8 @@ class ServiceAdmin(admin.ModelAdmin):
         (
             'Описание работ', {
                 'classes': ('collapse',),
-                'fields': ('reason', 'description', 'job_content',),
+                'fields': ('reason', 'description', 'job_content',
+                           'service_akt_url'),
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
@@ -358,6 +359,48 @@ class ServiceAdmin(admin.ModelAdmin):
     @admin.display(description='Фото', boolean=True)
     def photos(self, obj):
         return True if obj.service_photos.values() else False
+
+    @admin.display(description='Акт', boolean=True)
+    def akt(self, obj):
+        return True if obj.service_akt else False
+
+    @admin.display(description='Акт о проведении работ')
+    def service_akt_url(self, obj):
+        if obj.service_akt:
+            akt_name = obj.service_akt.split('/')[-1]
+            return mark_safe(f"<a href='{obj.service_akt}' target='_blank'>{akt_name}</a>")
+        return f"--"
+
+    @admin.action(description='Создать - Акт о проведении работ')
+    def create_service_akt(self, request, queryset):
+        file_path = str(Path(settings.BASE_DIR, 'files', 'service', 'service_akt_MEDSIL.docx'))
+        for qs in queryset:
+            dept = qs.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
+            client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
+            address = f"{client_city} {dept.client.address if dept.client.address else ''}"
+            client = {
+                '{{ CLIENT }}': dept.client.name,
+                '{{ ADDRESS }}': address,
+                '{{ PHONE }}': '',
+                '{{ EMAIL }}': '',
+                '{{ INN }}': f"ИНН {dept.client.inn if dept.client.inn else ''}",
+                '{{ KPP }}': 'КПП ',
+                '{{ EQUIPMENT }}': qs.equipment_accounting.equipment.full_name,
+                '{{ SERIAL_NUM }}': qs.equipment_accounting.serial_number,
+                '{{ DATE }}': qs.end_dt if qs.end_dt else '',
+            }
+            description = qs.description if qs.description else ''
+            job_content = qs.job_content if qs.job_content else ''
+            spare_parts = list(qs.spare_part.values_list('name', 'article'))
+            save_file_path = str(Path(settings.BASE_DIR, 'files', 'service',
+                                  f"service_akt_MEDSIL_{qs.equipment_accounting.serial_number}"
+                                  f"{'_' + str(qs.end_dt) if qs.end_dt else ''}.docx"))
+            create_akt = CreateServiceAkt(client, file_path, save_file_path, job_content, description, spare_parts)
+            create_akt.update_tables()
+            qs.service_akt = save_file_path
+            qs.save()
+            self.message_user(request, message=f'Акт сформирован')
+
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
