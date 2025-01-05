@@ -373,7 +373,7 @@ class ServiceAdmin(admin.ModelAdmin):
 
     @admin.action(description='Создать - Акт о проведении работ')
     def create_service_akt(self, request, queryset):
-        file_path = str(Path(settings.BASE_DIR, 'files', 'service', 'service_akt_MEDSIL.docx'))
+        file_path = str(Path(settings.MEDIA_ROOT, 'files', 'service', 'service_akt_MEDSIL.docx'))
         for qs in queryset:
             dept = qs.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
             client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
@@ -392,7 +392,7 @@ class ServiceAdmin(admin.ModelAdmin):
             description = qs.description if qs.description else ''
             job_content = qs.job_content if qs.job_content else ''
             spare_parts = list(qs.spare_part.values_list('name', 'article'))
-            save_file_path = str(Path(settings.BASE_DIR, 'files', 'service',
+            save_file_path = str(Path(settings.MEDIA_ROOT, 'files', 'service',
                                   f"service_akt_MEDSIL_{qs.equipment_accounting.serial_number}"
                                   f"{'_' + str(qs.end_dt) if qs.end_dt else ''}.docx"))
             create_akt = CreateServiceAkt(client, file_path, save_file_path, job_content, description, spare_parts)
