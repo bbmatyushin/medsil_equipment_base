@@ -10,13 +10,13 @@ class WhoShipment(admin.SimpleListFilter):
     title = 'Кто отгрузил'
     parameter_name = 'user'
 
-    users = CompanyUser.objects \
-        .annotate(fio=Trim(Concat('last_name', Value(' '), 'first_name'))) \
-        .filter(position__name__in=['инженер']) \
-        .values_list('username', 'fio')
-
     def lookups(self, request, model_admin):
-        return list(self.users)
+        users = CompanyUser.objects \
+            .annotate(fio=Trim(Concat('first_name', Value(' '), 'last_name'))) \
+            .filter(position__name__in=['инженер']) \
+            .values_list('username', 'fio')
+        
+        return list(users)
 
     def queryset(self, request, queryset):
         if self.value():  # здесь будет username выбранного фильтра
