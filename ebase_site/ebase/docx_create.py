@@ -86,7 +86,8 @@ class CreateServiceAkt:
         """Обновляем данные в таблице Замененные детали"""
         count_parts = len(self.spare_parts)
         for n, paragraph in self.cell_paragraph_gen(table):
-            paragraph.text = f"{n}. {self.spare_parts[n - 1][0]} (арт. {self.spare_parts[n - 1][1]})"
+            if n <= count_parts:
+                paragraph.text = f"{n}. {self.spare_parts[n - 1][0]} (арт. {self.spare_parts[n - 1][1]})"
         if len(table.rows) < count_parts:
             for i in range(count_parts - len(table.rows)):
                 cell = table.add_row().cells[0]
