@@ -1,6 +1,4 @@
 import re
-from pathlib import Path
-from django.conf import settings
 from django.utils.safestring import mark_safe
 
 from spare_part.models import SparePart
@@ -19,7 +17,8 @@ class ClientAdmin(admin.ModelAdmin):
     ordering = ('name',)
 
     fieldsets = (
-        ('Новый клиент', {'fields': ('name', 'inn', 'city', 'address')}),
+        ('Клиент', {'fields': ('name',)}),
+        ('Реквизиты', {'fields': (('inn', 'kpp',), ('phone', 'email',), ('city', 'address',))})
     )
 
     @admin.display(description='Город')
@@ -367,14 +366,15 @@ class ServiceAdmin(admin.ModelAdmin):
     @admin.display(description='Акт о проведении работ')
     def service_akt_url(self, obj):
         if obj.service_akt:
-            url = re.sub('var/www/ebase_media', 'media', obj.service_akt)
+            url = re.sub(r'.*/docs', '/media/docs', obj.service_akt)
             akt_name = obj.service_akt.split('/')[-1]
             return mark_safe(f"<a href='{url}'>{akt_name}</a>")
         return f"--"
 
     @admin.action(description='Создать - Акт о проведении работ')
-    def create_service_akt(self, request, queryset):
-        file_path = str(Path(settings.MEDIA_ROOT, 'files', 'service', 'service_akt_MEDSIL.docx'))
+    def create_service_akt(self, request, queryset) -> None:
+        """Формирование актов о проделаной работе для выбранных случаев"""
+        equipments_list: list = []
         for qs in queryset:
             dept = qs.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
             client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
@@ -382,25 +382,32 @@ class ServiceAdmin(admin.ModelAdmin):
             client = {
                 '{{ CLIENT }}': dept.client.name,
                 '{{ ADDRESS }}': address,
-                '{{ PHONE }}': '',
-                '{{ EMAIL }}': '',
+                '{{ PHONE }}': dept.client.phone if dept.client.phone else '',
+                '{{ EMAIL }}': dept.client.email if dept.client.email else '',
                 '{{ INN }}': f"ИНН {dept.client.inn if dept.client.inn else ''}",
-                '{{ KPP }}': 'КПП ',
-                '{{ EQUIPMENT }}': qs.equipment_accounting.equipment.full_name,
+                '{{ KPP }}': f"КПП {dept.client.kpp}" if dept.client.kpp else 'КПП',
+                '{{ EQUIPMENT }}': qs.equipment_accounting.equipment.full_name
+                    if qs.equipment_accounting.equipment.full_name else '',
                 '{{ SERIAL_NUM }}': qs.equipment_accounting.serial_number,
-                '{{ DATE }}': qs.end_dt.strftime('%d.%m.%Y') if qs.end_dt else '',
+                '{{ DATE }}': qs.end_dt.strftime('%d.%m.%Y') if qs.end_dt else '________________',
+                'equipment_short_name': qs.equipment_accounting.equipment.short_name
+                    if qs.equipment_accounting.equipment.short_name else qs.equipment_accounting.equipment.full_name,
             }
             description = qs.description if qs.description else ''
             job_content = qs.job_content if qs.job_content else ''
             spare_parts = list(qs.spare_part.values_list('name', 'article'))
-            save_file_path = str(Path(settings.MEDIA_ROOT, 'files', 'service',
-                                  f"service_akt_MEDSIL_{qs.equipment_accounting.serial_number}"
-                                  f"{'_' + str(qs.end_dt) if qs.end_dt else ''}.docx"))
-            create_akt = CreateServiceAkt(client, file_path, save_file_path, job_content, description, spare_parts)
+            create_akt = CreateServiceAkt(client, job_content, description, spare_parts)
             create_akt.update_tables()
-            qs.service_akt = save_file_path
+            qs.service_akt = create_akt.save_file_path
             qs.save()
-            self.message_user(request, message=f'Акт сформирован')
+            equipments_list.append(f"{client['equipment_short_name']} (s/n {client['{{ SERIAL_NUM }}']})")
+
+        if len(equipments_list) > 1:
+            msg = f"Акты сформированы для: {', '.join(equipments_list)}."
+        else:
+            msg = f"Акт сформирован для {', '.join(equipments_list)}."
+
+        self.message_user(request, message=msg)
 
 
     def changelist_view(self, request, extra_context=None):

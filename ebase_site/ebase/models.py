@@ -32,8 +32,20 @@ class Client(EbaseModel):
         db_comment='Наименование клиента', help_text='Название учреждения'
     )
     inn = models.CharField(
-        max_length=12, null=True, blank=True, verbose_name='ИНН',
+        max_length=12, null=True, blank=False, verbose_name='ИНН',
         db_comment='ИНН клиента', unique=True
+    )
+    kpp = models.CharField(
+        max_length=12, null=True, blank=True, verbose_name='КПП',
+        db_comment='КПП клиента',
+    )
+    phone = models.CharField(
+        max_length=60, null=True, blank=True, verbose_name='Телефон',
+        db_comment='Телефон клиента'
+    )
+    email = models.EmailField(
+        max_length=50, null=True, blank=True,
+        verbose_name='Email', db_comment='Почта клиента'
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
@@ -67,7 +79,7 @@ class Department(EbaseModel):
     )
     address = models.CharField(
         max_length=200, null=True, blank=True, verbose_name='Адрес',
-        db_comment='Адрес подразделения', help_text='Адрес подразделения / филиала'
+        db_comment='Адрес подразделения', help_text='Адрес подразделения / филиала без указания города'
     )
     client = models.ForeignKey(
         "Client", on_delete=models.SET_NULL, null=True,

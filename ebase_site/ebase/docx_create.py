@@ -1,20 +1,39 @@
 """Создание документом для инженеров - актов"""
 
+import os
 from pathlib import Path
+
+from django.conf import settings
 from docx import Document
 from docx.table import Table
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 
 class CreateServiceAkt:
-    def __init__(self, client: dict, file_path: str, save_file_path: str,
-                 job_content: str, description: str, spare_parts: list):
-        self.akt = Document(file_path)
-        self.CLIENT = client
+    TEMPLATE_PATH = str(Path(settings.MEDIA_ROOT, 'docs', 'service_akt', 'service_akt_MEDSIL.docx'))  # путь к шаблону
+
+    def __init__(self, client: dict, job_content: str,
+                 description: str, spare_parts: list):
+        self.akt = Document(self.TEMPLATE_PATH)
+        self.client = client
         self.description = description
         self.job_content = job_content
         self.spare_parts = spare_parts
-        self.save_file_path = save_file_path
+        self.save_file_path = self.create_save_path()
+
+    def create_save_path(self) -> str:
+        """Провреяет наличие папки для хранения актов определенной модели оборудования"""
+        eq_dir_path = Path(settings.MEDIA_ROOT, 'docs', 'service_akt',
+                           self.client['equipment_short_name'].replace(' ', '_'))
+        file_name = (f"service_akt_MEDSIL_{self.client['{{ SERIAL_NUM }}'].replace(' ', '_')}"
+                     f"{'_' + self.client['{{ DATE }}'] if not self.client['{{ DATE }}'].startswith('___') else ''}"
+                     f".docx")
+        if not os.path.exists(eq_dir_path):
+            os.mkdir(eq_dir_path)
+
+        return str(Path(settings.MEDIA_ROOT, 'docs', 'service_akt',
+                        self.client['equipment_short_name'].replace(' ', '_'),
+                        file_name))
 
     def update_paragraphs(self):
         """Для обновления абзацев. НЕ ИСПОЛЬЗУЕТСЯ"""
@@ -43,7 +62,7 @@ class CreateServiceAkt:
     def main_table(self, table: Table):
         """Обновления даттых в таблице с реквизитами"""
         for n, paragraph in self.cell_paragraph_gen(table):
-            for k, v in self.CLIENT.items():
+            for k, v in self.client.items():
                 if k in paragraph.text:
                     paragraph.text = paragraph.text.replace(k, v)
                     if k == '{{ CLIENT }}':
