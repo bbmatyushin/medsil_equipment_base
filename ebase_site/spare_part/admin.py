@@ -6,6 +6,7 @@ from django.db.models import Sum
 
 from .models import *
 from .forms import *
+from .admin_filters import WhoShipment
 
 
 @admin.register(SparePart)
@@ -120,6 +121,7 @@ class SparePartShipmentAdmin(admin.ModelAdmin):
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-shipment_dt', 'spare_part_count__spare_part__name',)
     list_select_related = True
+    list_filter = (WhoShipment, )
 
     fieldsets = (
         ('Новая отгрузка', {'fields': ('spare_part_count', ('doc_num', 'shipment_dt'), 'count_shipment',)}),
