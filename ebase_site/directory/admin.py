@@ -1,9 +1,10 @@
 from django.contrib import admin
 from .models import *
+from ebase.admin import MainAdmin
 
 
 @admin.register(City)
-class CityAdmin(admin.ModelAdmin):
+class CityAdmin(MainAdmin):
     list_display = ('id', 'name', 'region', 'create_dt')
     list_display_links = ('name',)
     search_fields = ('name', 'region')
@@ -15,7 +16,7 @@ class CityAdmin(admin.ModelAdmin):
 
 
 @admin.register(Country)
-class CountryAdmin(admin.ModelAdmin):
+class CountryAdmin(MainAdmin):
     list_display = ('id', 'name', 'create_dt')
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -27,7 +28,7 @@ class CountryAdmin(admin.ModelAdmin):
 
 
 @admin.register(EquipmentStatus)
-class EquipmentStatusAdmin(admin.ModelAdmin):
+class EquipmentStatusAdmin(MainAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -39,7 +40,7 @@ class EquipmentStatusAdmin(admin.ModelAdmin):
 
 
 @admin.register(Engineer)
-class EngineerAdmin(admin.ModelAdmin):
+class EngineerAdmin(MainAdmin):
     list_display = ('name', 'user')
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -51,7 +52,7 @@ class EngineerAdmin(admin.ModelAdmin):
 
 
 @admin.register(MedDirection)
-class MedDirectionAdmin(admin.ModelAdmin):
+class MedDirectionAdmin(MainAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -63,7 +64,7 @@ class MedDirectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(Position)
-class PositionAdmin(admin.ModelAdmin):
+class PositionAdmin(MainAdmin):
     list_display = ('id', 'name', 'type',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -75,7 +76,7 @@ class PositionAdmin(admin.ModelAdmin):
 
 
 @admin.register(ServiceType)
-class ServiceTypeAdmin(admin.ModelAdmin):
+class ServiceTypeAdmin(MainAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -87,7 +88,7 @@ class ServiceTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(Unit)
-class UnitAdmin(admin.ModelAdmin):
+class UnitAdmin(MainAdmin):
     list_display = ('id', 'short_name', 'full_name', )
     list_display_links = ('short_name',)
     search_fields = ('short_name', 'full_name')

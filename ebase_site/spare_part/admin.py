@@ -3,6 +3,7 @@ from datetime import datetime
 from django.contrib import admin
 from django.utils import timezone
 from django.db.models import Sum
+from ebase.admin import MainAdmin
 
 from .models import *
 from .forms import *
@@ -10,10 +11,10 @@ from .admin_filters import WhoShipment
 
 
 @admin.register(SparePart)
-class SparePartAdmin(admin.ModelAdmin):
+class SparePartAdmin(MainAdmin):
     autocomplete_fields = ('unit',)
     list_display = ('article', 'name', 'amount', 'unit', 'is_expiration', 'equipment_name',)
-    list_per_page = 30
+    list_display_links =  ('article', 'name',)
     search_fields = ('name', 'article', 'equipment__full_name',)
     search_help_text = 'Поиск по названию, артикулу запчасти или по оборудованию'
     ordering = ('name', 'article')
@@ -40,13 +41,12 @@ class SparePartAdmin(admin.ModelAdmin):
 
 
 @admin.register(SparePartCount)
-class SparePartCountAdmin(admin.ModelAdmin):
+class SparePartCountAdmin(MainAdmin):
     form = SparePartCountForm
 
     autocomplete_fields = ('spare_part',)
     list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
     list_filter = ('is_overdue',)
-    list_per_page = 30
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('spare_part__name', '-amount',)
@@ -77,13 +77,12 @@ class SparePartCountAdmin(admin.ModelAdmin):
 
 
 @admin.register(SparePartSupply)
-class SparePartSupplyAdmin(admin.ModelAdmin):
+class SparePartSupplyAdmin(MainAdmin):
     form = SparePartSupplyForm
 
     autocomplete_fields = ('spare_part',)
     date_hierarchy = 'supply_dt'
     list_display = ('spare_part', 'count_part', 'doc_num', 'supply_dt', 'expiration_dt', 'user',)
-    list_per_page = 30
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-supply_dt', 'spare_part__name')
@@ -110,13 +109,13 @@ class SparePartSupplyAdmin(admin.ModelAdmin):
 
 
 @admin.register(SparePartShipment)
-class SparePartShipmentAdmin(admin.ModelAdmin):
+class SparePartShipmentAdmin(MainAdmin):
     form = SparePartShipmentForm
 
     autocomplete_fields = ('spare_part_count',)
     date_hierarchy = 'shipment_dt'
-    list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt', 'doc_num', 'shipment_dt', 'user',)
-    list_per_page = 30
+    list_display = ('spare_part_name', 'count_shipment_part', 'exp_dt',
+                    'doc_num', 'shipment_dt', 'user',)
     search_fields = ('spare_part_count__spare_part__name', 'spare_part_count__spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
     ordering = ('-shipment_dt', 'spare_part_count__spare_part__name',)

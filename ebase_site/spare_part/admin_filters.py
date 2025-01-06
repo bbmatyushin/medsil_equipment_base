@@ -15,7 +15,7 @@ class WhoShipment(admin.SimpleListFilter):
             .annotate(fio=Trim(Concat('first_name', Value(' '), 'last_name'))) \
             .filter(position__name__in=['инженер']) \
             .values_list('username', 'fio')
-        
+
         return list(users)
 
     def queryset(self, request, queryset):

@@ -8,8 +8,12 @@ from .admin_filters import *
 from .docx_create import CreateServiceAkt
 
 
+class MainAdmin(admin.ModelAdmin):
+    list_per_page = 30
+
+
 @admin.register(Client)
-class ClientAdmin(admin.ModelAdmin):
+class ClientAdmin(MainAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'inn')
@@ -27,7 +31,7 @@ class ClientAdmin(admin.ModelAdmin):
 
 
 @admin.register(Department)
-class DepartmentAdmin(admin.ModelAdmin):
+class DepartmentAdmin(MainAdmin):
     list_display = ('name', 'client_name', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'client__name')
     search_help_text = 'Поиск по подразделению или клиенту'
@@ -47,7 +51,7 @@ class DepartmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(DeptContactPers)
-class DeptContactPersAdmin(admin.ModelAdmin):
+class DeptContactPersAdmin(MainAdmin):
     autocomplete_fields = ('department',)
     list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
     list_filter = ('position',)
@@ -88,7 +92,7 @@ class DeptContactPersAdmin(admin.ModelAdmin):
 
 
 @admin.register(Equipment)
-class EquipmentAdmin(admin.ModelAdmin):
+class EquipmentAdmin(MainAdmin):
     autocomplete_fields = ('manufacturer','supplier',)
     list_display = ('full_name', 'short_name', 'med_direction_name',
                     'manufacturer_name', 'supplier_name',)
@@ -144,7 +148,7 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
 
 
 @admin.register(EquipmentAccounting)
-class EquipmentAccountingAdmin(admin.ModelAdmin):
+class EquipmentAccountingAdmin(MainAdmin):
     actions = ('set_is_our_service',)
     date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
     # form = EquipmentAccountingForm
@@ -162,7 +166,6 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
                         'по названию Подразделения клиента (где установлено)')
     ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
                 'equipment', 'serial_number', 'user',)
-    list_per_page = 30
     list_select_related = True
     list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply',)
 #
@@ -232,7 +235,7 @@ class EquipmentAccountingAdmin(admin.ModelAdmin):
 
 
 @admin.register(Manufacturer)
-class ManufacturerAdmin(admin.ModelAdmin):
+class ManufacturerAdmin(MainAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
@@ -281,7 +284,7 @@ class ServicePhotosInline(admin.StackedInline):
 
 
 @admin.register(Service)
-class ServiceAdmin(admin.ModelAdmin):
+class ServiceAdmin(MainAdmin):
     actions = ('create_service_akt',)
     add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
@@ -294,7 +297,6 @@ class ServiceAdmin(admin.ModelAdmin):
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
-    list_per_page = 30
     readonly_fields = ('service_akt_url',)
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
@@ -458,7 +460,7 @@ class ServiceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Supplier)
-class SupplierAdmin(admin.ModelAdmin):
+class SupplierAdmin(MainAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
