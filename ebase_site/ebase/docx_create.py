@@ -22,9 +22,11 @@ class CreateServiceAkt:
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
-        """Провреяет наличие папки для хранения актов определенной модели оборудования"""
-        eq_dir_path = Path(settings.MEDIA_ROOT, 'docs', 'service_akt',
-                           self.client['equipment_short_name'].replace(' ', '_'))
+        """Проверяет наличие папки для хранения актов определенной модели оборудования"""
+        equipment_short_name = self.client['equipment_short_name'] \
+            .replace(' ', '_') \
+            .replace('/', '-')
+        eq_dir_path = Path(settings.MEDIA_ROOT, 'docs', 'service_akt', equipment_short_name)
         file_name = (f"service_akt_MEDSIL_{self.client['{{ SERIAL_NUM }}'].replace(' ', '_')}"
                      f"{'_' + self.client['{{ DATE }}'] if not self.client['{{ DATE }}'].startswith('___') else ''}"
                      f".docx")
@@ -32,8 +34,7 @@ class CreateServiceAkt:
             os.mkdir(eq_dir_path)
 
         return str(Path(settings.MEDIA_ROOT, 'docs', 'service_akt',
-                        self.client['equipment_short_name'].replace(' ', '_'),
-                        file_name))
+                        equipment_short_name, file_name))
 
     def update_paragraphs(self):
         """Для обновления абзацев. НЕ ИСПОЛЬЗУЕТСЯ"""
