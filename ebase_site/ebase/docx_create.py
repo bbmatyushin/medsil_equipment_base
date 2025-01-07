@@ -22,7 +22,8 @@ class CreateServiceAkt:
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
-        """Проверяет наличие папки для хранения актов определенной модели оборудования"""
+        """Проверяет наличие папки для хранения актов определенной модели оборудования и
+        возвращает путь расположения файла"""
         equipment_short_name = self.client['equipment_short_name'] \
             .replace(' ', '_') \
             .replace('/', '-')
