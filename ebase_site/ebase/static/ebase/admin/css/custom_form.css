@@ -1,3 +1,23 @@
+#akt-create-btn {
+    font-size: 0.8125rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--body-bg);
+    box-shadow: 0 -15px 20px -10px rgba(0, 0, 0, 0.15) inset;
+    cursor: pointer;
+    height: 1.5rem;
+    line-height: 1;
+    padding: 4px 8px;
+    margin: 0;
+    color: var(--body-fg);
+}
+
+#akt-create-btn:hover {
+    border: 1px solid black;
+    background: #e4e4e4;
+}
+
+
 #filter-style-eqipment {
     order: 1;
     background: #f8f8f8;

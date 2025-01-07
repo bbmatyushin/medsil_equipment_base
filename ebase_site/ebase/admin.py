@@ -285,7 +285,7 @@ class ServicePhotosInline(admin.StackedInline):
 
 @admin.register(Service)
 class ServiceAdmin(MainAdmin):
-    actions = ('create_service_akt',)
+    actions = ('create_service_akt_by_action',)
     add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
     date_hierarchy = 'beg_dt'
@@ -313,11 +313,11 @@ class ServiceAdmin(MainAdmin):
         (
             'Описание работ', {
                 'classes': ('collapse',),
-                'fields': ('reason', 'description', 'job_content',
-                           'service_akt_url'),
+                'fields': ('reason', 'description', 'job_content',),
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
+        ('Документы по ремонту', {'fields': ('service_akt_url',),})
     )
 
     @admin.display(description='Содержание работ')
@@ -370,40 +370,21 @@ class ServiceAdmin(MainAdmin):
         if obj.service_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.service_akt)
             akt_name = obj.service_akt.split('/')[-1]
-            return mark_safe(f"<a href='{url}'>{akt_name}</a>")
-        return f"--"
+            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
+                             f'<input type="button" id="akt-create-btn" value="Обновить">')
+        if obj.pk:
+            return mark_safe('<span class="akt-span">Акт не создан</span>'
+                             '<input type="button" id="akt-create-btn" value="Создать">')
+        # При создании новой записи направит сюда
+        return mark_safe('<span class="akt-span">-------</span>')
 
     @admin.action(description='Создать - Акт о проведении работ')
-    def create_service_akt(self, request, queryset) -> None:
+    def create_service_akt_by_action(self, request, queryset) -> None:
         """Формирование актов о проделаной работе для выбранных случаев"""
         equipments_list: list = []
         for qs in queryset:
-            dept = qs.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
-            client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
-            address = f"{client_city} {dept.client.address if dept.client.address else ''}"
-            client = {
-                '{{ CLIENT }}': dept.client.name,
-                '{{ ADDRESS }}': address,
-                '{{ PHONE }}': dept.client.phone if dept.client.phone else '',
-                '{{ EMAIL }}': dept.client.email if dept.client.email else '',
-                '{{ INN }}': f"ИНН {dept.client.inn if dept.client.inn else ''}",
-                '{{ KPP }}': f"КПП {dept.client.kpp}" if dept.client.kpp else 'КПП',
-                '{{ EQUIPMENT }}': qs.equipment_accounting.equipment.full_name
-                    if qs.equipment_accounting.equipment.full_name else '',
-                '{{ SERIAL_NUM }}': qs.equipment_accounting.serial_number,
-                '{{ DATE }}': qs.end_dt.strftime('%d.%m.%Y') if qs.end_dt else '________________',
-                'equipment_short_name': qs.equipment_accounting.equipment.short_name
-                    if qs.equipment_accounting.equipment.short_name else qs.equipment_accounting.equipment.full_name,
-            }
-            description = qs.description if qs.description else ''
-            job_content = qs.job_content if qs.job_content else ''
-            spare_parts = list(qs.spare_part.values_list('name', 'article'))
-            create_akt = CreateServiceAkt(client, job_content, description, spare_parts)
-            create_akt.update_tables()
-            qs.service_akt = create_akt.save_file_path
-            qs.save()
-            equipments_list.append(f"{client['equipment_short_name']} (s/n {client['{{ SERIAL_NUM }}']})")
-
+            create_akt = self.create_service_atk(obj=qs)
+            equipments_list.append(f"{create_akt[0]} (s/n {create_akt[1]})")
         if len(equipments_list) > 1:
             msg = f"Акты сформированы для: {', '.join(equipments_list)}."
         else:
@@ -411,6 +392,47 @@ class ServiceAdmin(MainAdmin):
 
         self.message_user(request, message=msg)
 
+    @staticmethod
+    def create_service_atk(obj: Service):
+        """Создание акта для преданного объекта из модели Service"""
+        dept = obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
+        client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
+        address = f"{client_city} {dept.client.address if dept.client.address else ''}"
+        client = {
+            '{{ CLIENT }}': dept.client.name,
+            '{{ ADDRESS }}': address,
+            '{{ PHONE }}': dept.client.phone if dept.client.phone else '',
+            '{{ EMAIL }}': dept.client.email if dept.client.email else '',
+            '{{ INN }}': f"ИНН {dept.client.inn if dept.client.inn else ''}",
+            '{{ KPP }}': f"КПП {dept.client.kpp}" if dept.client.kpp else 'КПП',
+            '{{ EQUIPMENT }}': obj.equipment_accounting.equipment.full_name
+            if obj.equipment_accounting.equipment.full_name else '',
+            '{{ SERIAL_NUM }}': obj.equipment_accounting.serial_number,
+            '{{ DATE }}': obj.end_dt.strftime('%d.%m.%Y') if obj.end_dt else '________________',
+            'equipment_short_name': obj.equipment_accounting.equipment.short_name
+            if obj.equipment_accounting.equipment.short_name else obj.equipment_accounting.equipment.full_name,
+        }
+        description = obj.description if obj.description else ''
+        job_content = obj.job_content if obj.job_content else ''
+        spare_parts = list(obj.spare_part.values_list('name', 'article'))
+        create_akt = CreateServiceAkt(client, job_content, description, spare_parts)
+        create_akt.update_tables()
+        obj.service_akt = create_akt.save_file_path
+        obj.save()
+        
+        return client['equipment_short_name'], client['{{ SERIAL_NUM }}']
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        """В карточке по ремонту есть кнопка по созданию акта. Чтобы отследить её
+        нажатие, через JS в GET передается параметр akt"""
+        if re.search(r'(akt=create)', request.META['QUERY_STRING']):
+            if obj:
+                create_akt = self.create_service_atk(obj)
+                self.message_user(request,
+                                  message=f"Акт сформирован для "
+                                          f"{create_akt[0]} (s/n {create_akt[1]})")
+        return super().get_form(request, obj=None, change=False, **kwargs)
+        
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
