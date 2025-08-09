@@ -2,6 +2,22 @@ from django import forms
 from .models import *
 
 
+class SparePartForm(forms.ModelForm):
+    class Meta:
+        model = SparePart
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if SparePart.objects.filter(article=cleaned_data['article']).exists():
+            self.add_error('article',
+                           f'Запчасть с артикулом "{cleaned_data["article"]}" уже существует')
+        if not cleaned_data.get("equipment"):
+            self.add_error('equipment',
+                           error="Необходимо выбрать оборудование, для данной запчасти")
+        return cleaned_data
+
+
 class SparePartCountForm(forms.ModelForm):
     class Meta:
         model = SparePartCount

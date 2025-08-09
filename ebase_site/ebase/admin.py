@@ -1,4 +1,5 @@
 import re
+import logging
 from django.utils.safestring import mark_safe
 
 from spare_part.models import SparePart
@@ -6,6 +7,8 @@ from directory.models import Position
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt
+
+logger = logging.getLogger('ebase')
 
 
 class MainAdmin(admin.ModelAdmin):
@@ -171,27 +174,37 @@ class EquipmentAccountingAdmin(MainAdmin):
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
-                                               ('is_our_supply', 'is_our_service',),)}),
+                                                     ('is_our_supply', 'is_our_service',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
 
     def get_instance(self, obj):
-        instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        try:
+            instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        except Exception as e:  #TODO: заглушка, чтобы не падала с ошибкой. Исправить.
+            logger.warning("get_instance WARNING:", exc_info=e)
+            instance = list(obj.equipment_acc_department_equipment_accounting.filter(equipment_accounting=obj.pk))
         return instance
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
         instance = self.get_instance(obj)
+        if isinstance(instance, list):
+            instance = instance[0]
         return instance.department
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
         instance = self.get_instance(obj)
+        if isinstance(instance, list):
+            instance = instance[0]
         return instance.engineer
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
         instance = self.get_instance(obj)
+        if isinstance(instance, list):
+            instance = instance[0]
         return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '-'
 
     @admin.display(description='Добавил')

@@ -12,6 +12,8 @@ from .admin_filters import WhoShipment
 
 @admin.register(SparePart)
 class SparePartAdmin(MainAdmin):
+    form = SparePartForm
+
     autocomplete_fields = ('unit',)
     list_display = ('article', 'name', 'amount', 'unit', 'is_expiration', 'equipment_name',)
     list_display_links =  ('article', 'name',)
