@@ -211,7 +211,7 @@ class EquipmentAccountingAdmin(MainAdmin):
     def user_name(self, obj):
         return obj.user.username if obj.user else '-'
 
-    @admin.action(description='Установить - Обслужен нами')
+    @admin.action(description='Установить - Проведено ТО')
     def set_is_our_service(self, request, queryset):
         count_set = queryset.update(is_our_service=True)
         self.message_user(request, message=f'Успешно изменено {count_set} записей')
