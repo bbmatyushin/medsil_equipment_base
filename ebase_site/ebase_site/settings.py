@@ -176,9 +176,19 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        "file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "when": "D",
+            "interval": 1,
+            "backupCount": 30,
+            "filename": f"{Path(BASE_DIR, 'logs', 'ebase_err.log')}",
+            "formatter": "verbose",
+            "level": "ERROR",
+            "encoding": "utf-8",
+        },
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": ["console", "file"],
         "level": "INFO",
     },
 }
