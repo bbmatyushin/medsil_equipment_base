@@ -246,7 +246,7 @@ class EquipmentAccounting(EbaseModel):
         db_comment='Серийный номер оборудования', help_text='Серийный номер оборудования'
     )
     is_our_service = models.BooleanField(
-        null=False, blank=False, default=False, verbose_name='Обслужан нами',
+        null=False, blank=False, default=False, verbose_name='Проведено ТО',
         db_comment='True, если оборудование обслуживалось нами',
     )
     is_our_supply = models.BooleanField(
