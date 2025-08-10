@@ -2,6 +2,7 @@ from datetime import datetime
 
 from django.contrib import admin
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.db.models import Sum
 from ebase.admin import MainAdmin
 
@@ -10,13 +11,39 @@ from .forms import *
 from .admin_filters import WhoShipment
 
 
+class SparePartPhotoInline(admin.StackedInline):
+    model = SparePartPhoto
+    # classes = ['wide',]
+    fk_name = 'spare_part'
+    extra = 1
+    readonly_fields = ('s_part_photo',)
+    verbose_name = 'ФОТО ЗАПЧАСТИ'
+    verbose_name_plural = 'ФОТО ЗАПЧАСТИ'
+
+    fieldsets = (
+        ('', {
+            # 'classes': ('collapse',),
+            'fields': (('photo', 's_part_photo'),)
+        }),
+    )
+
+    @admin.display(description='Изображение')
+    def s_part_photo(self, obj):
+        if obj.photo:
+            return mark_safe(f"<a href='{obj.photo.url}' target='_blank'>"
+                             f"<img src='{obj.photo.url}' width=50>"
+                             f"</a>")
+        return f"Нет изображения"
+
+
 @admin.register(SparePart)
 class SparePartAdmin(MainAdmin):
     form = SparePartForm
 
     autocomplete_fields = ('unit',)
-    list_display = ('article', 'name', 'amount', 'unit', 'is_expiration', 'equipment_name',)
-    list_display_links =  ('article', 'name',)
+    inlines = (SparePartPhotoInline, )
+    list_display = ('article', 'name', 'photo', 'amount', 'unit', 'is_expiration', 'equipment_name',)
+    list_display_links = ('article', 'name',)
     search_fields = ('name', 'article', 'equipment__full_name',)
     search_help_text = 'Поиск по названию, артикулу запчасти или по оборудованию'
     ordering = ('name', 'article')
@@ -40,6 +67,10 @@ class SparePartAdmin(MainAdmin):
         amount = obj.spare_part_count_spare_part.aggregate(Sum('amount'))['amount__sum'] or 0
         amount = amount if amount % 1 else int(amount)
         return amount
+
+    @admin.display(description='Фото', boolean=True)
+    def photo(self, obj):
+        return True if obj.spare_part_photo.values() else False
 
 
 @admin.register(SparePartCount)

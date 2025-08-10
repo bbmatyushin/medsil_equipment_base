@@ -216,3 +216,37 @@ class SparePartSupply(SparePartAbs):
 
     def __repr__(self):
         return f"<SparePartSupply: {self.spare_part=!r}, {self.count_supply=!r}>"
+
+class SparePartPhoto(SparePartAbs):
+    """Набор фото связанных с запчастями"""
+    spare_part = models.ForeignKey(
+        'SparePart', on_delete=models.CASCADE, null=False, blank=False,
+        related_name="spare_part_photo", verbose_name='Запчасть',
+        db_comment='ID запчасти',
+    )
+    photo = models.ImageField(upload_to='spare_part/%Y/', blank=True, null=True,
+                              verbose_name='Фото запчасти',
+                              db_comment='Ссылка на поле для фото связанных с запчастей')
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="spare_part_photo_user", verbose_name='ID Пользователя',
+        db_comment='ID Пользователя (сотрудника)',
+        help_text='Пользователь из таблицы "Пользователи"'
+    )
+    create_dt = models.DateTimeField(auto_now_add=True, verbose_name='Когда было добавлено фото')
+
+    class Meta:
+        db_table = f'{company}."spare_part_photo"'
+        db_table_comment = 'Фотографии запчастей. \n\n-- BMatyushin'
+        verbose_name = 'Фото запчасти'
+        verbose_name_plural = 'Фото запчастей'
+
+    def delete(self, using=None, keep_parents=False):
+        self.photo.delete(save=False)
+        super().delete(using=None, keep_parents=False)
+
+    def __str__(self):
+        return f"{self.spare_part} - {self.photo}"
+
+    def __repr__(self):
+        return f'<SparePartPhoto {self.id=!r}, {self.spare_part=!r}>'
