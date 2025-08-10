@@ -263,6 +263,9 @@ class EquipmentAccounting(EbaseModel):
                                   help_text='Ссылка для связи с сервисом YouJail',
                                   db_comment='Ссылка для связи с сервисом YouJail'
     )
+    comment = models.TextField(null=True, blank=True, verbose_name="Комментарий",
+                               db_comment='Комментарий'
+    )
 
     class Meta:
         db_table = f'{company}."equipment_accounting"'

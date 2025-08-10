@@ -152,9 +152,10 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
 
 @admin.register(EquipmentAccounting)
 class EquipmentAccountingAdmin(MainAdmin):
+    form = EquipmentAccountingForm
+
     actions = ('set_is_our_service',)
     date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
-    # form = EquipmentAccountingForm
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
     # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
@@ -174,7 +175,8 @@ class EquipmentAccountingAdmin(MainAdmin):
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
-                                                     ('is_our_supply', 'is_our_service',),)}),
+                                                     ('is_our_supply', 'is_our_service',),
+                                                     ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
 
