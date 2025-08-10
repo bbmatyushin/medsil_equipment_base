@@ -11,5 +11,10 @@ class EquipmentAccountingForm(forms.ModelForm):
         model = EquipmentAccounting
         fields = '__all__'
         widgets = {
-            'equipment': forms.TextInput(attrs={'style': 'width: 100px;'}),
+            'comment': forms.Textarea(attrs={
+                'rows': 4,  # уменьшаем высоту до 4 строк
+                "cols": 60,
+                'style': 'resize: both; max-width: 600px; max-height: 250px;',  # разрешаем изменять только по высоте
+                'placeholder': "Введите комменарий для данного оборудования...",
+            }),
         }
