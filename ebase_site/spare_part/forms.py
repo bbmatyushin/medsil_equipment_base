@@ -12,11 +12,15 @@ class SparePartForm(forms.ModelForm):
         if not cleaned_data.get("equipment"):
             self.add_error('equipment',
                            error="Необходимо выбрать оборудование, для данной запчасти")
-        # проверка, что создается новая запись, а не обновляется старая и существует ли уже такой артикул
-        elif self.instance.pk is None and SparePart.objects.filter(article=cleaned_data['article']).exists():
-            self.add_error('article',
-                           f'Запчасть с артикулом "{cleaned_data["article"]}" уже существует')
-        #TODO: нужна проверка, что запчасть с таким артикулом для одного из оборудования существует
+        # проверка, что существует уже запчасть с таким артикулом
+        else:
+            for eq in cleaned_data["equipment"]:
+                # проверка что запчасть с данным артикулом уже есть у оборудования из списка
+                if SparePart.objects.filter(equipment__full_name=eq.full_name, article=cleaned_data['article']) \
+                        .exists():
+                    self.add_error('article',
+                                   f'Запчасть с артикулом "{cleaned_data["article"]}" для '
+                                   f'"{eq.full_name}" уже существует')
         return cleaned_data
 
 
