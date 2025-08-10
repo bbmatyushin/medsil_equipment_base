@@ -16,8 +16,9 @@ class SparePartForm(forms.ModelForm):
         else:
             for eq in cleaned_data["equipment"]:
                 # проверка что запчасть с данным артикулом уже есть у оборудования из списка
+                # и что поле с артикулом было изменено
                 if SparePart.objects.filter(equipment__full_name=eq.full_name, article=cleaned_data['article']) \
-                        .exists():
+                        .exists() and "article" in self.changed_data:
                     self.add_error('article',
                                    f'Запчасть с артикулом "{cleaned_data["article"]}" для '
                                    f'"{eq.full_name}" уже существует')
