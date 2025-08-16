@@ -1,8 +1,9 @@
 import re
 import logging
+import json
 from django.utils.safestring import mark_safe
 
-from spare_part.models import SparePart
+from spare_part.models import SparePart, SparePartCount
 from directory.models import Position
 from .forms import *
 from .admin_filters import *
@@ -322,7 +323,7 @@ class ServiceAdmin(MainAdmin):
     fieldsets = (
         (
             'Данные на оборудование', {'fields':
-                                           ('equipment_accounting', 'service_type', 'spare_part',)
+                                           ('equipment_accounting', 'service_type', 'spare_part', )
                                        }
         ),
         (
@@ -447,7 +448,6 @@ class ServiceAdmin(MainAdmin):
                                   message=f"Акт сформирован для "
                                           f"{create_akt[0]} (s/n {create_akt[1]})")
         return super().get_form(request, obj=None, change=False, **kwargs)
-        
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
@@ -483,17 +483,47 @@ class ServiceAdmin(MainAdmin):
                 kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
-    # def get_inline_instances(self, request, obj=None):
-        # TODO: В зависимости от устройства (компьютер или мобильный) возвращать
-        # TODO: class ServicePhotosInline(admin.TabularInline) - для компьютеров
-        # TODO: class ServicePhotosInline(admin.StackedInline) - для мобильных
-
     def save_model(self, request, obj, form, change):
         if not change:
             obj.user = request.user
         elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
+
+        spare_parts_data = []
+
+        # Извлекаем данные из POST параметров
+        for key, value in request.POST.items():
+            if key.startswith('spare_part_quantities['):
+                try:
+                    data = json.loads(value)
+                    spare_parts_data.append(data)
+                except json.JSONDecodeError:
+                    continue
+
+        # Обновляем количества запчастей
+        for spare_part_info in spare_parts_data:
+            spare_part_id = spare_part_info['id']
+            new_quantity = spare_part_info['quantity']
+            original_quantity = spare_part_info['originalQuantity']
+
+            try:
+                spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
+
+                # Рассчитываем изменение
+                quantity_change = new_quantity - original_quantity
+
+                # Обновляем доступное количество
+                spare_part_count.amount -= quantity_change
+                spare_part_count.amount = max(0, spare_part_count.amount)
+                spare_part_count.save()
+
+            except SparePartCount.DoesNotExist:
+                # Если записи не существует, создаем её
+                SparePartCount.objects.create(
+                    spare_part_id=spare_part_id,
+                    amount=max(0, -new_quantity)
+                )
 
 
 @admin.register(Supplier)

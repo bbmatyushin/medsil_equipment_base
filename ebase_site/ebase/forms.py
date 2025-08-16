@@ -3,6 +3,7 @@ from django.forms.widgets import URLInput
 from django.db.models import Value, CharField, Q
 from django.db.models.functions import Concat
 from .models import *
+from spare_part.models import SparePart
 from directory.models import MedDirection
 
 
@@ -18,3 +19,4 @@ class EquipmentAccountingForm(forms.ModelForm):
                 'placeholder': "Введите комменарий для данного оборудования...",
             }),
         }
+

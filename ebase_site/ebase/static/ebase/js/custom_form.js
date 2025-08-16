@@ -15,4 +15,4 @@ aktButton.onclick = createAkt;
 if (url.searchParams.get('akt')) {
 	url.searchParams.delete('akt');	
 	window.history.replaceState({}, document.title, url.toString());
-} 
+}
