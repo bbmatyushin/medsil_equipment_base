@@ -570,42 +570,42 @@ class ServiceAdmin(MainAdmin):
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
-        spare_parts_data = []
-
-        # Извлекаем данные из POST параметров
-        for key, value in request.POST.items():
-            if key.startswith('spare_part_quantities['):
-                try:
-                    data = json.loads(value)
-                    spare_parts_data.append(data)
-                except json.JSONDecodeError:
-                    continue
-
-        #TODO: отгружать с худшим сроком
-
-        # Обновляем количества запчастей
-        for spare_part_info in spare_parts_data:
-            spare_part_id = spare_part_info['id']
-            new_quantity = spare_part_info['quantity']
-            original_quantity = spare_part_info['originalQuantity']
-
-            try:
-                spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
-
-                # Рассчитываем изменение
-                quantity_change = new_quantity - original_quantity
-
-                # Обновляем доступное количество
-                spare_part_count.amount -= quantity_change
-                spare_part_count.amount = max(0, spare_part_count.amount)
-                spare_part_count.save()
-
-            except SparePartCount.DoesNotExist:
-                # Если записи не существует, создаем её
-                SparePartCount.objects.create(
-                    spare_part_id=spare_part_id,
-                    amount=max(0, -new_quantity)
-                )
+        # spare_parts_data = []
+        #
+        # # Извлекаем данные из POST параметров
+        # for key, value in request.POST.items():
+        #     if key.startswith('spare_part_quantities['):
+        #         try:
+        #             data = json.loads(value)
+        #             spare_parts_data.append(data)
+        #         except json.JSONDecodeError:
+        #             continue
+        #
+        # #TODO: отгружать с худшим сроком
+        #
+        # # Обновляем количества запчастей
+        # for spare_part_info in spare_parts_data:
+        #     spare_part_id = spare_part_info['id']
+        #     new_quantity = spare_part_info['quantity']
+        #     original_quantity = spare_part_info['originalQuantity']
+        #
+        #     try:
+        #         spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
+        #
+        #         # Рассчитываем изменение
+        #         quantity_change = new_quantity - original_quantity
+        #
+        #         # Обновляем доступное количество
+        #         spare_part_count.amount -= quantity_change
+        #         spare_part_count.amount = max(0, spare_part_count.amount)
+        #         spare_part_count.save()
+        #
+        #     except SparePartCount.DoesNotExist:
+        #         # Если записи не существует, создаем её
+        #         SparePartCount.objects.create(
+        #             spare_part_id=spare_part_id,
+        #             amount=max(0, -new_quantity)
+        #         )
 
 
 @admin.register(Supplier)

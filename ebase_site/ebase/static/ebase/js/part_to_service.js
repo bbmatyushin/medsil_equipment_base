@@ -375,7 +375,7 @@ class SparePartsManager {
         console.log(`Using fallback data for: ${sparePartId}`);
         return {
             name: `Запчасть c ID: ${sparePartId} не найдена`,
-            quantity: Math.floor(Math.random() * 50) + 1,
+            quantity: 0,  // Math.floor(Math.random() * 50) + 1,
             id: sparePartId
         };
     }
