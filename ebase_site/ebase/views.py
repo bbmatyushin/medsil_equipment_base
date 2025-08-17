@@ -1,13 +1,17 @@
 import logging
+from datetime import datetime
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from django.db.models import Sum
+from django.db.models import Sum, QuerySet
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse_lazy
 from django.views.generic.base import RedirectView
 
+from typing import Optional
+
+from .models import Service
 from spare_part.models import SparePartCount, SparePart
 
 
@@ -24,20 +28,36 @@ class IndexRedirectView(RedirectView):
     url = 'admin/'
 
 
+def get_service_part_count(spare_part_count_info: Optional[dict], part: dict) -> int:
+    """Получаем количество запчестей используемых в ремонте
+    для определенного срока годности"""
+    if spare_part_count_info:
+        for info in spare_part_count_info:
+            ext_dt = datetime.date(datetime.strptime(info["expiration_dt"], "%Y-%m-%d")) \
+                if info["expiration_dt"] else None
+            if ext_dt == part["expiration_dt"]:
+                return info["service_part_count"]
+    return 0
+
+
 @staff_member_required
-def get_spare_part_quantity(request, spare_part_id):
+def get_spare_part_quantity(request, service_id,  spare_part_id):
     """
     API endpoint для получения доступного количества запчасти
     Для страницы admin/ebase/service/<spare_part_id>/change/, на которой
     динамически, с помощью JS, формируется блок "Выбранные запчасти" > part_to_service.js
     """
-    #TODO: учесть только непросроченные запчасти
     try:
         part = SparePart.objects.get(pk=spare_part_id)
+        service = Service.objects.get(pk=service_id)
+
+        # информация о том склолько уже было использованна данной запчасти в ремонте
+        spare_part_count_info = service.spare_part_count.get(str(spare_part_id))
 
         part_count = SparePartCount.objects.annotate(total_amount=Sum('amount')) \
             .filter(spare_part=part) \
-            .values('total_amount', 'expiration_dt')
+            .values('total_amount', 'expiration_dt') \
+            .order_by("expiration_dt")
 
         data = [
             {
@@ -45,35 +65,12 @@ def get_spare_part_quantity(request, spare_part_id):
                         (f' годен до: {obj.get("expiration_dt").strftime("%d.%m.%Y")}г.' if obj.get("expiration_dt") else ""),
                 "quantity": obj["total_amount"] if obj.get("total_amount") else 0,
                 "id": spare_part_id,
-                "expiration_dt": obj["expiration_dt"] if obj.get("expiration_dt") else None
+                "expiration_dt": obj["expiration_dt"] if obj.get("expiration_dt") else None,
+                "service_part_count": get_service_part_count(spare_part_count_info, obj),
             } for obj in part_count
         ]
 
-        logger.info(data)
-
-        # return JsonResponse({"results": data})
-        return JsonResponse({**data[0]})
-
-        # part_info = ''
-        # if part.is_expiration:  # имеет срок годности
-        #     part_count = SparePartCount.objects.annotate(total_amount=Sum('amount')) \
-        #         .filter(spare_part=part) \
-        #         .values('total_amount', 'expiration_dt') \
-        #         .order_by('expiration_dt')
-        #
-        #     part_info = ", ".join([f"{p['expiration_dt']} - {int(p['total_amount'])} {part.unit}" for p in part_count])
-        #
-        # spare_part_count = SparePartCount.objects.annotate(total_amount=Sum('amount')) \
-        #     .filter(spare_part=part).values('total_amount')
-        #
-        # spare_part_count = int(sum(s['total_amount'] for s in spare_part_count))
-        #
-        # return JsonResponse({
-        #     'name': f'{part.name}{f" (арт. {part.article})" if part.article else ""}{f" (сроки: {part_info})" if part_info else ""}',
-        #     # 'quantity': spare_part_count[0].get('total_amount') if spare_part_count else 0,
-        #     'quantity': spare_part_count if spare_part_count else 0,
-        #     'id': spare_part_id
-        # })
+        return JsonResponse({"results": data})
     except Exception as e:
         return JsonResponse({
             "error": str(e)
