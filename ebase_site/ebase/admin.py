@@ -435,17 +435,6 @@ class ServiceAdmin(MainAdmin):
 
     @admin.display(description='Подразделение')
     def dept_name(self, obj):
-        # dept_id_list = obj.equipment_accounting.equipment_acc_department_equipment_accounting \
-        #     .prefetch_related(Prefetch(
-        #                           'equipment_accounting__equipment_acc_department_equipment_accounting__department',
-        #                           queryset=Department.objects.all()
-        #                       )) \
-        #     .filter(is_active=True)\
-        #     .values_list('department', flat=True)
-        # dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
-        # return "; ".join(dept) if dept else '-'
-        # Используем предзагруженные данные из get_queryset
-
         departments = [
             acc_dept.department.name
             for acc_dept in obj.equipment_accounting.equipment_acc_department_equipment_accounting.all()
@@ -568,44 +557,71 @@ class ServiceAdmin(MainAdmin):
             obj.user = request.user
         elif not obj.pk:
             obj.user = request.user
+
+        spare_parts_data = []
+        spare_part_count_data = []  # для хранения сколько использовалось запчастей в ремонет в моедли Service
+
+        # Извлекаем данные из POST параметров
+        for key, value in request.POST.items():
+            if key.startswith('spare_part_quantities['):
+                try:
+                    data = json.loads(value)
+                    spare_parts_data.append(data)
+                except json.JSONDecodeError:
+                    continue
+            else:
+                obj.spare_part_count = {}
+
+        # Обновляем количества запчастей
+        for spare_part_info in spare_parts_data:
+            spare_part_id = spare_part_info['id']
+            new_quantity = spare_part_info['quantity']
+            original_quantity = spare_part_info['originalQuantity']
+            expiration_dt = spare_part_info['expiration_dt']
+
+            spare_part_count_data.append({"expiration_dt": expiration_dt, "service_part_count": new_quantity})
+            obj.spare_part_count[spare_part_id] = spare_part_count_data
+
+            #TODO: включить, если нужно обновлять общее количество в модели SparePartCount
+            # try:
+            #     spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
+            #
+            #     # Рассчитываем изменение
+            #     quantity_change = new_quantity - original_quantity
+            #
+            #     # Обновляем доступное количество
+            #     spare_part_count.amount -= quantity_change
+            #     spare_part_count.amount = max(0, spare_part_count.amount)
+            #     spare_part_count.save()
+            #
+            # except SparePartCount.DoesNotExist:
+            #     # Если записи не существует, создаем её
+            #     SparePartCount.objects.create(
+            #         spare_part_id=spare_part_id,
+            #         amount=max(0, -new_quantity)
+            #     )
+
         super().save_model(request, obj, form, change)
 
-        # spare_parts_data = []
+        #TODO: включить, если нужно учитывать количество запчастей из SparePartCount
+        # def delete_model(self, request, obj):
+        #     """
+        #     Переопределяем удаление для возврата запчастей
+        #     """
+        #     # Перед удалением возвращаем запчасти в наличие
+        #     if hasattr(obj, 'spare_part') and obj.spare_part.all().exists():
+        #         for spare_part in obj.spare_part.all():
+        #             try:
+        #                 spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part.id)
+        #                 # Здесь нужно знать, сколько запчастей использовалось в данной записи
+        #                 # Это значение должно храниться в связанной модели
+        #                 used_quantity = self.get_used_quantity(obj, spare_part.id)
+        #                 spare_part_count.available_quantity += used_quantity
+        #                 spare_part_count.save()
+        #             except SparePartCount.DoesNotExist:
+        #                 pass
         #
-        # # Извлекаем данные из POST параметров
-        # for key, value in request.POST.items():
-        #     if key.startswith('spare_part_quantities['):
-        #         try:
-        #             data = json.loads(value)
-        #             spare_parts_data.append(data)
-        #         except json.JSONDecodeError:
-        #             continue
-        #
-        # #TODO: отгружать с худшим сроком
-        #
-        # # Обновляем количества запчастей
-        # for spare_part_info in spare_parts_data:
-        #     spare_part_id = spare_part_info['id']
-        #     new_quantity = spare_part_info['quantity']
-        #     original_quantity = spare_part_info['originalQuantity']
-        #
-        #     try:
-        #         spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
-        #
-        #         # Рассчитываем изменение
-        #         quantity_change = new_quantity - original_quantity
-        #
-        #         # Обновляем доступное количество
-        #         spare_part_count.amount -= quantity_change
-        #         spare_part_count.amount = max(0, spare_part_count.amount)
-        #         spare_part_count.save()
-        #
-        #     except SparePartCount.DoesNotExist:
-        #         # Если записи не существует, создаем её
-        #         SparePartCount.objects.create(
-        #             spare_part_id=spare_part_id,
-        #             amount=max(0, -new_quantity)
-        #         )
+        #     super().delete_model(request, obj)
 
 
 @admin.register(Supplier)

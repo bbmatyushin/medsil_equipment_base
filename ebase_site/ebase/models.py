@@ -465,6 +465,11 @@ class Service(EbaseModel):
         verbose_name='Запчасти',
         help_text='Запчасти, которые используются в ремонте. ', blank=True,
     )
+    spare_part_count = models.JSONField(
+        default=dict, blank=True, editable=False,
+        db_comment='Для хранения сколько и каких запчестей использовалось в ремонте. '
+                   'Формат - {spare_part_id: {expiration_dt: date, service_part_count: count}}'
+    )
     service_akt = models.CharField(
         max_length=2056, null=True, blank=True, verbose_name='Акт',
         db_comment='Акт о проведении работ', help_text='Акт о проведении работ',
