@@ -2,6 +2,7 @@ import re
 import logging
 import json
 from django.utils.safestring import mark_safe
+from django.db.models import Prefetch
 
 from spare_part.models import SparePart, SparePartCount
 from directory.models import Position
@@ -13,7 +14,7 @@ logger = logging.getLogger('ebase')
 
 
 class MainAdmin(admin.ModelAdmin):
-    list_per_page = 30
+    list_per_page = 20
 
 
 @admin.register(Client)
@@ -28,6 +29,9 @@ class ClientAdmin(MainAdmin):
         ('Клиент', {'fields': ('name',)}),
         ('Реквизиты', {'fields': (('inn', 'kpp',), ('phone', 'email',), ('city', 'address',))})
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('city')
 
     @admin.display(description='Город')
     def city_name(self, obj):
@@ -44,6 +48,9 @@ class DepartmentAdmin(MainAdmin):
     fieldsets = (
         ('Новое подразделение', {'fields': ('name', 'client', 'address', 'city')}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('client', 'city')
 
     @admin.display(description='Клиент')
     def client_name(self, obj):
@@ -70,6 +77,9 @@ class DeptContactPersAdmin(MainAdmin):
                        'email', 'comment')
         }),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('department', 'position')
 
     # Переопределяет метод для выбора должностей. Будут видны только должности типа "Клиент"
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -109,6 +119,11 @@ class EquipmentAdmin(MainAdmin):
         ('Новое оборудование', {'fields': ('full_name', 'short_name', 'med_direction')}),
         ('Производитель и поставщик', {'fields': ('manufacturer', 'supplier',)}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'med_direction', 'manufacturer', 'supplier'
+        ).prefetch_related('spare_part')
 
     @admin.display(description='Направление')
     def med_direction_name(self, obj):
@@ -181,13 +196,45 @@ class EquipmentAccountingAdmin(MainAdmin):
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
 
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        # Проверяем, что у сотрудника установлена должность менеджер
+        user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
+        if user_position:
+            # Для менеджреров не отображаем оборудование посталенное не нами
+            queryset = queryset.filter(is_our_supply__exact=1)
+
+        queryset = queryset.select_related(
+            'equipment',
+            'equipment_status',
+            'user'
+        ).prefetch_related(
+            Prefetch(
+                'equipment_acc_department_equipment_accounting',
+                queryset=EquipmentAccDepartment.objects.select_related(
+                    'department',
+                    'engineer'
+                )
+            ),
+            "service_equipment_accounting"
+        )
+
+        return queryset
+
     def get_instance(self, obj):
+        # try:
+        #     instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
+        # except Exception as e:  #TODO: заглушка, чтобы не падала с ошибкой. Исправить.
+        #     logger.warning("get_instance WARNING:", exc_info=e)
+        #     instance = list(obj.equipment_acc_department_equipment_accounting.filter(equipment_accounting=obj.pk))
+        # return instance
+
+        # Используем уже предзагруженные данные из prefetch_related -- Claude
         try:
-            instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
-        except Exception as e:  #TODO: заглушка, чтобы не падала с ошибкой. Исправить.
-            logger.warning("get_instance WARNING:", exc_info=e)
-            instance = list(obj.equipment_acc_department_equipment_accounting.filter(equipment_accounting=obj.pk))
-        return instance
+            return obj.equipment_acc_department_equipment_accounting.all()[0]
+        except (IndexError, AttributeError):
+            logger.warning(f"get_instance WARNING: No department found for equipment_accounting {obj.pk}")
+            return None
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
@@ -233,15 +280,6 @@ class EquipmentAccountingAdmin(MainAdmin):
                 kwargs["queryset"] = Equipment.objects.filter(med_direction__name=condition)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        # Проверяем, что у сотрудника установлена должность менеджер
-        user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
-        if user_position:
-            # Для менеджреров не отображаем оборудование посталенное не нами
-            queryset = queryset.filter(is_our_supply__exact=1)
-        return queryset
-
     def get_list_filter(self, request):
         list_filter = super().get_list_filter(request)
         user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
@@ -264,6 +302,9 @@ class ManufacturerAdmin(MainAdmin):
         ('Адрес', {'fields': ('country', 'city', 'address')}),
         ('Контакты производителя', {'fields': ('contact_person', 'contact_phone', 'email')}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('city', 'country')
 
     @admin.display(description='Город')
     def city_name(self, obj):
@@ -289,6 +330,9 @@ class ServicePhotosInline(admin.StackedInline):
             'fields': (('photo', 'eq_service_photo'),)
         }),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("service", "user")
 
     @admin.display(description='Изображение')
     def eq_service_photo(self, obj):
@@ -336,6 +380,29 @@ class ServiceAdmin(MainAdmin):
         ('Документы по ремонту', {'fields': ('service_akt_url',),})
     )
 
+    def get_queryset(self, request):
+        # Максимально оптимизированный queryset с предзагрузкой всех необходимых связей
+        return super().get_queryset(request).select_related(
+            "equipment_accounting",
+            "equipment_accounting__equipment",
+            "service_type",
+            "user"
+        ).prefetch_related(
+            "spare_part",
+            Prefetch(
+                'equipment_accounting__equipment_acc_department_equipment_accounting',
+                queryset=EquipmentAccDepartment.objects.select_related(
+                    'department',
+                    'department__client',
+                    'department__client__city'
+                ).filter(is_active=True)
+            ),
+            Prefetch(
+                "service_photos",
+                queryset=ServicePhotos.objects.all()
+            )
+        )
+
     @admin.display(description='Содержание работ')
     def job_content_short(self, obj):
         job_content = obj.job_content
@@ -362,16 +429,29 @@ class ServiceAdmin(MainAdmin):
 
     @admin.display(description='Запчасти')
     def spare_part_used(self, obj):
-        spare_parts_list = list(obj.spare_part.values_list('name', flat=True))
+        # Используем предзагруженные данные
+        spare_parts_list = [sp.name for sp in obj.spare_part.all()]
         return "; ".join(spare_parts_list) if spare_parts_list else '-'
 
     @admin.display(description='Подразделение')
     def dept_name(self, obj):
-        dept_id_list = obj.equipment_accounting.equipment_acc_department_equipment_accounting\
-            .filter(is_active=True)\
-            .values_list('department', flat=True)
-        dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
-        return "; ".join(dept) if dept else '-'
+        # dept_id_list = obj.equipment_accounting.equipment_acc_department_equipment_accounting \
+        #     .prefetch_related(Prefetch(
+        #                           'equipment_accounting__equipment_acc_department_equipment_accounting__department',
+        #                           queryset=Department.objects.all()
+        #                       )) \
+        #     .filter(is_active=True)\
+        #     .values_list('department', flat=True)
+        # dept = Department.objects.filter(id__in=dept_id_list).values_list('name', flat=True)
+        # return "; ".join(dept) if dept else '-'
+        # Используем предзагруженные данные из get_queryset
+
+        departments = [
+            acc_dept.department.name
+            for acc_dept in obj.equipment_accounting.equipment_acc_department_equipment_accounting.all()
+            if acc_dept.is_active
+        ]
+        return "; ".join(departments) if departments else '-'
 
     @admin.display(description='Фото', boolean=True)
     def photos(self, obj):
@@ -435,7 +515,7 @@ class ServiceAdmin(MainAdmin):
         create_akt.update_tables()
         obj.service_akt = create_akt.save_file_path
         obj.save()
-        
+
         return client['equipment_short_name'], client['{{ SERIAL_NUM }}']
 
     def get_form(self, request, obj=None, change=False, **kwargs):
@@ -501,6 +581,8 @@ class ServiceAdmin(MainAdmin):
                 except json.JSONDecodeError:
                     continue
 
+        #TODO: отгружать с худшим сроком
+
         # Обновляем количества запчастей
         for spare_part_info in spare_parts_data:
             spare_part_id = spare_part_info['id']
@@ -540,6 +622,9 @@ class SupplierAdmin(MainAdmin):
         ('Адрес', {'fields': ('country', 'city', 'address',)}),
         ('Контакты поставщика', {'fields': ('contact_person', 'contact_phone', 'email')}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('city', 'country')
 
     @admin.display(description='Город')
     def city_name(self, obj):

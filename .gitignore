@@ -15,6 +15,7 @@ ebase_dump_20240825.sql
 requirements_hp.txt
 ebase_site/media/
 pg_medsil_backup/
+gpt/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -68,6 +69,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+*part_to_service.txt
 
 # Translations
 *.mo

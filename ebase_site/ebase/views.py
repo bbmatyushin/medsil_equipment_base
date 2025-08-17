@@ -31,6 +31,7 @@ def get_spare_part_quantity(request, spare_part_id):
     Для страницы admin/ebase/service/<spare_part_id>/change/, на которой
     динамически, с помощью JS, формируется блок "Выбранные запчасти" > part_to_service.js
     """
+    #TODO: учесть только непросроченные запчасти
     try:
         part = SparePart.objects.get(pk=spare_part_id)
         part_info = ''
@@ -38,7 +39,7 @@ def get_spare_part_quantity(request, spare_part_id):
             part_count = SparePartCount.objects.annotate(total_amount=Sum('amount')) \
                 .filter(spare_part=part) \
                 .values('total_amount', 'expiration_dt') \
-                .order_by('-expiration_dt')
+                .order_by('expiration_dt')
 
             part_info = ", ".join([f"{p['expiration_dt']} - {int(p['total_amount'])} {part.unit}" for p in part_count])
 
@@ -46,6 +47,7 @@ def get_spare_part_quantity(request, spare_part_id):
             .filter(spare_part=part).values('total_amount')
 
         spare_part_count = int(sum(s['total_amount'] for s in spare_part_count))
+
 
         return JsonResponse({
             'name': f'{part.name}{f" (арт. {part.article})" if part.article else ""}{f" (сроки: {part_info})" if part_info else ""}',
