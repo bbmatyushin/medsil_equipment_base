@@ -63,6 +63,11 @@ class Client(EbaseModel):
         verbose_name = 'Клиент'
         verbose_name_plural = 'Клиенты'
         unique_together = ('name', 'city')
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['inn']),
+            models.Index(fields=['city']),
+        ]
 
     def __str__(self):
         return f"{self.name}, {f'ИНН {self.inn}' if self.inn else ''}"
@@ -101,7 +106,10 @@ class Department(EbaseModel):
         unique_together = ('name', 'address',)
         ordering = ('city',)
         indexes = [
-            models.Index(models.F('name'), models.F('city'), name='department_name_city')
+            models.Index(models.F('name'), models.F('city'), name='department_name_city'),
+            models.Index(fields=['name']),
+            models.Index(fields=['client']),
+            models.Index(fields=['city']),
         ]
 
     def __str__(self):
@@ -213,6 +221,13 @@ class Equipment(EbaseModel):
         verbose_name = 'Мед. оборудование'
         verbose_name_plural = 'Мед. оборудование'
         unique_together = ('full_name', 'short_name',)
+        indexes = [
+            models.Index(fields=['full_name']),
+            models.Index(fields=['short_name']),
+            models.Index(fields=['med_direction']),
+            models.Index(fields=['manufacturer']),
+            models.Index(fields=['supplier']),
+        ]
 
     def __str__(self):
         return self.full_name
@@ -270,7 +285,12 @@ class EquipmentAccounting(EbaseModel):
     class Meta:
         db_table = f'{company}."equipment_accounting"'
         indexes = [
-            models.Index(fields=['serial_number'], name='serial_number_idx'),
+            models.Index(fields=['equipment']),
+            models.Index(fields=['serial_number'],  name='serial_number_idx'),
+            models.Index(fields=['equipment_status']),
+            models.Index(fields=['is_our_supply']),
+            models.Index(fields=['is_our_service']),
+            models.Index(fields=['user']),
         ]
         db_table_comment = ('Таблица с учёт оборудования. Для отслеживаия оборудования по его серийному '
                             'номеру.\n\n-- BMatyushin')
@@ -323,6 +343,13 @@ class EquipmentAccDepartment(EbaseModel):
         db_table_comment = 'Учет поставленного оборудования в подразделения клиента.\n\n-- BMatyushin'
         verbose_name = 'Оборудование по клиентам'
         verbose_name_plural = 'Оборудование по клиентам'
+        indexes = [
+            models.Index(fields=['equipment_accounting']),
+            models.Index(fields=['department']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['install_dt']),
+            models.Index(fields=['engineer']),
+        ]
 
     def __str__(self):
         return f"{self.department} - {self.equipment_accounting}"
@@ -449,6 +476,14 @@ class Service(EbaseModel):
         db_table_comment = 'Учет ремонта оборудования. \n\n-- BMatyushin'
         verbose_name = 'Ремонт оборудования'
         verbose_name_plural = 'Ремонт оборудования'
+        indexes = [
+            models.Index(fields=['equipment_accounting']),
+            models.Index(fields=['service_type']),
+            models.Index(fields=['beg_dt']),
+            models.Index(fields=['end_dt']),
+            models.Index(fields=['-beg_dt']),  # Для сортировки по убыванию
+            models.Index(fields=['user']),
+        ]
 
     def __str__(self):
         return f"{self.equipment_accounting} - {self.service_type}"
