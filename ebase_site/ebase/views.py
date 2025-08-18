@@ -40,6 +40,8 @@ def get_service_part_count(spare_part_count_info: Optional[dict], part: dict) ->
     return 0
 
 
+#TODO вьюшки друг друга дублируют, сделаны на скорую руку. Переделать!
+
 @staff_member_required
 def get_spare_part_quantity(request, service_id,  spare_part_id):
     """
@@ -98,6 +100,9 @@ def get_spare_part_quantity_null(request, spare_part_id):
             .filter(spare_part=part) \
             .values('total_amount', 'expiration_dt') \
             .order_by("expiration_dt")
+
+        if not part_count:  # заглушка на случай, если запчасть не ставили на приход
+            part_count = [{"total_amount": 0, "expiration_dt": None}]
 
         data = [
             {
