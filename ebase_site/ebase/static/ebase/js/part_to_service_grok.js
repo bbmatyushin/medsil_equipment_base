@@ -73,7 +73,7 @@ class SparePartsManager {
                 if (results.length === 0) {
                     // Fallback если нет данных
                     results = [{
-                        name: `Запчасть c ID: ${option.value} не найдена`,
+                        name: `Запчасть c ID: ${option.value} не найдена в поставках`,
                         quantity: 0,
                         id: option.value,
                         expiration_dt: null,
