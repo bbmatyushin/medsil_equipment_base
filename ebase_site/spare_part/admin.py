@@ -156,7 +156,8 @@ class SparePartShipmentAdmin(MainAdmin):
     list_filter = (WhoShipment, )
 
     fieldsets = (
-        ('Новая отгрузка', {'fields': ('spare_part_count', ('doc_num', 'shipment_dt'), 'count_shipment',)}),
+        ('Новая отгрузка', {'fields': ('spare_part_count', ('doc_num', 'shipment_dt'),
+                                       'count_shipment', 'comment',)}),
 
     )
 

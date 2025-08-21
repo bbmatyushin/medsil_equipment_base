@@ -39,10 +39,29 @@ class SparePartCountForm(forms.ModelForm):
 
 
 class SparePartShipmentForm(forms.ModelForm):
-    # spare_part_available = forms.CharField(label='Доступно')
+    comment = forms.CharField(
+        label='Комментарий',
+        required=False,
+        widget=forms.widgets.Textarea(attrs={
+            'rows': 4,  # уменьшаем высоту до 4 строк
+            "cols": 60,
+            'style': 'resize: both; max-width: 600px; max-height: 250px;',  # разрешаем изменять только по высоте
+            'placeholder': "Введите комментарий к отгрузке...",
+        })
+    )
+
     class Meta:
         model = SparePartShipment
         fields = '__all__'
+        # exclude = ('is_auto_comment',)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # запрещаем редактировать поле комментарий, если оно было создано автоматически
+        if self.instance.is_auto_comment:
+            self.fields['comment'].widget.attrs.pop('placeholder')
+            self.fields['comment'].widget.attrs['disabled'] = True
+
 
     # Отрабатывает после нажатия кнопки "Сохранить"
     def clean(self):

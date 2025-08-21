@@ -159,6 +159,13 @@ class SparePartShipment(SparePartAbs):
         related_name='spare_part_shipment_company_user', verbose_name='Кто отгрузил',
         db_comment="ID сотрудника, который оформил отгрузку",
     )
+    comment = models.TextField(null=True, blank=True,
+                               db_comment='Комментарий к отгрузке',
+                               verbose_name='Комментарий',
+                               help_text='Комментарий к отгрузке')
+    is_auto_comment = models.BooleanField(blank=True, default=False,
+                                          db_comment='true если коммент был создано на стороне django, '
+                                                     'если пользователем - false')
 
     class Meta:
         db_table = f'{company}."spare_part_shipment"'
