@@ -62,7 +62,6 @@ class SparePartShipmentForm(forms.ModelForm):
             self.fields['comment'].widget.attrs.pop('placeholder')
             self.fields['comment'].widget.attrs['disabled'] = True
 
-
     # Отрабатывает после нажатия кнопки "Сохранить"
     def clean(self):
         cleaned_data = super().clean()
