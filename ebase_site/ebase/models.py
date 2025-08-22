@@ -473,7 +473,12 @@ class Service(EbaseModel):
     service_akt = models.CharField(
         max_length=2056, null=True, blank=True, verbose_name='Акт',
         db_comment='Акт о проведении работ', help_text='Акт о проведении работ',
-        validators=[validators.RegexValidator(regex=r'\.docs$')]
+        validators=[validators.RegexValidator(regex=r'\.docs$|\.doc$')]
+    )
+    acceptance_akt = models.CharField(
+        max_length=2056, null=True, blank=True, verbose_name='Акт приёма',
+        db_comment='Акт приема-передачи', help_text='Акт приема-передачи',
+        validators=[validators.RegexValidator(regex=r'\.docs$|\.doc$')]
     )
 
     class Meta:

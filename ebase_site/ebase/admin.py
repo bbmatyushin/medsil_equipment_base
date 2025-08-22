@@ -358,7 +358,7 @@ class ServiceAdmin(MainAdmin):
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
-    readonly_fields = ('service_akt_url',)
+    readonly_fields = ('service_akt_url', 'acceptance_akt_url',)
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
                      'equipment_accounting__serial_number',)
@@ -378,7 +378,7 @@ class ServiceAdmin(MainAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
-        ('Документы по ремонту', {'fields': ('service_akt_url',),})
+        ('Документы по ремонту', {'fields': ('acceptance_akt_url', 'service_akt_url',),})
     )
 
     def get_queryset(self, request):
@@ -461,6 +461,19 @@ class ServiceAdmin(MainAdmin):
         if obj.pk:
             return mark_safe('<span class="akt-span">Акт не создан</span>'
                              '<input type="button" id="akt-create-btn" value="Создать">')
+        # При создании новой записи направит сюда
+        return mark_safe('<span class="akt-span">-------</span>')
+
+    @admin.display(description='Акт приёма-передачи')
+    def acceptance_akt_url(self, obj):
+        if obj.acceptance_akt:
+            url = re.sub(r'.*/docs', '/media/docs', obj.acceptance_akt)
+            akt_name = obj.acceptance_akt.split('/')[-1]
+            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
+                             f'<input type="button" id="accept-akt-create-btn" value="Обновить">')
+        if obj.pk:
+            return mark_safe('<span class="akt-span">Акт не создан</span>'
+                             '<input type="button" id="accept-akt-create-btn" value="Создать">')
         # При создании новой записи направит сюда
         return mark_safe('<span class="akt-span">-------</span>')
 
