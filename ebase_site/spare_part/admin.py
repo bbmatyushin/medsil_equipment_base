@@ -141,6 +141,36 @@ class SparePartSupplyAdmin(MainAdmin):
         super().save_model(request, obj, form, change)
 
 
+class SparePartShipmentM2MInline(admin.TabularInline):
+    model = SparePartShipmentM2M
+    extra = 1
+    autocomplete_fields = ("spare_part",)
+    fields = ("spare_part", "quantity",)
+    readonly_fields = ("create_dt",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('spare_part', 'shipment',)
+
+
+@admin.register(SparePartShipmentV2)
+class SparePartShipmentV2Admin(admin.ModelAdmin):
+    form = SparePartShipmentV2Form
+    inlines = [SparePartShipmentM2MInline,]
+
+    list_display = ("doc_num", "shipment_dt", "user_name")
+
+    @admin.display(description="Создал")
+    def user_name(self, obj):
+        return obj.user if obj.user else "-"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # оптимизация: подгружаем связанные объекты и инлайн-запчасти
+        return qs.select_related("user", "service") \
+            .prefetch_related("shipment_m2m__spare_part__unit",)
+
+
 @admin.register(SparePartShipment)
 class SparePartShipmentAdmin(MainAdmin):
     form = SparePartShipmentForm

@@ -46,8 +46,8 @@ class CompanyUser(AbstractUser):
     def __str__(self):
         return (f"{self.first_name if self.first_name else ''} "
                 f"{self.patron if self.patron else ''} " 
-                f"{self.last_name if self.last_name else ''} " 
-                f"{f'({self.username})' if self.username else ''}")
+                f"{self.last_name if self.last_name else ''}")
+                # f"{f'({self.username})' if self.username else ''}")
 
     def __repr__(self):
         return f"<CompanyUser {self.username=!r}>"
