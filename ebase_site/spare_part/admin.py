@@ -160,6 +160,14 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
     list_display = ("doc_num", "shipment_dt", "user_name")
 
+    fieldsets = (
+        (
+            "ИНФОРМАЦИЯ ПО ОТГРУЗКЕ", {
+                "fields": (("doc_num", "shipment_dt",), "service", "comment", "user",)
+            },
+        ),
+    )
+
     @admin.display(description="Создал")
     def user_name(self, obj):
         return obj.user if obj.user else "-"
@@ -169,6 +177,13 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         # оптимизация: подгружаем связанные объекты и инлайн-запчасти
         return qs.select_related("user", "service") \
             .prefetch_related("shipment_m2m__spare_part__unit",)
+
+    def get_changeform_initial_data(self, request):
+        """Устанавливает начальные значения при открытии формы"""
+        return {
+            'user': request.user,
+            "shipment_dt": datetime.now(),
+        }
 
 
 @admin.register(SparePartShipment)
