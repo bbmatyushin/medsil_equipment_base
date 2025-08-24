@@ -1,15 +1,7 @@
-function createAkt() {
-	if (!url.searchParams.get('akt')) url.searchParams.append('akt', 'create');
+function createAkt(aktName) {
+	if (!url.searchParams.get(aktName)) url.searchParams.append(aktName, 'create');
 	location.href = url;
 }
-
-// Нужно всё одну функцию упаковать - createAkt
-function createAcceptAkt() {
-    console.log('createAcceptAkt');
-	if (!url.searchParams.get('acceptAkt')) url.searchParams.append('acceptAkt', 'create');
-	location.href = url;
-}
-
 const url = new URL(location.href);
 
 var acceptAktSpan = document.getElementsByClassName('akt-span')[0];
@@ -17,14 +9,17 @@ var aktSpan = document.getElementsByClassName('akt-span')[1];
 acceptAktSpan.style.padding = '0px 7px 4px 4px';
 aktSpan.style.padding = '0px 7px 4px 4px';
 
-var aktButton = document.getElementById('accept-akt-create-btn');
-aktButton.onclick = createAcceptAkt;
+var acceptAktButton = document.getElementById('accept-akt-create-btn');
+// acceptAktButton.onclick = () => createAkt('acceptAkt');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
+acceptAktButton.disabled = true;
+acceptAktButton.onclick = () => alert('Акт не загружен.\nАкт приёма-передачи пока не может быть сформирован.');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
 
 var aktButton = document.getElementById('akt-create-btn');
-aktButton.onclick = createAkt;
+aktButton.onclick = () => createAkt('akt');
 
 // Удаляем akt=create из get-параметров, чтобы лишний раз не вызывать метод создания акта в Django 
-if (url.searchParams.get('akt')) {
+if (url.searchParams.has('akt') || url.searchParams.has('acceptAkt')) {
 	url.searchParams.delete('akt');	
+	url.searchParams.delete('acceptAkt');
 	window.history.replaceState({}, document.title, url.toString());
 }
