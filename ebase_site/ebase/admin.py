@@ -473,7 +473,8 @@ class ServiceAdmin(MainAdmin):
                              f'<input type="button" id="accept-akt-create-btn" value="Обновить">')
         if obj.pk:
             return mark_safe('<span class="akt-span">Акт не создан</span>'
-                             '<input type="button" id="accept-akt-create-btn" value="Создать">')
+                             '<input type="button" id="accept-akt-create-btn" value="Создать">'
+                             f'<span>  (форма Акта ещё не загружена)</span>')
         # При создании новой записи направит сюда
         return mark_safe('<span class="akt-span">-------</span>')
 
