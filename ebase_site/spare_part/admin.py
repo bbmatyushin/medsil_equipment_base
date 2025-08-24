@@ -141,6 +141,22 @@ class SparePartSupplyAdmin(MainAdmin):
         super().save_model(request, obj, form, change)
 
 
+class SparePartShipmentM2MInline(admin.TabularInline):
+    model = SparePartShipmentM2M
+    extra = 1
+    autocomplete_fields = ("spare_part",)
+    fields = ("spare_part", "quantity",)
+    readonly_fields = ("create_dt",)
+
+
+@admin.register(SparePartShipmentV2)
+class SparePartShipmentV2Admin(admin.ModelAdmin):
+    form = SparePartShipmentV2Form
+    inlines = [SparePartShipmentM2MInline,]
+
+    list_display = ("pk", "doc_num")
+
+
 @admin.register(SparePartShipment)
 class SparePartShipmentAdmin(MainAdmin):
     form = SparePartShipmentForm

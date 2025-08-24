@@ -119,6 +119,75 @@ class SparePartCount(SparePartAbs):
         return f'<SparePartCount {self.spare_part=!r} {self.amount=!r}>'
 
 
+class SparePartShipmentM2M(models.Model):
+    spare_part = models.ForeignKey("spare_part.SparePart", on_delete=models.CASCADE,
+                                   related_name="spare_part_m2m")
+    shipment = models.ForeignKey("spare_part.SparePartShipmentV2", on_delete=models.CASCADE,
+                                   related_name="shipment_m2m")
+    quantity = models.PositiveIntegerField(help_text="Количество отгружаемых единиц товара")
+    create_dt = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = f'{company}."spare_part_shipment_m2m"'
+        db_table_comment = ("Связывает отгрузку, запчать и количество отгруженных запчастей."
+                            "\r\n\r\n--Матюшин")
+        verbose_name = 'Выбрать запчасть'
+        verbose_name_plural = 'Выберите запчасти'
+
+    def __repr__(self):
+        return f"<SparePartShipmentM2M(id={self.pk}, spare_part={self.spare_part.name}, quantity={self.quantity})>"
+
+
+class SparePartShipmentV2(SparePartAbs):
+    """Обновленная талица для отгрузки запчастей.
+    Чтобы в одной отгрузке учитывать несколько видов запчастей"""
+
+    spare_part = models.ManyToManyField("spare_part.SparePart", related_name="m2m_spare_part_shipment_v2",
+                                        help_text="Для связи одной отгрузки с несколькими запчастями",
+                                        through="spare_part.SparePartShipmentM2M")
+    service = models.ForeignKey("ebase.Service", on_delete=models.CASCADE, related_name="fk_spare_part_shipment_v2",
+                                null=True, blank=True, verbose_name="Ремонт оборудования",
+                                help_text="Связь с ремонтом оборудования", db_comment="Связь с ремонтом оборудования")
+    doc_num = models.CharField(
+        max_length=20, null=False, blank=False, verbose_name='Номер документа',
+        db_comment='Номер документа отгрузки',
+        help_text='Номер документа отгрузки или внутренний номер для учёта',
+        default='б/н'
+    )
+    shipment_dt = models.DateField(
+        null=False, blank=False, verbose_name='Дата отгрузки',
+        db_comment='Дата отгрузки', help_text='Дата отгрузки.'
+    )
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name='fk_spare_part_shipment_v2_user', verbose_name='Кто отгрузил',
+        db_comment="ID сотрудника, который оформил отгрузку",
+    )
+    comment = models.TextField(null=True, blank=True,
+                               db_comment='Комментарий к отгрузке',
+                               verbose_name='Комментарий',
+                               help_text='Комментарий к отгрузке')
+    is_auto_comment = models.BooleanField(blank=True, default=False,
+                                          db_comment='true если коммент был создано на стороне django, '
+                                                     'если пользователем - false')
+
+    class Meta:
+        db_table = f'{company}."spare_part_shipment_v2"'
+        db_table_comment = ("Обновленная таблица для хранения отгрузок запчастей. Для связи одной отгрузки с "
+                            "несколькими запчастями используется таблица spare_part_shipment_m2m, в которй "
+                            "указывается количество отгруженного товара."
+                            "\r\n\r\n--Матюшин")
+        verbose_name = 'Пробная модель - Отгрузка запчастей V2'
+        verbose_name_plural = 'Отгрузки запчастей V2 (тестовый режим)'
+
+    def __str__(self):
+        spare_parts = [f"{part.spare_part.name} - {part.quantity} {part.spare_part.unit}" for part in self.items.all()]
+        return f"Отгрузка #{self.doc_num}: {', '.join(spare_parts)}"
+
+    def __repr__(self):
+        return f"<SparePartShipmentV2(id={self.pk}, shipment_dt={self.shipment_dt}, user={self.user.username})>"
+
+
 class SparePartShipment(SparePartAbs):
     """Отслеживание отгрузок запчастей"""
 
