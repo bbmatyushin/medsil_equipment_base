@@ -63,6 +63,11 @@ class SparePart(SparePartAbs):
         verbose_name = 'Запчасть'
         verbose_name_plural = 'Запчасти'
         unique_together = ('article', 'name',)
+        indexes = [
+            models.Index(fields=["article"]),
+            models.Index(fields=["name",]),
+            models.Index(fields=["unit",]),
+        ]
 
     def __str__(self):
         return f'{self.name} {f"(арт. {self.article})" if self.article else ""}'
@@ -101,6 +106,9 @@ class SparePartCount(SparePartAbs):
         verbose_name = 'Остаток запчастей'
         verbose_name_plural = 'Остаток запчастей'
         unique_together = ('spare_part', 'expiration_dt')
+        indexes = [
+            models.Index(fields=["spare_part"]),
+        ]
 
     def check_expiration(self):
         """Проверка окончания срока годности у запчасти"""
@@ -133,6 +141,10 @@ class SparePartShipmentM2M(models.Model):
                             "\r\n\r\n--Матюшин")
         verbose_name = 'Выбрать запчасть'
         verbose_name_plural = 'Выберите запчасти'
+        indexes = [
+            models.Index(fields=['spare_part'],),
+            models.Index(fields=["shipment",])
+        ]
 
     def __repr__(self):
         return f"<SparePartShipmentM2M(id={self.pk}, spare_part={self.spare_part.name}, quantity={self.quantity})>"
@@ -179,9 +191,14 @@ class SparePartShipmentV2(SparePartAbs):
                             "\r\n\r\n--Матюшин")
         verbose_name = 'Пробная модель - Отгрузка запчастей V2'
         verbose_name_plural = 'Отгрузки запчастей V2 (тестовый режим)'
+        indexes = [
+            models.Index(fields=["service"]),
+            models.Index(fields=["user"]),
+        ]
 
     def __str__(self):
-        spare_parts = [f"{part.spare_part.name} - {part.quantity} {part.spare_part.unit}" for part in self.items.all()]
+        spare_parts = [(f"{part.spare_part.name} - {part.quantity} "
+                        f"{part.spare_part.unit}") for part in self.shipment_m2m.all()]
         return f"Отгрузка #{self.doc_num}: {', '.join(spare_parts)}"
 
     def __repr__(self):
@@ -286,6 +303,10 @@ class SparePartSupply(SparePartAbs):
         db_table_comment = 'Отслеживание поставок запчастей. \n\n-- BMatyushin'
         verbose_name = 'Поставка запчастей'
         verbose_name_plural = 'Поставки запчастей'
+        indexes = [
+            models.Index(fields=["spare_part"]),
+            models.Index(fields=["user"]),
+        ]
 
     def __str__(self):
         return f'{self.spare_part.name} {f"(арт. {self.spare_part.article})" if self.spare_part.article else ""}'
