@@ -380,8 +380,8 @@ class SparePartsManager {
     async getSparePartData(sparePartId) {
         console.log(`Fetching data for spare part: ${sparePartId}`);
         try {
-            const currentUrl = window.location.href;
-            const serviceId = currentUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+            const currentPath = window.location.pathname;  // остается тольк путь без get параметров
+            const serviceId = currentPath.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
             const response = await fetch(`/admin/get-spare-part-quantity/${serviceId}/${sparePartId}/`, {
                 method: 'GET',
                 headers: {
