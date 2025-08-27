@@ -242,21 +242,23 @@ class EquipmentAccountingAdmin(MainAdmin):
         instance = self.get_instance(obj)
         if isinstance(instance, list):
             instance = instance[0]
-        return instance.department
+        return instance.department if instance else "--"
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
         instance = self.get_instance(obj)
         if isinstance(instance, list):
             instance = instance[0]
-        return instance.engineer
+        return instance.engineer if instance else "--"
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
         instance = self.get_instance(obj)
         if isinstance(instance, list):
             instance = instance[0]
-        return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '-'
+        if instance:
+            return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '--'
+        return "--"
 
     @admin.display(description='Добавил')
     def user_name(self, obj):
