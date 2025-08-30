@@ -2,6 +2,8 @@ import datetime
 import re
 import logging
 import json
+from typing import Optional
+
 from django.utils.safestring import mark_safe
 from django.db.models import Prefetch
 
@@ -458,39 +460,49 @@ class ServiceAdmin(MainAdmin):
         if obj.service_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.service_akt)
             akt_name = obj.service_akt.split('/')[-1]
-            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
-                             f'<input type="button" id="akt-create-btn" value="Обновить">')
+            return self._akt_mark_safe(url=url, akt_name=akt_name,
+                                       tag_id="akt-create-btn", action="update")
         if obj.pk:
-            return mark_safe('<span class="akt-span">Акт о проведении работ не создан</span>'
-                             '<input type="button" id="akt-create-btn" value="Создать">')
+            return self._akt_mark_safe(tag_id="akt-create-btn", action="create")
         # При создании новой записи направит сюда
-        return mark_safe('<span class="akt-span">-------</span>')
+        return self._akt_mark_safe()
 
     @admin.display(description='Акт приёма-передачи в ремонт')
     def accept_in_akt_url(self, obj):
         if obj.accept_in_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.accept_in_akt)
             akt_name = obj.accept_in_akt.split('/')[-1]
-            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
-                             f'<input type="button" id="accept-akt-create-btn" value="Обновить">')
+            return self._akt_mark_safe(url=url, akt_name=akt_name,
+                                       tag_id="accept-akt-create-btn", action="update")
         if obj.pk:
-            return mark_safe('<span class="akt-span">Акт приёма-передачи в ремонт не создан</span>'
-                             '<input type="button" id="accept-akt-create-btn" value="Создать">')
+            return self._akt_mark_safe(tag_id="accept-akt-create-btn", action="create")
         # При создании новой записи направит сюда
-        return mark_safe('<span class="akt-span">-------</span>')
+        return self._akt_mark_safe()
 
     @admin.display(description='Акт приёма-передачи из ремонта')
     def accept_from_akt_url(self, obj):
         if obj.accept_from_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.accept_from_akt)
             akt_name = obj.accept_from_akt.split('/')[-1]
-            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
-                             f'<input type="button" id="accept-akt-from-create-btn" value="Обновить">')
+            return self._akt_mark_safe(url=url, akt_name=akt_name,
+                                       tag_id="accept-akt-from-create-btn", action="update")
         if obj.pk:
-            return mark_safe('<span class="akt-span">Акт приёма-передачи из ремонта не создан</span>'
-                             '<input type="button" id="accept-akt-from-create-btn" value="Создать">')
+            return self._akt_mark_safe(tag_id="accept-akt-from-create-btn", action="create")
         # При создании новой записи направит сюда
-        return mark_safe('<span class="akt-span">-------</span>')
+        return self._akt_mark_safe()
+
+    @staticmethod
+    def _akt_mark_safe(url: Optional[str] = None, akt_name: Optional[str] = None,
+                       tag_id: Optional[str] = None, action: Optional[str] = None):
+        """Возвращает mark_safe для актов"""
+        if action == "create":
+            return mark_safe(f'<span class="akt-span">Акт не создан</span>'
+                             f'<input type="button" id="{tag_id}" value="Создать">')
+        elif action == "update":
+            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
+                             f'<input type="button" id="{tag_id}" value="Обновить">')
+        else:
+            return mark_safe('<span class="akt-span">-------</span>')
 
     @admin.action(description='Создать - Акт о проведении работ')
     def create_service_akt_by_action(self, request, queryset) -> None:
