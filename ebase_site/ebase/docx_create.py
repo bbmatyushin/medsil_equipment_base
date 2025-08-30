@@ -9,6 +9,7 @@ from docx.table import Table
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 
+
 class CreateServiceAkt:
     TEMPLATE_PATH = str(Path(settings.MEDIA_ROOT, 'docs', 'service_akt', 'service_akt_MEDSIL.docx'))  # путь к шаблону
 
@@ -81,7 +82,6 @@ class CreateServiceAkt:
         for n, paragraph in self.cell_paragraph_gen(table):
             if n == 1:
                 paragraph.text = self.job_content
-
 
     def spare_part_table(self, table: Table):
         """Обновляем данные в таблице Замененные детали"""

@@ -514,8 +514,8 @@ class ServiceAdmin(MainAdmin):
             'equipment_short_name': obj.equipment_accounting.equipment.short_name
             if obj.equipment_accounting.equipment.short_name else obj.equipment_accounting.equipment.full_name,
         }
-        description = obj.description if obj.description else ''
-        job_content = obj.job_content if obj.job_content else ''
+        description = obj.description.replace("\r\n", "\n") if obj.description else ''
+        job_content = obj.job_content.replace("\r\n", "\n") if obj.job_content else ''
         spare_parts = list(obj.spare_part.values_list('name', 'article'))
         create_akt = CreateServiceAkt(client, job_content, description, spare_parts)
         create_akt.update_tables()
