@@ -475,9 +475,16 @@ class Service(EbaseModel):
         db_comment='Акт о проведении работ', help_text='Акт о проведении работ',
         validators=[validators.RegexValidator(regex=r'\.docs$|\.doc$')]
     )
-    acceptance_akt = models.CharField(
-        max_length=2056, null=True, blank=True, verbose_name='Акт приёма',
-        db_comment='Акт приема-передачи', help_text='Акт приема-передачи',
+    accept_in_akt = models.CharField(
+        max_length=2056, null=True, blank=True, verbose_name='Акт в ремонт',
+        db_comment='Акт приема-передачи оборудования в ремонт',
+        help_text='Акт приёма-передачи оборудования в ремонт',
+        validators=[validators.RegexValidator(regex=r'\.docs$|\.doc$')]
+    )
+    accept_from_akt = models.CharField(
+        max_length=2056, null=True, blank=True, verbose_name='Акт из ремонта',
+        db_comment='Акт приема-передачи оборудования из ремонт',
+        help_text='Акт приёма-передачи оборудования из ремонт',
         validators=[validators.RegexValidator(regex=r'\.docs$|\.doc$')]
     )
 

@@ -1,4 +1,4 @@
-#akt-create-btn, #accept-akt-create-btn {
+#akt-create-btn, #accept-akt-create-btn, #accept-akt-from-create-btn {
     font-size: 0.8125rem;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -12,11 +12,10 @@
     color: var(--body-fg);
 }
 
-#akt-create-btn:hover, #accept-akt-create-btn:hover {
+#akt-create-btn:hover, #accept-akt-create-btn:hover, #accept-akt-from-create-btn:hover {
     border: 1px solid black;
     background: #e4e4e4;
 }
-
 
 #filter-style-eqipment {
     order: 1;
