@@ -466,7 +466,7 @@ class ServiceAdmin(MainAdmin):
         # При создании новой записи направит сюда
         return mark_safe('<span class="akt-span">-------</span>')
 
-    @admin.display(description='Акт п/п в ремонт')
+    @admin.display(description='Акт приёма-передачи в ремонт')
     def accept_in_akt_url(self, obj):
         if obj.accept_in_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.accept_in_akt)
@@ -479,7 +479,7 @@ class ServiceAdmin(MainAdmin):
         # При создании новой записи направит сюда
         return mark_safe('<span class="akt-span">-------</span>')
 
-    @admin.display(description='Акт п/п из ремонта')
+    @admin.display(description='Акт приёма-передачи из ремонта')
     def accept_from_akt_url(self, obj):
         if obj.accept_from_akt:
             url = re.sub(r'.*/docs', '/media/docs', obj.accept_from_akt)
