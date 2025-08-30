@@ -2,6 +2,7 @@ import datetime
 import re
 import logging
 import json
+import time
 from typing import Optional
 
 from django.utils.safestring import mark_safe
@@ -499,7 +500,8 @@ class ServiceAdmin(MainAdmin):
             return mark_safe(f'<span class="akt-span">Акт не создан</span>'
                              f'<input type="button" id="{tag_id}" value="Создать">')
         elif action == "update":
-            return mark_safe(f'<span class="akt-span"><a href="{url}">{akt_name}</a></span>'
+            time_version = int(time.time())
+            return mark_safe(f'<span class="akt-span"><a href="{url}?v={time_version}">{akt_name}</a></span>'
                              f'<input type="button" id="{tag_id}" value="Обновить">')
         else:
             return mark_safe('<span class="akt-span">-------</span>')
