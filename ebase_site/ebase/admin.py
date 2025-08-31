@@ -125,9 +125,9 @@ class EquipmentAdmin(MainAdmin):
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
-            'med_direction', 'manufacturer', 'supplier'
-        ).prefetch_related('spare_part')
+        return super().get_queryset(request) \
+            .select_related('med_direction', 'manufacturer', 'supplier', "equipment_accounting_equipment") \
+            .prefetch_related('spare_part')
 
     @admin.display(description='Направление')
     def med_direction_name(self, obj):
@@ -399,6 +399,7 @@ class ServiceAdmin(MainAdmin):
                 'equipment_accounting__equipment_acc_department_equipment_accounting',
                 queryset=EquipmentAccDepartment.objects.select_related(
                     'department',
+                    # 'department__сity',
                     'department__client',
                     'department__client__city'
                 ).filter(is_active=True)
@@ -556,30 +557,120 @@ class ServiceAdmin(MainAdmin):
         return response
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Формируем список оборудования с серийными номера на основе
-        id полученного из get-запроса"""
-        eq_id: list = []
+        """Формируем список оборудования в формах с серийными номера на основе
+            id полученного из get-запроса"""
         if db_field.name == 'equipment_accounting':
-            if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+
+            # Для страницы добавления новой записи
+            if re.search(r'\/service\/add\/', request.path):
                 eq_id = request.GET.getlist('eq_select')
-            if eq_id:
-                kwargs["queryset"] = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
+                if eq_id:
+                    # Предзагружаем все необходимые связи для оборудования
+                    kwargs["queryset"] = EquipmentAccounting.objects.filter(
+                        equipment__id__in=eq_id
+                    ).select_related(
+                        "equipment",
+                        "equipment__manufacturer",
+                        "equipment__supplier",
+                        "equipment__med_direction",
+                        "equipment_status",
+                        "user"
+                    ).prefetch_related(
+                        Prefetch(
+                            'equipment_acc_department_equipment_accounting',
+                            queryset=EquipmentAccDepartment.objects.select_related(
+                                'department',
+                                'department__client',
+                                'department__city',
+                                'engineer'
+                            )
+                        )
+                    )
+
+            # Для страницы изменения записи - ограничиваем queryset только текущим оборудованием
+            elif re.search(r'\/service\/.*\/change\/', request.path):
+                try:
+                    service_id = request.path.strip().split('/')[-3]
+                    service_obj = Service.objects.select_related(
+                        'equipment_accounting__equipment'
+                    ).get(pk=service_id)
+
+                    kwargs["queryset"] = EquipmentAccounting.objects.filter(
+                        pk=service_obj.equipment_accounting.pk
+                    ).select_related(
+                        "equipment",
+                        "equipment__manufacturer",
+                        "equipment__supplier",
+                        "equipment__med_direction",
+                        "equipment_status",
+                        "user"
+                    )
+                except (Service.DoesNotExist, IndexError, ValueError):
+                    # Fallback к базовому queryset
+                    pass
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
-        """Формируем список запчастей для оборудования на основе
-        его id полученного из get-запроса"""
-        eq_id: list = []
-        if db_field.name =='spare_part':
-            if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+        """Оптимизированный метод для ManyToMany полей
+        Формируем список запчастей для оборудования на основе
+        id полученного из get-запроса"""
+        if db_field.name == 'spare_part':
+            eq_id = []
+
+            # Для страницы добавления
+            if re.search(r'\/service\/add\/', request.path):
                 eq_id = request.GET.getlist('eq_select')
+
+            # Для страницы изменения
             elif re.search(r'\/service\/.*\/change\/', request.path):
-                # Фильтруем запчасти на странице изменения по ремонту оборудования
-                service_id = request.path.strip().split('/')[-3]
-                eq_id.append(Service.objects.get(pk=service_id).equipment_accounting.equipment.pk)
+                try:
+                    service_id = request.path.strip().split('/')[-3]
+                    service_obj = Service.objects.select_related(
+                        'equipment_accounting__equipment'
+                    ).get(pk=service_id)
+                    eq_id = [service_obj.equipment_accounting.equipment.pk]
+                except (Service.DoesNotExist, IndexError, ValueError):
+                    pass
+
             if eq_id:
-                kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id)
+                # Предзагружаем запчасти с их оборудованием
+                kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id) \
+                    .prefetch_related("equipment", "service",)
+
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     """Формируем список оборудования с серийными номера на основе
+    #     id полученного из get-запроса"""
+    #     eq_id: list = []
+    #     if db_field.name == 'equipment_accounting':
+    #         if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+    #             eq_id = request.GET.getlist('eq_select')
+    #         if eq_id:
+    #             kwargs["queryset"] = EquipmentAccounting.objects \
+    #                 .filter(equipment__id__in=eq_id) \
+    #                 .select_related("equipment", "equipment__manufacturer", "equipment__supplier")
+    #             # kwargs["queryset"] = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
+    #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    #
+    # def formfield_for_manytomany(self, db_field, request, **kwargs):
+    #     """Формируем список запчастей для оборудования на основе
+    #     его id полученного из get-запроса"""
+    #     eq_id: list = []
+    #     if db_field.name =='spare_part':
+    #         if re.search(r'\/service\/add\/', request.path):  # Проверяем, что это страница с добавлением новой записи
+    #             eq_id = request.GET.getlist('eq_select')
+    #         elif re.search(r'\/service\/.*\/change\/', request.path):
+    #             # Фильтруем запчасти на странице изменения по ремонту оборудования
+    #             service_id = request.path.strip().split('/')[-3]
+    #             eq_id.append(Service.objects.get(pk=service_id).equipment_accounting.equipment.pk)
+    #         if eq_id:
+    #             kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id) \
+    #                 .prefetch_related("equipment", "service")
+    #     return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         if not change:
