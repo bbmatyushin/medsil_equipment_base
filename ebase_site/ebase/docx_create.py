@@ -101,6 +101,8 @@ class CreateServiceAkt:
                     paragraph.text = paragraph.text.replace(k, v)
                     if self.file_name == 'Akt_from_service.docx':
                         paragraph.runs[0].font.size = Pt(12)  # задаем разме шрифта
+                    elif self.file_name in ("Akt_in_service.docx", "Akt_from_service.docx"):
+                        paragraph.runs[0].font.size = Pt(11)  # задаем разме шрифта
                     if k == '{{ CLIENT }}':
                         paragraph.runs[0].bold = True
                     if k in ('{{ EQUIPMENT }}', '{{ SERIAL_NUM }}') \
