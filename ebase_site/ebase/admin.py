@@ -671,44 +671,44 @@ class ServiceAdmin(MainAdmin):
             obj.spare_part_count[spare_part_id] = spare_part_count_data
 
             #TODO: включить, если нужно обновлять общее количество в модели SparePartCount
-            try:
-                spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
+            # try:
+            #     spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
             #
-                # Рассчитываем изменение
-                quantity_change = new_quantity - original_quantity
-
-                # Обновляем доступное количество
-                spare_part_count.amount -= quantity_change
-                spare_part_count.amount = max(0, spare_part_count.amount)
-
-                # Добавляем комментарий к отгрузке
-                comment = (f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
-                           f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
-                           f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
-                           f"(s/n {obj.equipment_accounting.serial_number.upper()})")
-                try:
-                    spare_part_shipment = SparePartShipment.objects.get(spare_part_count=spare_part_count)
-                    spare_part_shipment.comment = comment
-                    spare_part_shipment.save()
-                except SparePartShipment.DoesNotExist:
-                    SparePartShipment.objects.create(
-                        user=request.user,
-                        spare_part_count=spare_part_count,
-                        count_shipment=spare_part_count.amount,
-                        shipment_dt=datetime.datetime.now(),
-                        comment=comment,
-                        is_auto_comment=True,
-                    )
-
-                spare_part_count.save()
-
+            #     # Рассчитываем изменение
+            #     quantity_change = new_quantity - original_quantity
             #
-            except SparePartCount.DoesNotExist:
-                # Если записи не существует, создаем её
-                SparePartCount.objects.create(
-                    spare_part_id=spare_part_id,
-                    amount=max(0, -new_quantity)
-                )
+            #     # Обновляем доступное количество
+            #     spare_part_count.amount -= quantity_change
+            #     spare_part_count.amount = max(0, spare_part_count.amount)
+            #
+            #     # Добавляем комментарий к отгрузке
+            #     comment = (f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
+            #                f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
+            #                f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
+            #                f"(s/n {obj.equipment_accounting.serial_number.upper()})")
+            #     try:
+            #         spare_part_shipment = SparePartShipment.objects.get(spare_part_count=spare_part_count)
+            #         spare_part_shipment.comment = comment
+            #         spare_part_shipment.save()
+            #     except SparePartShipment.DoesNotExist:
+            #         SparePartShipment.objects.create(
+            #             user=request.user,
+            #             spare_part_count=spare_part_count,
+            #             count_shipment=spare_part_count.amount,
+            #             shipment_dt=datetime.datetime.now(),
+            #             comment=comment,
+            #             is_auto_comment=True,
+            #         )
+            #
+            #     spare_part_count.save()
+            #
+            # #
+            # except SparePartCount.DoesNotExist:
+            #     # Если записи не существует, создаем её
+            #     SparePartCount.objects.create(
+            #         spare_part_id=spare_part_id,
+            #         amount=max(0, -new_quantity)
+            #     )
 
         super().save_model(request, obj, form, change)
 

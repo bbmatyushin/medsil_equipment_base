@@ -38,6 +38,14 @@ def spare_part_supply_post_delete(sender, instance, **kwargs):
                         instance.spare_part)
 
 
+@receiver(post_save, sender=SparePartShipmentM2M)
+def spare_part_quantity_post_save(sender, instance, created, **kwargs):
+    if created:
+        if instance.quantity > 0:
+            part_name = instance.spare_part.name
+            #TODO: доделать
+
+
 @receiver(post_save, sender=SparePartShipment)
 def spare_part_shipment_post_save(sender, instance, created, **kwargs):
     if created:

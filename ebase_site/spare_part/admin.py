@@ -3,8 +3,10 @@ from datetime import datetime
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.db.models import Sum
+from django.db.models import Sum, Prefetch
 from ebase.admin import MainAdmin
+from ebase.models import Service, EquipmentAccDepartment
+# from ebase_site.ebase.models import Service, EquipmentAccDepartment
 
 from .models import *
 from .forms import *
@@ -152,6 +154,17 @@ class SparePartShipmentM2MInline(admin.TabularInline):
         qs = super().get_queryset(request)
         return qs.select_related('spare_part', 'shipment',)
 
+    @admin.display(description="срок годности")
+    def part_with_expiration(self, obj):
+        """Запчасть со сроком годности"""
+        pass
+        return obj.quantity
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "spare_part":
+            kwargs["queryset"] = SparePart.objects.select_related("unit")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(SparePartShipmentV2)
 class SparePartShipmentV2Admin(admin.ModelAdmin):
@@ -197,13 +210,13 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
         return equipment
 
-
-
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # оптимизация: подгружаем связанные объекты и инлайн-запчасти
-        return qs.select_related("user", "service") \
-            .prefetch_related("shipment_m2m__spare_part__unit",)
+        return qs.select_related(
+            "user",
+            "service__equipment_accounting__equipment", # Добавляем связи для департаментов
+        ).prefetch_related("spare_part", "service")
 
     def get_changeform_initial_data(self, request):
         """Устанавливает начальные значения при открытии формы"""
@@ -211,6 +224,12 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             'user': request.user,
             "shipment_dt": datetime.now(),
         }
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "service":
+            kwargs["queryset"] = Service.objects \
+                .select_related("service_type", "equipment_accounting__equipment", "user")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(SparePartShipment)
