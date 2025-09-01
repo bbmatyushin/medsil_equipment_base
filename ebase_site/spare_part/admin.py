@@ -158,12 +158,19 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
     form = SparePartShipmentV2Form
     inlines = [SparePartShipmentM2MInline,]
 
-    list_display = ("doc_num", "shipment_dt", "user_name")
+    list_display = ("doc_num", "shipment_dt", "client_shipment", "service_equipment", "user_name")
+    readonly_fields = ("client_shipment",)
+    search_fields = ("service__equipment_accounting__equipment__short_name",
+                     "service__equipment_accounting__equipment_acc_department_equipment_accounting__department__name")
+    search_help_text = "Поиск по клиенту или названию оборудования"
 
     fieldsets = (
         (
             "ИНФОРМАЦИЯ ПО ОТГРУЗКЕ", {
-                "fields": (("doc_num", "shipment_dt",), "service", "comment", "user",)
+                "fields": (("doc_num", "shipment_dt",),
+                           ("service",
+                            "client_shipment"),
+                           "comment", "user",)
             },
         ),
     )
@@ -171,6 +178,26 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
     @admin.display(description="Создал")
     def user_name(self, obj):
         return obj.user if obj.user else "-"
+
+    @admin.display(description="Клиент")
+    def client_shipment(self, obj):
+        client = "--"
+        if obj.service:
+            client = obj.service.equipment_accounting \
+                .equipment_acc_department_equipment_accounting \
+                .values_list("department__name", flat=True)[0]
+
+        return client
+
+    @admin.display(description="Оборудование")
+    def service_equipment(self, obj):
+        equipment = "--"
+        if obj.service:
+            equipment = obj.service.equipment_accounting.equipment.short_name
+
+        return equipment
+
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
