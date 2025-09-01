@@ -129,10 +129,11 @@ class SparePartCount(SparePartAbs):
 
 class SparePartShipmentM2M(models.Model):
     spare_part = models.ForeignKey("spare_part.SparePart", on_delete=models.CASCADE,
-                                   related_name="spare_part_m2m")
+                                   related_name="spare_part_m2m", verbose_name="Запчасть")
     shipment = models.ForeignKey("spare_part.SparePartShipmentV2", on_delete=models.CASCADE,
-                                   related_name="shipment_m2m")
-    quantity = models.PositiveIntegerField(help_text="Количество отгружаемых единиц товара")
+                                 related_name="shipment_m2m")
+    quantity = models.PositiveIntegerField(help_text="Количество отгружаемых единиц товара",
+                                           verbose_name="Кол-во")
     create_dt = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -313,6 +314,7 @@ class SparePartSupply(SparePartAbs):
 
     def __repr__(self):
         return f"<SparePartSupply: {self.spare_part=!r}, {self.count_supply=!r}>"
+
 
 class SparePartPhoto(SparePartAbs):
     """Набор фото связанных с запчастями"""
