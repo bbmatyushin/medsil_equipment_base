@@ -86,7 +86,7 @@ class SparePartCount(SparePartAbs):
     amount = models.FloatField(
         verbose_name='Количество', db_comment='Кол-во запчастей',
         help_text='Кол-во запчастей. Заполняется автоматически',
-        validators=[MinValueValidator(0)], null=False, blank=False,
+        # validators=[MinValueValidator(0)], null=False, blank=False,
     )
     expiration_dt = models.DateField(
         null=True, blank=True, verbose_name='Годен до',

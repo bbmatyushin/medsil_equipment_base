@@ -324,7 +324,7 @@ class SparePartsManager {
                 <strong>${sparePartData.name}</strong>
             </div>
             <div style="margin-right: 10px;">
-                Доступно: <span class="available-qty">${Math.max(0, availableQty - currentQty + originalQty)}</span> шт.
+                Доступно: <span class="available-qty">${(availableQty - currentQty + originalQty).toFixed(1)}</span> шт.
             </div>
             <div style="margin-right: 10px;">
                 <label for="qty-${uniqueKey}">Количество:</label>
