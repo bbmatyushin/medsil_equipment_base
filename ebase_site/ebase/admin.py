@@ -126,7 +126,7 @@ class EquipmentAdmin(MainAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request) \
-            .select_related('med_direction', 'manufacturer', 'supplier', "equipment_accounting_equipment") \
+            .select_related('med_direction', 'manufacturer', 'supplier',) \
             .prefetch_related('spare_part')
 
     @admin.display(description='Направление')
