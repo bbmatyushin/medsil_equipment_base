@@ -345,13 +345,13 @@ class SparePartsManager {
         const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
 
         qtyInput.addEventListener('change', (e) => {
-            const newQty = parseInt(e.target.value) || 0;
+            const newQty = parseFloat(e.target.value) || 0;
             this.currentQuantities.set(uniqueKey, newQty);
             this.updateAvailableDisplay(uniqueKey);
         });
 
         qtyInput.addEventListener('input', (e) => {
-            const newQty = parseInt(e.target.value) || 0;
+            const newQty = parseFloat(e.target.value) || 0;
             this.currentQuantities.set(uniqueKey, newQty);
             this.updateAvailableDisplay(uniqueKey);
         });
