@@ -353,7 +353,7 @@ class ServicePhotosInline(admin.StackedInline):
 class ServiceAdmin(MainAdmin):
     actions = ('create_service_akt_by_action',)
     add_form_template = 'ebase/admin/service_change_form.html'
-    # autocomplete_fields = ('equipment_accounting',)
+    autocomplete_fields = ('equipment_accounting',)
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
     inlines = (ServicePhotosInline, )
@@ -648,6 +648,7 @@ class ServiceAdmin(MainAdmin):
 
         spare_parts_data = []
         spare_part_count_data = []  # для хранения сколько использовалось запчастей в ремонет в моедли Service
+        spare_part_count_json = {}
 
         # Извлекаем данные из POST параметров
         for key, value in request.POST.items():
@@ -657,8 +658,8 @@ class ServiceAdmin(MainAdmin):
                     spare_parts_data.append(data)
                 except json.JSONDecodeError:
                     continue
-            else:
-                obj.spare_part_count = {}
+            # else:
+            #     obj.spare_part_count = {}
 
         # Обновляем количества запчастей
         for spare_part_info in spare_parts_data:
@@ -666,50 +667,65 @@ class ServiceAdmin(MainAdmin):
             new_quantity = spare_part_info['quantity']
             original_quantity = spare_part_info['originalQuantity']
             expiration_dt = spare_part_info['expiration_dt']
+            if spare_part_id in spare_part_count_json:
+                spare_part_count_json[spare_part_id] \
+                    .extend([{"expiration_dt": expiration_dt, "service_part_count": new_quantity}])
+            else:
+                spare_part_count_json[spare_part_id] = \
+                    [{"expiration_dt": expiration_dt, "service_part_count": new_quantity}]
 
-            spare_part_count_data.append({"expiration_dt": expiration_dt, "service_part_count": new_quantity})
-            obj.spare_part_count[spare_part_id] = spare_part_count_data
+            # spare_part_count_data.append({"expiration_dt": expiration_dt, "service_part_count": new_quantity})
+            # spare_part_count_json[spare_part_id] = spare_part_count_data
+            # obj.spare_part_count[spare_part_id] = spare_part_count_data
 
             #TODO: включить, если нужно обновлять общее количество в модели SparePartCount
-            # try:
-            #     spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
-            #
-            #     # Рассчитываем изменение
-            #     quantity_change = new_quantity - original_quantity
-            #
-            #     # Обновляем доступное количество
-            #     spare_part_count.amount -= quantity_change
-            #     spare_part_count.amount = max(0, spare_part_count.amount)
-            #
-            #     # Добавляем комментарий к отгрузке
-            #     comment = (f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
-            #                f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
-            #                f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
-            #                f"(s/n {obj.equipment_accounting.serial_number.upper()})")
-            #     try:
-            #         spare_part_shipment = SparePartShipment.objects.get(spare_part_count=spare_part_count)
-            #         spare_part_shipment.comment = comment
-            #         spare_part_shipment.save()
-            #     except SparePartShipment.DoesNotExist:
-            #         SparePartShipment.objects.create(
-            #             user=request.user,
-            #             spare_part_count=spare_part_count,
-            #             count_shipment=spare_part_count.amount,
-            #             shipment_dt=datetime.datetime.now(),
-            #             comment=comment,
-            #             is_auto_comment=True,
-            #         )
-            #
-            #     spare_part_count.save()
-            #
-            # #
-            # except SparePartCount.DoesNotExist:
-            #     # Если записи не существует, создаем её
-            #     SparePartCount.objects.create(
-            #         spare_part_id=spare_part_id,
-            #         amount=max(0, -new_quantity)
-            #     )
+            try:
+                spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
 
+                # Рассчитываем изменение
+                quantity_change = new_quantity - original_quantity
+
+                # Обновляем доступное количество
+                spare_part_count.amount -= quantity_change
+                # spare_part_count.amount = max(0, spare_part_count.amount)
+
+                # Добавляем комментарий к отгрузке
+                comment = (f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
+                           f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
+                           f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
+                           f"(s/n {obj.equipment_accounting.serial_number.upper()})")
+
+                try:
+                    spare_part_shipment = SparePartShipment.objects.get(spare_part_count=spare_part_count)
+                    spare_part_shipment.comment = comment
+                    spare_part_shipment.is_auto_comment = True
+                    spare_part_shipment.save()
+                except SparePartShipment.DoesNotExist:
+                    SparePartShipment.objects.create(
+                        user=request.user,
+                        spare_part_count=spare_part_count,
+                        count_shipment=spare_part_count.amount,
+                        shipment_dt=datetime.datetime.now(),
+                        comment=comment,
+                        is_auto_comment=True,
+                    )
+                except Exception as e:
+                    spare_part_shipment = SparePartShipment.objects.filter(spare_part_count=spare_part_count)
+                    for ship in spare_part_shipment:
+                        ship.comment = comment
+                        ship.is_auto_comment = True
+                        ship.save()
+
+                spare_part_count.save()
+
+            except SparePartCount.DoesNotExist:
+                # Если записи не существует, создаем её
+                SparePartCount.objects.create(
+                    spare_part_id=spare_part_id,
+                    amount=max(0, -new_quantity)
+                )
+
+        obj.spare_part_count = spare_part_count_json
         super().save_model(request, obj, form, change)
 
         #TODO: включить, если нужно учитывать количество запчастей из SparePartCount

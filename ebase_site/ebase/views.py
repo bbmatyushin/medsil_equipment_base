@@ -28,7 +28,7 @@ class IndexRedirectView(RedirectView):
     url = 'admin/'
 
 
-def get_service_part_count(spare_part_count_info: Optional[dict], part: dict) -> int:
+def get_service_part_count(spare_part_count_info: Optional[list], part: dict) -> int:
     """Получаем количество запчестей используемых в ремонте
     для определенного срока годности"""
     if spare_part_count_info:
@@ -60,7 +60,7 @@ def get_spare_part_quantity(request, service_id,  spare_part_id):
         if service_id != "null":
             service = Service.objects.get(pk=service_id)
             # информация о том склолько уже было использованна данной запчасти в ремонте
-            spare_part_count_info = service.spare_part_count.get(str(spare_part_id))
+            spare_part_count_info: list = service.spare_part_count.get(str(spare_part_id))
 
         if not part_count:  # заглушка на случай, если запчасть не ставили на приход
             part_count = [{"total_amount": 0, "expiration_dt": None}]
