@@ -352,7 +352,7 @@ class ServicePhotosInline(admin.StackedInline):
 @admin.register(Service)
 class ServiceAdmin(MainAdmin):
     actions = ('create_service_akt_by_action',)
-    add_form_template = 'ebase/admin/service_change_form.html'
+    # add_form_template = 'ebase/admin/service_change_form.html'
     autocomplete_fields = ('equipment_accounting',)
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
@@ -385,6 +385,12 @@ class ServiceAdmin(MainAdmin):
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
         ('Документы по ремонту', {'fields': ('accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
+
+    class Media:
+        css = {
+            "all": ("ebase/admin/css/custom_form.css",)
+        }
+        js = ("ebase/js/scripts.js", "ebase/js/part_to_service_grok.js",)
 
     def get_queryset(self, request):
         # Максимально оптимизированный queryset с предзагрузкой всех необходимых связей
