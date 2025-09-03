@@ -8,6 +8,11 @@ urlpatterns = [
         views.get_spare_part_quantity,
         name="get_spare_part_quantity",
     ),
+    path(
+        "get_equipment_id_by_name/<str:equipment_full_name>/",
+        views.get_equipment_id_by_name,
+        name="get_equipment_id_by_name"
+    )
     # path('admin/get-spare-part-quantity/<uuid:service_id>/<uuid:spare_part_id>/',
     #      views.get_spare_part_quantity,
     #      name="get_spare_part_quantity"),
