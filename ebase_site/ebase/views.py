@@ -11,7 +11,7 @@ from django.views.generic.base import RedirectView
 
 from typing import Optional
 
-from .models import Service
+from .models import Service, Equipment
 from spare_part.models import SparePartCount, SparePart
 
 
@@ -81,3 +81,21 @@ def get_spare_part_quantity(request, service_id,  spare_part_id):
         return JsonResponse({
             "error": str(e)
         }, status=500)
+
+
+@staff_member_required
+def get_equipment_id_by_name(request, equipment_full_name: str):
+    """Возвращаем id оборудование по его названию.
+    Запрос на эту вьюшку приходит от JS (scripts.js)
+
+    :param equipment_full_name - Полное название оборудования + серийный номер.
+                                Пример Анализатор глюкозы Biosen C_Line Sport [5212-05-0067]
+    """
+
+    try:
+        equipment_full_name = equipment_full_name.split("[")[0].strip()
+        equipment = Equipment.objects.get(full_name=equipment_full_name)
+        return JsonResponse({"id": equipment.pk})
+    except Equipment.DoesNotExist:
+        return JsonResponse({"id": None})
+

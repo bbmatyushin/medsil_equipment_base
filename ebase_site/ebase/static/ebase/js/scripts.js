@@ -1,4 +1,20 @@
+function removeQueryParam(paramName) {
+    // Получаем текущий URL
+    const url = new URL(window.location.href);
+
+    // Удаляем указанный параметр из строки запроса
+    url.searchParams.delete(paramName);
+
+    // Обновляем URL без перезагрузки страницы
+    history.replaceState({}, '', url);
+}
+
+
 document.addEventListener("DOMContentLoaded", function () {
+    // Вызов функции для удаления параметра 'eq_acc'
+//    removeQueryParam('eq_select');
+    let currentEqSelectValue = null;
+
     // Сначала ждём появления самого span
     const observerForSpan = new MutationObserver(() => {
         const spanEl = document.getElementById("select2-id_equipment_accounting-container");
@@ -13,9 +29,21 @@ document.addEventListener("DOMContentLoaded", function () {
                         console.log("Изменение текста:", newText);
 
                         // 👉 здесь можно делать fetch к Django и менять URL
-                        // fetch(`/get_equipment_id/?name=${encodeURIComponent(newText)}`)
-                        //   .then(r => r.json())
-                        //   .then(data => console.log("ID с backend:", data.id));
+                        if (newText && newText !== currentEqSelectValue) {
+                        currentEqSelectValue = newText;
+                        fetch(`/get_equipment_id_by_name/${encodeURIComponent(newText)}`)
+                           .then(r => r.json())
+                           .then(data => {
+                                if (data.id) {
+
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set("eq_select", data.id);
+                                    window.location.href = url.toString();
+                                } else {
+                                    console.log("ID для оборудования не найдено");
+                                }
+                           })
+                        }
                     }
                 });
             });

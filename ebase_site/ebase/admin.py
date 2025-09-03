@@ -390,7 +390,8 @@ class ServiceAdmin(MainAdmin):
         css = {
             "all": ("ebase/admin/css/custom_form.css",)
         }
-        js = ("ebase/js/scripts.js", "ebase/js/part_to_service_grok.js",)
+        # js = ("ebase/js/scripts.js", "ebase/js/part_to_service_grok.js",)
+        js = ("ebase/js/part_to_service_grok.js",)
 
     def get_queryset(self, request):
         # Максимально оптимизированный queryset с предзагрузкой всех необходимых связей
@@ -553,6 +554,14 @@ class ServiceAdmin(MainAdmin):
                                   message=f"{start_msg_text} сформирован для "
                                           f"{create_akt[0]} (s/n {create_akt[1]})")
         return super().get_form(request, obj=None, change=False, **kwargs)
+    
+    def get_changeform_initial_data(self, request):
+        """использовалось для отработки подставления значений оборудования при фильтрации
+        через JavaScript"""
+        initial = super().get_changeform_initial_data(request)
+        # eq_acc = EquipmentAccounting.objects.first()
+        # initial["equipment_accounting"] = eq_acc
+        return initial
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
