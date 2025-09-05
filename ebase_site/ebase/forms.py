@@ -7,6 +7,23 @@ from spare_part.models import SparePart
 from directory.models import MedDirection
 
 
+class ButtonWidget(forms.Widget):
+    def render(self, name, value, attrs=None, renderer=None):
+        return f'''
+        <button type="button" 
+                id="{attrs.get('id')}" 
+                style="padding: 8px 12px; background: #205067; color: white; border: none; border-radius: 4px;">
+            {value or 'Поиск'}
+        </button>
+        '''
+
+
+def get_equipment_for_form() -> tuple:
+    """Вернет картеж для поля формы ChoiceField"""
+    qs = Equipment.objects.values_list("pk", "full_name",)
+    return qs
+
+
 class EquipmentAccountingForm(forms.ModelForm):
     class Meta:
         model = EquipmentAccounting
@@ -20,3 +37,20 @@ class EquipmentAccountingForm(forms.ModelForm):
             }),
         }
 
+
+class ServiceForm(forms.ModelForm):
+    search_equipment = forms.CharField(
+        required=False,
+        label="Поиск оборудования",
+        help_text="Поиск по названию или серийному номеру",
+        empty_value=""
+    )
+    search_button = forms.CharField(
+        required=False,
+        widget=ButtonWidget,
+        label=''
+    )
+
+    class Meta:
+        model = Service
+        fields = "__all__"

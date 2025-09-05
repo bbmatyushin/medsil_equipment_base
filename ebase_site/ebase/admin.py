@@ -7,6 +7,8 @@ from typing import Optional
 
 from django.utils.safestring import mark_safe
 from django.db.models import Prefetch
+from django.urls import path
+from django.http import JsonResponse
 
 from spare_part.models import SparePart, SparePartCount, SparePartShipment
 from directory.models import Position
@@ -354,6 +356,7 @@ class ServiceAdmin(MainAdmin):
     actions = ('create_service_akt_by_action',)
     # add_form_template = 'ebase/admin/service_change_form.html'
     autocomplete_fields = ('equipment_accounting',)
+    form = ServiceForm
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
     inlines = (ServicePhotosInline, )
@@ -373,7 +376,8 @@ class ServiceAdmin(MainAdmin):
     fieldsets = (
         (
             'Данные на оборудование', {'fields':
-                                           ('equipment_accounting', 'service_type', 'spare_part', )
+                                           (("search_equipment", "search_button",),
+                                            'equipment_accounting', 'service_type', 'spare_part', )
                                        }
         ),
         (
@@ -414,7 +418,7 @@ class ServiceAdmin(MainAdmin):
             Prefetch(
                 "service_photos",
                 queryset=ServicePhotos.objects.all()
-            )
+            ),
         )
 
     @admin.display(description='Содержание работ')
@@ -578,7 +582,7 @@ class ServiceAdmin(MainAdmin):
 
             # Для страницы добавления новой записи
             if re.search(r'\/service\/add\/', request.path):
-                eq_id = request.GET.getlist('eq_select')
+                eq_id = request.GET.getlist('equipment_id')
                 if eq_id:
                     # Предзагружаем все необходимые связи для оборудования
                     kwargs["queryset"] = EquipmentAccounting.objects.filter(

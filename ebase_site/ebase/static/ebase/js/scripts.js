@@ -1,93 +1,38 @@
-function removeQueryParam(paramName) {
-    // Получаем текущий URL
-    const url = new URL(window.location.href);
+document.addEventListener('DOMContentLoaded', () => {
+    const $ = django.jQuery;
+    const $accountingField = $('#id_equipment_accounting');
 
-    // Удаляем указанный параметр из строки запроса
-    url.searchParams.delete(paramName);
+    $accountingField.on('select2:select', function (e) {
+                const selectedId = e.params.data.id;  // UUID выбранного EquipmentAccounting
 
-    // Обновляем URL без перезагрузки страницы
-    history.replaceState({}, '', url);
-}
+                console.log(selectedId);
 
+                // AJAX-запрос к кастомному эндпоинту
+                $.getJSON(
+                    '{% url "admin:get_equipment_id_by_accounting" pk="PLACEHOLDER" %}'.replace('PLACEHOLDER', selectedId),
+                    function (data) {
+                        if (data.equipment_id) {
+                            // Формируем новый URL с get-параметром
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('equipment_id', data.equipment_id);
 
-document.addEventListener("DOMContentLoaded", function () {
-    // Вызов функции для удаления параметра 'eq_acc'
-//    removeQueryParam('eq_select');
-    let currentEqSelectValue = null;
+                            // Обновляем URL без перезагрузки
+                            window.history.pushState({}, '', url);
 
-    // Сначала ждём появления самого span
-    const observerForSpan = new MutationObserver(() => {
-        const spanEl = document.getElementById("select2-id_equipment_accounting-container");
-        if (spanEl) {
-            console.log("Нашли span:", spanEl);
-
-            // Создаём постоянный наблюдатель для текста
-            const observerForText = new MutationObserver(mutations => {
-                mutations.forEach(mutation => {
-                    if (mutation.type === "childList" || mutation.type === "characterData") {
-                        const newText = spanEl.textContent.trim();
-                        console.log("Изменение текста:", newText);
-
-                        // 👉 здесь можно делать fetch к Django и менять URL
-                        if (newText && newText !== currentEqSelectValue) {
-                        currentEqSelectValue = newText;
-                        fetch(`/get_equipment_id_by_name/${encodeURIComponent(newText)}`)
-                           .then(r => r.json())
-                           .then(data => {
-                                if (data.id) {
-
-                                    const url = new URL(window.location.href);
-                                    url.searchParams.set("eq_select", data.id);
-                                    window.location.href = url.toString();
-                                } else {
-                                    console.log("ID для оборудования не найдено");
-                                }
-                           })
+                            console.log('URL обновлён:', url.toString());
                         }
                     }
+                ).fail(function () {
+                    console.error('Ошибка при получении equipment_id');
                 });
             });
 
-            observerForText.observe(spanEl, {
-                childList: true,
-                characterData: true,
-                subtree: true
-            });
-
-            // Этот отключаем, чтобы не искал span повторно
-            observerForSpan.disconnect();
-        }
-    });
-
-    observerForSpan.observe(document.body, { childList: true, subtree: true });
 });
-
-
-
-
-            // Отправляем fetch-запрос к Django
-//            fetch(`/get_equipment_id/?name=${encodeURIComponent(selectedText)}`)
-//                .then(response => response.json())
-//                .then(data => {
-//                    if (data.id) {
-//                        // Обновляем URL с новым GET параметром
-//                        const url = new URL(window.location.href);
-//                        url.searchParams.set("equipment_id", data.id);
-//                        window.location.href = url.toString();
-//                    }
-//                })
-//                .catch(error => {
-//                    console.error("Ошибка при запросе:", error);
-//                });
-//        });
-//    }
-//});
-
 
 
 // Возвращает Get-запрос с id оборудования
 //document.addEventListener('DOMContentLoaded', () => {
-//    const eqSelectList = document.getElementById('eqSelectList');
+//    const eqSelectList = document.getElementById('id_search_equipment');
 //
 //    if (eqSelectList) {
 //        eqSelectList.addEventListener('change', function() {
