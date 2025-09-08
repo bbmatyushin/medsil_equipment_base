@@ -12,7 +12,7 @@ class ButtonWidget(forms.Widget):
         return f'''
         <button type="button" 
                 id="{attrs.get('id')}" 
-                style="padding: 8px 12px; background: #205067; color: white; border: none; border-radius: 4px;">
+                class="search-equipment-button">
             {value or 'Поиск'}
         </button>
         '''
@@ -48,7 +48,7 @@ class ServiceForm(forms.ModelForm):
     search_button = forms.CharField(
         required=False,
         widget=ButtonWidget,
-        label=''
+        label='',  # ширину поля для label задаем в custom_form.css стр.126
     )
 
     class Meta:

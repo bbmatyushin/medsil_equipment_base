@@ -6,7 +6,7 @@ import time
 from typing import Optional
 
 from django.utils.safestring import mark_safe
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from django.urls import path
 from django.http import JsonResponse
 
@@ -355,7 +355,7 @@ class ServicePhotosInline(admin.StackedInline):
 class ServiceAdmin(MainAdmin):
     actions = ('create_service_akt_by_action',)
     # add_form_template = 'ebase/admin/service_change_form.html'
-    autocomplete_fields = ('equipment_accounting',)
+    # autocomplete_fields = ('equipment_accounting',)
     form = ServiceForm
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
@@ -394,8 +394,10 @@ class ServiceAdmin(MainAdmin):
         css = {
             "all": ("ebase/admin/css/custom_form.css",)
         }
-        # js = ("ebase/js/scripts.js", "ebase/js/part_to_service_grok.js",)
-        js = ("ebase/js/part_to_service_grok.js",)
+        js = (
+            "ebase/js/part_to_service_grok.js",
+            "ebase/js/scripts.js",
+        )
 
     def get_queryset(self, request):
         # Максимально оптимизированный queryset с предзагрузкой всех необходимых связей
@@ -585,26 +587,29 @@ class ServiceAdmin(MainAdmin):
                 eq_id = request.GET.getlist('equipment_id')
                 if eq_id:
                     # Предзагружаем все необходимые связи для оборудования
-                    kwargs["queryset"] = EquipmentAccounting.objects.filter(
-                        equipment__id__in=eq_id
-                    ).select_related(
-                        "equipment",
-                        "equipment__manufacturer",
-                        "equipment__supplier",
-                        "equipment__med_direction",
-                        "equipment_status",
-                        "user"
-                    ).prefetch_related(
-                        Prefetch(
-                            'equipment_acc_department_equipment_accounting',
-                            queryset=EquipmentAccDepartment.objects.select_related(
-                                'department',
-                                'department__client',
-                                'department__city',
-                                'engineer'
-                            )
+                    eq_acc_queryset: QuerySet = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
+                else:
+                    eq_acc_queryset: QuerySet = EquipmentAccounting.objects.all()
+
+                kwargs["queryset"] = eq_acc_queryset \
+                    .select_related(
+                    "equipment",
+                    "equipment__manufacturer",
+                    "equipment__supplier",
+                    "equipment__med_direction",
+                    "equipment_status",
+                    "user"
+                ).prefetch_related(
+                    Prefetch(
+                        'equipment_acc_department_equipment_accounting',
+                        queryset=EquipmentAccDepartment.objects.select_related(
+                            'department',
+                            'department__client',
+                            'department__city',
+                            'engineer'
                         )
                     )
+                )
 
             # Для страницы изменения записи - ограничиваем queryset только текущим оборудованием
             elif re.search(r'\/service\/.*\/change\/', request.path):
