@@ -12,13 +12,19 @@ aktSpan.style.padding = '0px 7px 4px 4px';
 acceptFromAktSpan.style.padding = '0px 7px 4px 4px';
 
 var acceptAktButton = document.getElementById('accept-akt-create-btn');
- acceptAktButton.onclick = () => createAkt('acceptInAkt');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
+if (acceptAktButton) {
+    acceptAktButton.onclick = () => createAkt('acceptInAkt');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
+ }
 
 var acceptAktButton = document.getElementById('accept-akt-from-create-btn');
- acceptAktButton.onclick = () => createAkt('acceptFromAkt');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
+if (acceptAktButton) {
+    acceptAktButton.onclick = () => createAkt('acceptFromAkt');  // () => нужно, чтобы не вызывалась сразу при загрузке страницы
+}
 
 var aktButton = document.getElementById('akt-create-btn');
-aktButton.onclick = () => createAkt('serviceAkt');
+if (aktButton) {
+    aktButton.onclick = () => createAkt('serviceAkt');
+}
 
 const searchBtn = document.getElementById("id_search_button");
 
