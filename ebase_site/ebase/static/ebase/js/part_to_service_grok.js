@@ -21,6 +21,7 @@ class SparePartsManager {
     }
 
     async setup() {
+        await this.waitForElement('#id_spare_part_to');
         this.sparePartSelect = document.getElementById('id_spare_part_to');
 
         if (!this.sparePartSelect) {
@@ -32,6 +33,29 @@ class SparePartsManager {
         await this.loadInitialData();
         this.setupEventListeners();
         await this.updateCustomBlock();
+    }
+
+    waitForElement(selector, timeout = 5000) {
+    // Чтобы дождаться полной инициализации filter_horizontal
+        return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+
+            const checkElement = () => {
+                const element = document.querySelector(selector);
+                if (element) {
+                    console.log(`✅ Element ${selector} found after ${Date.now() - startTime}ms`);
+                    resolve(element);
+                } else if (Date.now() - startTime > timeout) {
+                    console.error(`❌ Timeout: Element ${selector} not found after ${timeout}ms`);
+                    reject(new Error(`Element ${selector} not found`));
+                } else {
+                    // Проверяем снова через 100ms
+                    setTimeout(checkElement, 100);
+                }
+            };
+
+            checkElement();
+        });
     }
 
     createCustomBlock() {

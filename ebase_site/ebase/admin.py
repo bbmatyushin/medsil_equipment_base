@@ -587,8 +587,20 @@ class ServiceAdmin(MainAdmin):
         """использовалось для отработки подставления значений оборудования при фильтрации
         через JavaScript"""
         initial = super().get_changeform_initial_data(request)
-        # eq_acc = EquipmentAccounting.objects.first()
-        # initial["equipment_accounting"] = eq_acc
+        eq_acc_id = request.GET.get("choice_eq_acc")  # выбранное оборудование из таблицы учета
+        eq_search = request.GET.get("search_equipment_form")  # из поля поиска
+
+        if eq_acc_id:
+            try:
+                eq_acc = EquipmentAccounting.objects.get(pk=eq_acc_id)
+                initial["equipment_accounting"] = eq_acc
+            except EquipmentAccounting.DoesNotExists as e:
+                logger.warning(f"get_changeform_initial_data: {e}")
+        elif eq_search:
+            eq_acc: QuerySet = self.get_equipment_ids(search_str=eq_search)
+            if len(eq_acc) == 1:  # если нашелся один, то сразу его подставляем
+                initial["equipment_accounting"] = eq_acc.first()
+
         return initial
 
     def changelist_view(self, request, extra_context=None):
@@ -602,7 +614,9 @@ class ServiceAdmin(MainAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Формируем список оборудования в формах с серийными номера на основе
             id полученного из get-запроса"""
-        eq_search, eq_acc = request.GET.get("search_equipment_form"), None
+        eq_acc = None
+        eq_search = request.GET.get("search_equipment_form")
+
         if eq_search:  # по GET параметру получаем список id оборудований
             eq_acc: QuerySet = self.get_equipment_ids(search_str=eq_search)
 
@@ -665,12 +679,18 @@ class ServiceAdmin(MainAdmin):
         """Оптимизированный метод для ManyToMany полей
         Формируем список запчастей для оборудования на основе
         полученного значения из get-запроса"""
-        eq_search, eq_ids = request.GET.get("search_equipment_form"), None
+        eq_ids = None
+        eq_search = request.GET.get("search_equipment_form")
+        eq_acc_id = request.GET.get("choice_eq_acc")  # выбранное оборудование из таблицы учета
 
         if db_field.name == 'spare_part':
             # Для страницы добавления
             if re.search(r'\/service\/add\/', request.path):
-                if eq_search:  # по GET параметру получаем список id оборудований
+                if eq_acc_id:
+                    eq_ids = EquipmentAccounting.objects \
+                        .filter(pk=eq_acc_id) \
+                        .values_list("equipment__pk", flat=True)
+                elif eq_search:  # по GET параметру получаем список id оборудований
                     eq_acc = self.get_equipment_ids(search_str=eq_search)
                     eq_ids: QuerySet = eq_acc.values_list("equipment__pk", flat=True)
 
