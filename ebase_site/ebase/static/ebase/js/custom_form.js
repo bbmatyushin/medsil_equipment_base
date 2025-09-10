@@ -20,6 +20,8 @@ var acceptAktButton = document.getElementById('accept-akt-from-create-btn');
 var aktButton = document.getElementById('akt-create-btn');
 aktButton.onclick = () => createAkt('serviceAkt');
 
+const searchBtn = document.getElementById("id_search_button");
+
 // Удаляем akt=create из get-параметров, чтобы лишний раз не вызывать метод создания акта в Django 
 if (url.searchParams.has('akt')) {
 	url.searchParams.delete('akt');
