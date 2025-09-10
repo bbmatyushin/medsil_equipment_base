@@ -375,10 +375,7 @@ class ServiceAdmin(MainAdmin):
 
     fieldsets = (
         (
-            'Данные на оборудование', {'fields':
-                                           (("search_equipment", "search_button",),
-                                            'equipment_accounting', 'service_type', 'spare_part', )
-                                       }
+            'Данные на оборудование', {'fields': ()}  # задается через get_fieldsets
         ),
         (
             'Описание работ', {
@@ -534,6 +531,31 @@ class ServiceAdmin(MainAdmin):
 
         self.message_user(request, message=msg)
 
+    @staticmethod
+    def get_equipment_ids(search_str: str) -> QuerySet:
+        """Получаем список из id оборудований в названии или серийный номер, которых
+        совпадает с search_str
+
+        :param search_str - значение параметра search_equipment_form"""
+        eq_acc = \
+            EquipmentAccounting.objects \
+                .filter(Q(equipment__short_name__icontains=search_str) |
+                        Q(equipment__short_name__icontains=search_str) |
+                        Q(serial_number__icontains=search_str)) \
+                .distinct()
+
+        return eq_acc
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets: tuple = super().get_fieldsets(request, obj)
+        if obj is not None:  # для страницы редактирования убираем поля для поиска оборудования
+            fieldsets[0][1]['fields'] = ('equipment_accounting', 'service_type', 'spare_part')
+        else:
+            fieldsets[0][1]['fields'] = (("search_equipment", "search_button",),
+                                         'equipment_accounting', 'service_type', 'spare_part')
+
+        return fieldsets
+
     def get_form(self, request, obj=None, change=False, **kwargs):
         """В карточке по ремонту есть кнопка по созданию акта. Чтобы отследить её
         нажатие, через JS в GET передается параметр akt со значенем serviceAkt или
@@ -580,14 +602,18 @@ class ServiceAdmin(MainAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Формируем список оборудования в формах с серийными номера на основе
             id полученного из get-запроса"""
-        if db_field.name == 'equipment_accounting':
+        eq_search, eq_acc = request.GET.get("search_equipment_form"), None
+        if eq_search:  # по GET параметру получаем список id оборудований
+            eq_acc: QuerySet = self.get_equipment_ids(search_str=eq_search)
 
+        if db_field.name == 'equipment_accounting':
             # Для страницы добавления новой записи
             if re.search(r'\/service\/add\/', request.path):
-                eq_id = request.GET.getlist('equipment_id')
-                if eq_id:
+                if eq_acc:
                     # Предзагружаем все необходимые связи для оборудования
-                    eq_acc_queryset: QuerySet = EquipmentAccounting.objects.filter(equipment__id__in=eq_id)
+                    eq_acc_ids = eq_acc.values_list("pk", flat=True)
+                    eq_acc_queryset: QuerySet = EquipmentAccounting.objects \
+                        .filter(pk__in=eq_acc_ids)
                 else:
                     eq_acc_queryset: QuerySet = EquipmentAccounting.objects.all()
 
@@ -638,28 +664,30 @@ class ServiceAdmin(MainAdmin):
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         """Оптимизированный метод для ManyToMany полей
         Формируем список запчастей для оборудования на основе
-        id полученного из get-запроса"""
-        if db_field.name == 'spare_part':
-            eq_id = []
+        полученного значения из get-запроса"""
+        eq_search, eq_ids = request.GET.get("search_equipment_form"), None
 
+        if db_field.name == 'spare_part':
             # Для страницы добавления
             if re.search(r'\/service\/add\/', request.path):
-                eq_id = request.GET.getlist('eq_select')
+                if eq_search:  # по GET параметру получаем список id оборудований
+                    eq_acc = self.get_equipment_ids(search_str=eq_search)
+                    eq_ids: QuerySet = eq_acc.values_list("equipment__pk", flat=True)
 
-            # Для страницы изменения
+                    # Для страницы изменения
             elif re.search(r'\/service\/.*\/change\/', request.path):
                 try:
                     service_id = request.path.strip().split('/')[-3]
                     service_obj = Service.objects.select_related(
                         'equipment_accounting__equipment'
                     ).get(pk=service_id)
-                    eq_id = [service_obj.equipment_accounting.equipment.pk]
+                    eq_ids = [service_obj.equipment_accounting.equipment.pk]
                 except (Service.DoesNotExist, IndexError, ValueError):
                     pass
 
-            if eq_id:
+            if eq_ids:
                 # Предзагружаем запчасти с их оборудованием
-                kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_id) \
+                kwargs["queryset"] = SparePart.objects.filter(equipment__id__in=eq_ids) \
                     .prefetch_related("equipment", "service",)
 
         return super().formfield_for_manytomany(db_field, request, **kwargs)

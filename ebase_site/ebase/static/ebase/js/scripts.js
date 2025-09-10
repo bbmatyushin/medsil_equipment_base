@@ -26,7 +26,7 @@ django.jQuery(document).ready(function($) {
 
         // Добавляем новый, только если значение не пустое
         if (searchTerm) {
-            url.searchParams.set('search_equipment_form', encodeURIComponent(searchTerm));
+            url.searchParams.set('search_equipment_form', searchTerm);
         }
 
         // Перезагружаем страницу с обновлённым URL
