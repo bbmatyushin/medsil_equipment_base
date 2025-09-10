@@ -2,6 +2,7 @@ from django import forms
 from django.forms.widgets import URLInput
 from django.db.models import Value, CharField, Q
 from django.db.models.functions import Concat
+from django.utils.safestring import mark_safe
 from .models import *
 from spare_part.models import SparePart
 from directory.models import MedDirection
@@ -9,13 +10,13 @@ from directory.models import MedDirection
 
 class ButtonWidget(forms.Widget):
     def render(self, name, value, attrs=None, renderer=None):
-        return f'''
+        return mark_safe(f'''
         <button type="button" 
                 id="{attrs.get('id')}" 
                 class="search-equipment-button">
             {value or 'Поиск'}
         </button>
-        '''
+        ''')
 
 
 def get_equipment_for_form() -> tuple:
