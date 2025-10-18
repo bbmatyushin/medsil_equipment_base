@@ -17,6 +17,9 @@ ebase_site/media/
 pg_medsil_backup/
 gpt/
 .zencoder
+CONVENTIONS.md
+.vscode/
+.pylintrc
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
