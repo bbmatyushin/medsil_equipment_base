@@ -40,10 +40,39 @@ def spare_part_supply_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentM2M)
 def spare_part_quantity_post_save(sender, instance, created, **kwargs):
-    if created:
-        if instance.quantity > 0:
-            part_name = instance.spare_part.name
-            #TODO: доделать
+    if created and instance.quantity > 0:
+        try:
+            # Получаем связанную запчасть и её количество
+            spare_part = instance.spare_part
+            quantity = instance.quantity
+
+            # Находим соответствующую запись в SparePartCount
+            part_count = SparePartCount.objects.get(
+                spare_part=spare_part,
+                expiration_dt=instance.shipment.expiration_dt  # используем дату из отгрузки
+            )
+
+            # Атомарно уменьшаем количество
+            SparePartCount.objects.filter(pk=part_count.pk).update(
+                amount=F('amount') - quantity
+            )
+
+            logger.info(
+                'Updated spare part count after M2M shipment. '
+                'Part: %s, Shipment ID: %s, Quantity: %d',
+                spare_part.name, instance.shipment_id, quantity
+            )
+
+        except SparePartCount.DoesNotExist:
+            logger.error(
+                'SparePartCount not found for part %s and expiration date %s',
+                spare_part.name, instance.shipment.expiration_dt
+            )
+        except Exception as e:
+            logger.exception(
+                'Error updating SparePartCount for M2M shipment: %s',
+                str(e)
+            )
 
 
 @receiver(post_save, sender=SparePartShipment)

@@ -4,13 +4,15 @@ import logging
 import json
 import time
 from typing import Optional
+from datetime import date
 
 from django.utils.safestring import mark_safe
+from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.urls import path
 from django.http import JsonResponse
 
-from spare_part.models import SparePart, SparePartCount, SparePartShipment
+from spare_part.models import SparePart, SparePartCount, SparePartShipment, SparePartShipmentV2, SparePartShipmentM2M
 from directory.models import Position
 from .forms import *
 from .admin_filters import *
@@ -713,92 +715,78 @@ class ServiceAdmin(MainAdmin):
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        if not change:
-            obj.user = request.user
-        elif not obj.pk:
-            obj.user = request.user
+        with transaction.atomic():
+            if not change:
+                obj.user = request.user
+            elif not obj.pk:
+                obj.user = request.user
 
-        spare_parts_data = []
-        spare_part_count_data = []  # для хранения сколько использовалось запчастей в ремонет в моедли Service
-        spare_part_count_json = {}
+            spare_parts_data = []
+            spare_part_count_json = {}
 
-        # Извлекаем данные из POST параметров
-        for key, value in request.POST.items():
-            if key.startswith('spare_part_quantities['):
-                try:
-                    data = json.loads(value)
-                    spare_parts_data.append(data)
-                except json.JSONDecodeError:
-                    continue
-            # else:
-            #     obj.spare_part_count = {}
+            # Извлекаем данные о запчастях из POST
+            for key, value in request.POST.items():
+                if key.startswith('spare_part_quantities['):
+                    try:
+                        data = json.loads(value)
+                        spare_parts_data.append(data)
+                    except json.JSONDecodeError:
+                        continue
 
-        # Обновляем количества запчастей
-        for spare_part_info in spare_parts_data:
-            spare_part_id = spare_part_info['id']
-            new_quantity = spare_part_info['quantity']
-            original_quantity = spare_part_info['originalQuantity']
-            expiration_dt = spare_part_info['expiration_dt']
-            if spare_part_id in spare_part_count_json:
-                spare_part_count_json[spare_part_id] \
-                    .extend([{"expiration_dt": expiration_dt, "service_part_count": new_quantity}])
-            else:
-                spare_part_count_json[spare_part_id] = \
-                    [{"expiration_dt": expiration_dt, "service_part_count": new_quantity}]
+            # Обновляем данные в формате JSON для поля spare_part_count
+            for spare_part_info in spare_parts_data:
+                spare_part_id = spare_part_info['id']
+                new_quantity = spare_part_info['quantity']
+                expiration_dt = spare_part_info['expiration_dt']
 
-            # spare_part_count_data.append({"expiration_dt": expiration_dt, "service_part_count": new_quantity})
-            # spare_part_count_json[spare_part_id] = spare_part_count_data
-            # obj.spare_part_count[spare_part_id] = spare_part_count_data
+                if spare_part_id in spare_part_count_json:
+                    spare_part_count_json[spare_part_id].append({
+                        "expiration_dt": expiration_dt,
+                        "service_part_count": new_quantity
+                    })
+                else:
+                    spare_part_count_json[spare_part_id] = [{
+                        "expiration_dt": expiration_dt,
+                        "service_part_count": new_quantity
+                    }]
 
-            #TODO: включить, если нужно обновлять общее количество в модели SparePartCount
-            try:
-                spare_part_count = SparePartCount.objects.get(spare_part_id=spare_part_id)
+            comment = (
+                f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
+                f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
+                f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
+                f"(s/n {obj.equipment_accounting.serial_number.upper()})"
+            )
 
-                # Рассчитываем изменение
-                quantity_change = new_quantity - original_quantity
+            # Создаем или обновляем запись в SparePartShipmentV2
+            shipment, created = SparePartShipmentV2.objects.get_or_create(
+                service=obj,
+                defualts={
+                    'shipment_dt': obj.beg_dt,
+                    'user': request.user,
+                    'comment': comment,
+                    'is_auto_comment': True,
+                }
+            )
 
-                # Обновляем доступное количество
-                spare_part_count.amount -= quantity_change
-                # spare_part_count.amount = max(0, spare_part_count.amount)
+            # Удаляем старые записи о запчастях
+            shipment.shipment_m2m.all().delete()
 
-                # Добавляем комментарий к отгрузке
-                comment = (f"Отгружено в {obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department.name}\n"
-                           f"Дата проведения работ: {obj.beg_dt.strftime('%d.%m.%Y')}г.\n"
-                           f"Анализатор: {obj.equipment_accounting.equipment.short_name} "
-                           f"(s/n {obj.equipment_accounting.serial_number.upper()})")
+            # Добавляем новые записи о запчастях через промежуточную модель
+            for spare_part_info in spare_parts_data:
+                spare_part_id = spare_part_info['id']
+                quantity = spare_part_info['quantity']
 
-                try:
-                    spare_part_shipment = SparePartShipment.objects.get(spare_part_count=spare_part_count)
-                    spare_part_shipment.comment = comment
-                    spare_part_shipment.is_auto_comment = True
-                    spare_part_shipment.save()
-                except SparePartShipment.DoesNotExist:
-                    SparePartShipment.objects.create(
-                        user=request.user,
-                        spare_part_count=spare_part_count,
-                        count_shipment=spare_part_count.amount,
-                        shipment_dt=datetime.datetime.now(),
-                        comment=comment,
-                        is_auto_comment=True,
-                    )
-                except Exception as e:
-                    spare_part_shipment = SparePartShipment.objects.filter(spare_part_count=spare_part_count)
-                    for ship in spare_part_shipment:
-                        ship.comment = comment
-                        ship.is_auto_comment = True
-                        ship.save()
-
-                spare_part_count.save()
-
-            except SparePartCount.DoesNotExist:
-                # Если записи не существует, создаем её
-                SparePartCount.objects.create(
+                SparePartShipmentM2M.objects.create(
+                    shipment=shipment,
                     spare_part_id=spare_part_id,
-                    amount=max(0, -new_quantity)
+                    quantity=quantity
                 )
 
-        obj.spare_part_count = spare_part_count_json
-        super().save_model(request, obj, form, change)
+            # Сохраняем JSON с информацией о запчастях
+            obj.spare_part_count = spare_part_count_json
+
+            # Вызываем оригинальный метод сохранения
+            super().save_model(request, obj, form, change)
 
         #TODO: включить, если нужно учитывать количество запчастей из SparePartCount
         # def delete_model(self, request, obj):
