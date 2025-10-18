@@ -40,39 +40,35 @@ def spare_part_supply_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentM2M)
 def spare_part_quantity_post_save(sender, instance, created, **kwargs):
+    # Всегда будет created, т.к. в save_model сначала всё удаляется, а потом добавляются новые записи.
     if created and instance.quantity > 0:
-        try:
-            # Получаем связанную запчасть и её количество
-            spare_part = instance.spare_part
-            quantity = instance.quantity
+        # Получаем связанную запчасть и её количество
+        spare_part = instance.spare_part
+        quantity = instance.quantity
+        spare_part_info = instance.shipment.service.spare_part_count.get(str(spare_part.pk))
 
-            # Находим соответствующую запись в SparePartCount
-            part_count = SparePartCount.objects.get(
-                spare_part=spare_part,
-                expiration_dt=instance.shipment.expiration_dt  # используем дату из отгрузки
-            )
+        # Находим соответствующую запись в SparePartCount
+        for item in spare_part_info:
+            try:
+                SparePartCount.objects.filter(
+                    spare_part=spare_part,
+                    expiration_dt=item['expiration_dt']
+                ).update(amount=F('amount') - quantity)
 
-            # Атомарно уменьшаем количество
-            SparePartCount.objects.filter(pk=part_count.pk).update(
-                amount=F('amount') - quantity
-            )
-
-            logger.info(
-                'Updated spare part count after M2M shipment. '
-                'Part: %s, Shipment ID: %s, Quantity: %d',
-                spare_part.name, instance.shipment_id, quantity
-            )
-
-        except SparePartCount.DoesNotExist:
-            logger.error(
-                'SparePartCount not found for part %s and expiration date %s',
-                spare_part.name, instance.shipment.expiration_dt
-            )
-        except Exception as e:
-            logger.exception(
-                'Error updating SparePartCount for M2M shipment: %s',
-                str(e)
-            )
+                logger.info(
+                    'Updated spare part count after M2M shipment. '
+                    'Part: %s, Shipment ID: %s, Quantity: %d',
+                    spare_part.name, instance.shipment_id, quantity
+                )
+            except SparePartCount.DoesNotExist:
+                logger.error(
+                    f'SparePartCount not found for part {spare_part.name}',
+                )
+            except Exception as e:
+                logger.exception(
+                    'Error updating SparePartCount for M2M shipment: %s',
+                    str(e)
+                )
 
 
 @receiver(post_save, sender=SparePartShipment)

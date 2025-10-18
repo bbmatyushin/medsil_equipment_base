@@ -757,10 +757,16 @@ class ServiceAdmin(MainAdmin):
                 f"(s/n {obj.equipment_accounting.serial_number.upper()})"
             )
 
+            # Сохраняем JSON с информацией о запчастях
+            obj.spare_part_count = spare_part_count_json
+
+            # Вызываем оригинальный метод сохранения
+            super().save_model(request, obj, form, change)
+
             # Создаем или обновляем запись в SparePartShipmentV2
             shipment, created = SparePartShipmentV2.objects.get_or_create(
                 service=obj,
-                defualts={
+                defaults={
                     'shipment_dt': obj.beg_dt,
                     'user': request.user,
                     'comment': comment,
@@ -781,12 +787,6 @@ class ServiceAdmin(MainAdmin):
                     spare_part_id=spare_part_id,
                     quantity=quantity
                 )
-
-            # Сохраняем JSON с информацией о запчастях
-            obj.spare_part_count = spare_part_count_json
-
-            # Вызываем оригинальный метод сохранения
-            super().save_model(request, obj, form, change)
 
         #TODO: включить, если нужно учитывать количество запчастей из SparePartCount
         # def delete_model(self, request, obj):
