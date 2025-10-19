@@ -3,7 +3,8 @@ from datetime import datetime
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.db.models import Sum, Prefetch
+from django.db.models import Sum, Prefetch, F
+from django.db import transaction
 from ebase.admin import MainAdmin
 from ebase.models import Service, EquipmentAccDepartment
 # from ebase_site.ebase.models import Service, EquipmentAccDepartment
@@ -230,6 +231,58 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             kwargs["queryset"] = Service.objects \
                 .select_related("service_type", "equipment_accounting__equipment", "user")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            # Сохраняем оригинальные значения перед сохранением
+            original_spare_parts = {}
+            if change and obj.pk:
+                original = SparePartShipmentV2.objects.get(pk=obj.pk)
+                original_spare_parts = {
+                    str(item.spare_part.id): item.quantity
+                    for item in original.shipment_m2m.all()
+                }
+
+            # Сохраняем основную модель
+            super().save_model(request, obj, form, change)
+            
+            # Получаем текущие значения после сохранения
+            spare_part_name, spare_part_qnt = [], []
+
+            for key, value in request.POST.items():
+                if key.endswith("spare_part"):
+                    spare_part_name.append(value)
+                if key.endswith("quantity"):
+                    if value.isdigit():
+                        spare_part_qnt.append(int(value))
+
+            current_spare_parts = dict(list(zip(spare_part_name, spare_part_qnt)))
+
+            # Обрабатываем изменения количества для каждой запчасти
+            for spare_part_id, quantity in current_spare_parts.items():
+                original_qty = original_spare_parts.get(spare_part_id, 0)
+                delta = quantity - original_qty
+
+                if delta != 0:
+                    try:
+                        spare_part_info = obj.service.spare_part_count.get(spare_part_id)
+                        #TODO: если нет связки с отгрузкой, то дату срока годности неоткуда брать.
+                        # Нужно в инлайн форму добавить поле для выбора срока годности
+
+                        for item in spare_part_info:
+                            SparePartCount.objects.filter(
+                                spare_part_id=spare_part_id,
+                                expiration_dt=item['expiration_dt']
+                            ).update(amount=F('amount') - delta)
+
+                            logger.info(
+                                f"Обновление остатка для запчасти {spare_part_id}: "
+                                f"изменение на {delta} (было {original_qty}, стало {quantity})"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Ошибка обновления остатка для запчасти {spare_part_id}: {str(e)}"
+                        )
 
 
 @admin.register(SparePartShipment)
