@@ -6,7 +6,6 @@ from django.db.models.signals import post_save, post_delete
 
 from .models import *
 
-
 logger = logging.getLogger('SPARE_PART_SIGNALS')
 
 
@@ -40,14 +39,11 @@ def spare_part_supply_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentM2M)
 def spare_part_quantity_post_save(sender, instance, created, **kwargs):
-    # Всегда будет created, т.к. в save_model сначала всё удаляется, а потом добавляются новые записи.
     if created and instance.quantity > 0:
-        # Получаем связанную запчасть и её количество
         spare_part = instance.spare_part
         quantity = instance.quantity
         spare_part_info = instance.shipment.service.spare_part_count.get(str(spare_part.pk))
 
-        # Находим соответствующую запись в SparePartCount
         for item in spare_part_info:
             try:
                 SparePartCount.objects.filter(
@@ -90,3 +86,20 @@ def spare_part_shipment_post_delete(sender, instance, **kwargs):
         part.amount = part.amount + instance.count_shipment
         part.save()
         logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', part_name)
+
+
+@receiver(post_delete, sender=SparePartShipmentV2)
+def spare_part_shipment_v2_post_delete(sender, instance, **kwargs):
+    """Сигнал для возврата количества запчастей на склад при удалении записи из SparePartShipmentV2."""
+    if instance.shipment_m2m.exists():
+        for shipment_item in instance.shipment_m2m.all():
+            spare_part = shipment_item.spare_part
+            quantity = shipment_item.quantity
+            
+            try:
+                spare_part_count = SparePartCount.objects.get(spare_part=spare_part, expiration_dt=instance.expiration_dt)
+                spare_part_count.amount = F('amount') + quantity
+                spare_part_count.save()
+                logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', spare_part.id)
+            except SparePartCount.DoesNotExist:
+                logger.error('SparePartCount not found for spare_part_id %s', spare_part.id)
