@@ -67,6 +67,38 @@ def spare_part_quantity_post_save(sender, instance, created, **kwargs):
                 )
 
 
+@receiver(post_delete, sender=SparePartShipmentM2M)
+def spare_part_shipment_m2m_post_delete(sender, instance, **kwargs):
+    """
+    Восстанавливает количество запчастей при удалении связи ShipmentM2M.
+    """
+    spare_part = instance.spare_part
+    quantity = instance.quantity
+    
+    try:
+        if instance.shipment.service:
+            # Если есть связанный сервис - берем данные из его spare_part_count
+            spare_part_info = instance.shipment.service.spare_part_count.get(str(spare_part.pk))
+            
+            for item in spare_part_info:
+                SparePartCount.objects.filter(
+                    spare_part=spare_part,
+                    expiration_dt=item['expiration_dt']
+                ).update(amount=F('amount') + quantity)
+        else:
+            # Для обычных отгрузок без привязки к сервису
+            SparePartCount.objects.filter(
+                spare_part=spare_part
+            ).update(amount=F('amount') + quantity)
+            
+        logger.info(f'Restored {quantity} items of {spare_part.name} after M2M deletion')
+        
+    except SparePartCount.DoesNotExist:
+        logger.error(f'SparePartCount not found for part {spare_part.name}')
+    except Exception as e:
+        logger.exception(f'Error restoring SparePartCount: {str(e)}')
+
+
 @receiver(post_delete, sender=SparePartShipmentV2)
 def spare_part_shipment_v2_post_delete(sender, instance, **kwargs):
     """Сигнал для возврата количества запчастей на склад при удалении записи из SparePartShipmentV2."""
