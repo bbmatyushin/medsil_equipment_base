@@ -67,6 +67,23 @@ def spare_part_quantity_post_save(sender, instance, created, **kwargs):
                 )
 
 
+@receiver(post_delete, sender=SparePartShipmentV2)
+def spare_part_shipment_v2_post_delete(sender, instance, **kwargs):
+    """Сигнал для возврата количества запчастей на склад при удалении записи из SparePartShipmentV2."""
+    if instance.shipment_m2m.exists():
+        for shipment_item in instance.shipment_m2m.all():
+            spare_part = shipment_item.spare_part
+            quantity = shipment_item.quantity
+
+            try:
+                spare_part_count = SparePartCount.objects.get(spare_part=spare_part, expiration_dt=instance.expiration_dt)
+                spare_part_count.amount = F('amount') + quantity
+                spare_part_count.save()
+                logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', spare_part.id)
+            except SparePartCount.DoesNotExist:
+                logger.error('SparePartCount not found for spare_part_id %s', spare_part.id)
+
+
 @receiver(post_save, sender=SparePartShipment)
 def spare_part_shipment_post_save(sender, instance, created, **kwargs):
     if created:
@@ -86,20 +103,3 @@ def spare_part_shipment_post_delete(sender, instance, **kwargs):
         part.amount = part.amount + instance.count_shipment
         part.save()
         logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', part_name)
-
-
-@receiver(post_delete, sender=SparePartShipmentV2)
-def spare_part_shipment_v2_post_delete(sender, instance, **kwargs):
-    """Сигнал для возврата количества запчастей на склад при удалении записи из SparePartShipmentV2."""
-    if instance.shipment_m2m.exists():
-        for shipment_item in instance.shipment_m2m.all():
-            spare_part = shipment_item.spare_part
-            quantity = shipment_item.quantity
-            
-            try:
-                spare_part_count = SparePartCount.objects.get(spare_part=spare_part, expiration_dt=instance.expiration_dt)
-                spare_part_count.amount = F('amount') + quantity
-                spare_part_count.save()
-                logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', spare_part.id)
-            except SparePartCount.DoesNotExist:
-                logger.error('SparePartCount not found for spare_part_id %s', spare_part.id)
