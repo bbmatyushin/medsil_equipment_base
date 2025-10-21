@@ -42,29 +42,29 @@ def spare_part_quantity_post_save(sender, instance, created, **kwargs):
     if created and instance.quantity > 0:
         spare_part = instance.spare_part
         quantity = instance.quantity
-        spare_part_info = instance.shipment.service.spare_part_count.get(str(spare_part.pk))
+        expiration_dt = instance.expiration_dt
+        
+        try:
+            # Обновляем остаток с учетом срока годности
+            SparePartCount.objects.filter(
+                spare_part=spare_part,
+                expiration_dt=expiration_dt
+            ).update(amount=F('amount') - quantity)
 
-        for item in spare_part_info:
-            try:
-                SparePartCount.objects.filter(
-                    spare_part=spare_part,
-                    expiration_dt=item['expiration_dt']
-                ).update(amount=F('amount') - quantity)
-
-                logger.info(
-                    'Updated spare part count after M2M shipment. '
-                    'Part: %s, Shipment ID: %s, Quantity: %d',
-                    spare_part.name, instance.shipment_id, quantity
-                )
-            except SparePartCount.DoesNotExist:
-                logger.error(
-                    f'SparePartCount not found for part {spare_part.name}',
-                )
-            except Exception as e:
-                logger.exception(
-                    'Error updating SparePartCount for M2M shipment: %s',
-                    str(e)
-                )
+            logger.info(
+                'Updated spare part count after M2M shipment. '
+                'Part: %s, Shipment ID: %s, Quantity: %d, Expiration: %s',
+                spare_part.name, instance.shipment_id, quantity, expiration_dt
+            )
+        except SparePartCount.DoesNotExist:
+            logger.error(
+                f'SparePartCount not found for part {spare_part.name} with expiration {expiration_dt}',
+            )
+        except Exception as e:
+            logger.exception(
+                'Error updating SparePartCount for M2M shipment: %s',
+                str(e)
+            )
 
 
 @receiver(post_delete, sender=SparePartShipmentM2M)
@@ -74,27 +74,19 @@ def spare_part_shipment_m2m_post_delete(sender, instance, **kwargs):
     """
     spare_part = instance.spare_part
     quantity = instance.quantity
+    expiration_dt = instance.expiration_dt
     
     try:
-        if instance.shipment.service:
-            # Если есть связанный сервис - берем данные из его spare_part_count
-            spare_part_info = instance.shipment.service.spare_part_count.get(str(spare_part.pk))
-            
-            for item in spare_part_info:
-                SparePartCount.objects.filter(
-                    spare_part=spare_part,
-                    expiration_dt=item['expiration_dt']
-                ).update(amount=F('amount') + quantity)
-        else:
-            # Для обычных отгрузок без привязки к сервису
-            SparePartCount.objects.filter(
-                spare_part=spare_part
-            ).update(amount=F('amount') + quantity)
-            
-        logger.info(f'Restored {quantity} items of {spare_part.name} after M2M deletion')
+        # Восстанавливаем остаток с учетом срока годности
+        SparePartCount.objects.filter(
+            spare_part=spare_part,
+            expiration_dt=expiration_dt
+        ).update(amount=F('amount') + quantity)
+        
+        logger.info(f'Restored {quantity} items of {spare_part.name} (exp: {expiration_dt}) after M2M deletion')
         
     except SparePartCount.DoesNotExist:
-        logger.error(f'SparePartCount not found for part {spare_part.name}')
+        logger.error(f'SparePartCount not found for part {spare_part.name} with expiration {expiration_dt}')
     except Exception as e:
         logger.exception(f'Error restoring SparePartCount: {str(e)}')
 

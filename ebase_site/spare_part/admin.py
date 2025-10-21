@@ -148,18 +148,17 @@ class SparePartShipmentM2MInline(admin.TabularInline):
     model = SparePartShipmentM2M
     extra = 1
     autocomplete_fields = ("spare_part",)
-    fields = ("spare_part", "quantity",)
+    fields = ("spare_part", "quantity", "expiration_dt")
     readonly_fields = ("create_dt",)
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['expiration_dt'].required = False
+        return formset
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('spare_part', 'shipment',)
-
-    @admin.display(description="срок годности")
-    def part_with_expiration(self, obj):
-        """Запчасть со сроком годности"""
-        pass
-        return obj.quantity
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "spare_part":
@@ -239,50 +238,50 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             if change and obj.pk:
                 original = SparePartShipmentV2.objects.get(pk=obj.pk)
                 original_spare_parts = {
-                    str(item.spare_part.id): item.quantity
+                    str(item.spare_part.id): {
+                        'quantity': item.quantity,
+                        'expiration_dt': item.expiration_dt
+                    }
                     for item in original.shipment_m2m.all()
                 }
 
             # Сохраняем основную модель
             super().save_model(request, obj, form, change)
             
-            # Получаем текущие значения после сохранения
-            spare_part_name, spare_part_qnt = [], []
+            # Обрабатываем изменения количества для каждой запчасти через inline формы
+            # Используем form.forms для доступа к inline формам
+            for i, inline_form in enumerate(form.forms):
+                if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
+                    data = inline_form.cleaned_data
+                    # Пропускаем удаленные записи
+                    if data and not data.get('DELETE', False):
+                        spare_part = data.get('spare_part')
+                        quantity = data.get('quantity', 0)
+                        expiration_dt = data.get('expiration_dt')
+                        
+                        if spare_part and quantity > 0:
+                            try:
+                                # Получаем оригинальное количество
+                                original_data = original_spare_parts.get(str(spare_part.id), {})
+                                original_qty = original_data.get('quantity', 0)
+                                delta = quantity - original_qty
+                                
+                                if delta != 0:
+                                    # Обновляем остаток с учетом срока годности
+                                    SparePartCount.objects.filter(
+                                        spare_part=spare_part,
+                                        expiration_dt=expiration_dt
+                                    ).update(amount=F('amount') - delta)
 
-            for key, value in request.POST.items():
-                if key.endswith("spare_part"):
-                    spare_part_name.append(value)
-                if key.endswith("quantity"):
-                    if value.isdigit():
-                        spare_part_qnt.append(int(value))
-
-            current_spare_parts = dict(list(zip(spare_part_name, spare_part_qnt)))
-
-            # Обрабатываем изменения количества для каждой запчасти
-            for spare_part_id, quantity in current_spare_parts.items():
-                original_qty = original_spare_parts.get(spare_part_id, 0)
-                delta = quantity - original_qty
-
-                if delta != 0:
-                    try:
-                        spare_part_info = obj.service.spare_part_count.get(spare_part_id)
-                        #TODO: если нет связки с отгрузкой, то дату срока годности неоткуда брать.
-                        # Нужно в инлайн форму добавить поле для выбора срока годности
-
-                        for item in spare_part_info:
-                            SparePartCount.objects.filter(
-                                spare_part_id=spare_part_id,
-                                expiration_dt=item['expiration_dt']
-                            ).update(amount=F('amount') - delta)
-
-                            logger.info(
-                                f"Обновление остатка для запчасти {spare_part_id}: "
-                                f"изменение на {delta} (было {original_qty}, стало {quantity})"
-                            )
-                    except Exception as e:
-                        logger.error(
-                            f"Ошибка обновления остатка для запчасти {spare_part_id}: {str(e)}"
-                        )
+                                    logger.info(
+                                        f"Обновление остатка для запчасти {spare_part.name}: "
+                                        f"изменение на {delta} (было {original_qty}, стало {quantity}), "
+                                        f"срок годности: {expiration_dt}"
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
+                                )
 
 
 @admin.register(SparePartShipment)
