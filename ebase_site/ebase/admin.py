@@ -733,6 +733,10 @@ class ServiceAdmin(MainAdmin):
                     except json.JSONDecodeError:
                         continue
 
+            if not spare_parts_data:
+                # Если запчастей нет, то в отгрузку ничего не добавдляем
+                return super().save_model(request, obj, form, change)
+
             # Обновляем данные в формате JSON для поля spare_part_count
             for spare_part_info in spare_parts_data:
                 spare_part_id = spare_part_info['id']
