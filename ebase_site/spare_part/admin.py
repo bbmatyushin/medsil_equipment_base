@@ -160,6 +160,10 @@ class SparePartShipmentM2MInline(admin.TabularInline):
             for field_name in formset.form.base_fields:
                 formset.form.base_fields[field_name].disabled = True
                 formset.form.base_fields[field_name].widget.attrs['readonly'] = True
+                # if field_name == "expiration_dt":
+                #     formset.form.base_fields[field_name].widget.attrs.pop("today", None)
+                #     formset.form.base_fields[field_name].widget.attrs.pop("calendar", None)
+
 
         return formset
 
