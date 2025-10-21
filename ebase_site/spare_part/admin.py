@@ -212,7 +212,6 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         js = (
             'admin/js/jquery.init.js',
             'spare_part/js/remove_datetime_shortcuts.js',
-            'spare_part/js/toggle_filter.js',
         )
 
     @admin.display(description="Создал")
