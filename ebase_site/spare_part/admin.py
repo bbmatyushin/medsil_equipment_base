@@ -199,6 +199,12 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         ),
     )
 
+    class Media:
+        js = (
+            'admin/js/jquery.init.js',
+            'spare_part/js/remove_datetime_shortcuts.js',
+        )
+
     @admin.display(description="Создал")
     def user_name(self, obj):
         return obj.user if obj.user else "-"
