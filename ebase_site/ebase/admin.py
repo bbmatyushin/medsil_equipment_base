@@ -779,13 +779,11 @@ class ServiceAdmin(MainAdmin):
 
             # Добавляем новые записи о запчастях через промежуточную модель
             for spare_part_info in spare_parts_data:
-                spare_part_id = spare_part_info['id']
-                quantity = spare_part_info['quantity']
-
                 SparePartShipmentM2M.objects.create(
                     shipment=shipment,
-                    spare_part_id=spare_part_id,
-                    quantity=quantity
+                    spare_part_id=spare_part_info["id"],
+                    quantity=spare_part_info["quantity"],
+                    expiration_dt=spare_part_info["expiration_dt"]
                 )
 
         #TODO: включить, если нужно учитывать количество запчастей из SparePartCount

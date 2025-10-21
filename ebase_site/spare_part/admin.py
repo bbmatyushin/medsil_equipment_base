@@ -154,6 +154,13 @@ class SparePartShipmentM2MInline(admin.TabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['expiration_dt'].required = False
+
+        # Если объект существует и связан с Service, делаем поля недоступными для редактирования
+        if obj and obj.service:
+            for field_name in formset.form.base_fields:
+                formset.form.base_fields[field_name].disabled = True
+                formset.form.base_fields[field_name].widget.attrs['readonly'] = True
+
         return formset
 
     def get_queryset(self, request):
