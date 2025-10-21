@@ -1,0 +1,5 @@
+/* Сразу скрываем datetime shortcuts для заблокированных полей expiration_dt */
+input[name^="shipment_m2m-"][name$="-expiration_dt"][readonly] + .datetimeshortcuts,
+input[name^="shipment_m2m-"][name$="-expiration_dt"][disabled] + .datetimeshortcuts {
+    display: none !important;
+}

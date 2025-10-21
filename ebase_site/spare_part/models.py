@@ -13,6 +13,7 @@ company = '"medsil"'  # название схемы для таблиц
 
 
 class SparePartAbs(models.Model):
+    objects = models.Manager()
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
                           verbose_name='ID', db_comment='ID записи', help_text='ID записи')
     create_dt = models.DateTimeField(
@@ -134,6 +135,11 @@ class SparePartShipmentM2M(models.Model):
                                  related_name="shipment_m2m")
     quantity = models.PositiveIntegerField(help_text="Количество отгружаемых единиц товара",
                                            verbose_name="Кол-во")
+    expiration_dt = models.DateField(
+        null=True, blank=True, verbose_name='Срок годности',
+        db_comment='Срок годности для запчастей со сроком годности',
+        help_text='Срок годности для запчастей со сроком годности'
+    )
     create_dt = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -148,7 +154,7 @@ class SparePartShipmentM2M(models.Model):
         ]
 
     def __repr__(self):
-        return f"<SparePartShipmentM2M(id={self.pk}, spare_part={self.spare_part.name}, quantity={self.quantity})>"
+        return f"<SparePartShipmentM2M(id={self.pk}, spare_part={self.spare_part.name}, quantity={self.quantity}, expiration_dt={self.expiration_dt})>"
 
 
 class SparePartShipmentV2(SparePartAbs):

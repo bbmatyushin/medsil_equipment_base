@@ -3,7 +3,8 @@ from datetime import datetime
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.db.models import Sum, Prefetch
+from django.db.models import Sum, Prefetch, F
+from django.db import transaction
 from ebase.admin import MainAdmin
 from ebase.models import Service, EquipmentAccDepartment
 # from ebase_site.ebase.models import Service, EquipmentAccDepartment
@@ -58,6 +59,12 @@ class SparePartAdmin(MainAdmin):
         ('Новая запчасть', {'fields': ('article', ('name', 'unit'), 'is_expiration', 'equipment',)}),
 
     )
+
+    class Media:
+        js = (
+            'admin/js/jquery.init.js',
+            'spare_part/js/toggle_filter.js',
+        )
 
     @admin.display(description='Оборудование')
     def equipment_name(self, obj):
@@ -147,18 +154,28 @@ class SparePartShipmentM2MInline(admin.TabularInline):
     model = SparePartShipmentM2M
     extra = 1
     autocomplete_fields = ("spare_part",)
-    fields = ("spare_part", "quantity",)
+    fields = ("spare_part", "quantity", "expiration_dt")
     readonly_fields = ("create_dt",)
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['expiration_dt'].required = False
+
+        # Если объект существует и связан с Service, делаем поля недоступными для редактирования
+        if obj and obj.service:
+            for field_name in formset.form.base_fields:
+                formset.form.base_fields[field_name].disabled = True
+                formset.form.base_fields[field_name].widget.attrs['readonly'] = True
+                # if field_name == "expiration_dt":
+                #     formset.form.base_fields[field_name].widget.attrs.pop("today", None)
+                #     formset.form.base_fields[field_name].widget.attrs.pop("calendar", None)
+
+
+        return formset
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('spare_part', 'shipment',)
-
-    @admin.display(description="срок годности")
-    def part_with_expiration(self, obj):
-        """Запчасть со сроком годности"""
-        pass
-        return obj.quantity
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "spare_part":
@@ -187,6 +204,15 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             },
         ),
     )
+
+    class Media:
+        css = {
+            'all': ('spare_part/css/hide_datetime_shortcuts.css',)
+        }
+        js = (
+            'admin/js/jquery.init.js',
+            'spare_part/js/remove_datetime_shortcuts.js',
+        )
 
     @admin.display(description="Создал")
     def user_name(self, obj):
@@ -230,6 +256,58 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             kwargs["queryset"] = Service.objects \
                 .select_related("service_type", "equipment_accounting__equipment", "user")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            # Сохраняем оригинальные значения перед сохранением
+            original_spare_parts = {}
+            if change and obj.pk:
+                original = SparePartShipmentV2.objects.get(pk=obj.pk)
+                original_spare_parts = {
+                    str(item.spare_part.id): {
+                        'quantity': item.quantity,
+                        'expiration_dt': item.expiration_dt
+                    }
+                    for item in original.shipment_m2m.all()
+                }
+
+            # Сохраняем основную модель
+            super().save_model(request, obj, form, change)
+            
+            # Обрабатываем изменения количества для каждой запчасти через inline формы
+            # Используем form.forms для доступа к inline формам
+            for i, inline_form in enumerate(form.forms):
+                if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
+                    data = inline_form.cleaned_data
+                    # Пропускаем удаленные записи
+                    if data and not data.get('DELETE', False):
+                        spare_part = data.get('spare_part')
+                        quantity = data.get('quantity', 0)
+                        expiration_dt = data.get('expiration_dt')
+                        
+                        if spare_part and quantity > 0:
+                            try:
+                                # Получаем оригинальное количество
+                                original_data = original_spare_parts.get(str(spare_part.id), {})
+                                original_qty = original_data.get('quantity', 0)
+                                delta = quantity - original_qty
+                                
+                                if delta != 0:
+                                    # Обновляем остаток с учетом срока годности
+                                    SparePartCount.objects.filter(
+                                        spare_part=spare_part,
+                                        expiration_dt=expiration_dt
+                                    ).update(amount=F('amount') - delta)
+
+                                    logger.info(
+                                        f"Обновление остатка для запчасти {spare_part.name}: "
+                                        f"изменение на {delta} (было {original_qty}, стало {quantity}), "
+                                        f"срок годности: {expiration_dt}"
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
+                                )
 
 
 @admin.register(SparePartShipment)
