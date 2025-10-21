@@ -60,6 +60,12 @@ class SparePartAdmin(MainAdmin):
 
     )
 
+    class Media:
+        js = (
+            'admin/js/jquery.init.js',
+            'spare_part/js/toggle_filter.js',
+        )
+
     @admin.display(description='Оборудование')
     def equipment_name(self, obj):
         equipment_list = obj.equipment.values_list('full_name', flat=True)
@@ -206,6 +212,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         js = (
             'admin/js/jquery.init.js',
             'spare_part/js/remove_datetime_shortcuts.js',
+            'spare_part/js/toggle_filter.js',
         )
 
     @admin.display(description="Создал")
