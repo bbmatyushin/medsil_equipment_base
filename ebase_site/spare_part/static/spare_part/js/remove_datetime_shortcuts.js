@@ -1,9 +1,21 @@
 (function($) {
     $(document).ready(function() {
         function removeDateTimeShortcuts() {
+            console.log('Запуск removeDateTimeShortcuts...');
+            
+            // Ищем все поля с именем shipment_m2m-*-expiration_dt
             $('input[name^="shipment_m2m-"][name$="-expiration_dt"]').each(function() {
-                if ($(this).is('[readonly], [disabled]')) {
-                    var $shortcuts = $(this).next('.datetimeshortcuts');
+                var $input = $(this);
+                console.log('Найдено поле:', this.name, 'readonly:', this.readOnly, 'disabled:', this.disabled);
+                
+                // Проверяем атрибуты readonly и disabled
+                if ($input.is('[readonly], [disabled]')) {
+                    console.log('Поле заблокировано:', this.name);
+                    
+                    // Ищем следующий элемент span с классом datetimeshortcuts
+                    var $shortcuts = $input.next('.datetimeshortcuts');
+                    console.log('Найден shortcuts:', $shortcuts.length);
+                    
                     if ($shortcuts.length) {
                         $shortcuts.remove();
                         console.log('Удален datetime shortcuts для поля:', this.name);
@@ -17,6 +29,7 @@
         
         // Обрабатываем динамическое добавление форм (используем Django's formset events)
         $(document).on('formset:added', function(event, $row, formsetName) {
+            console.log('Добавлена форма:', formsetName);
             if (formsetName.startsWith('shipment_m2m')) {
                 setTimeout(removeDateTimeShortcuts, 100);
             }
@@ -46,13 +59,16 @@
         });
         
         // Дополнительная проверка при изменении атрибутов readonly/disabled
-        $(document).on('DOMAttrModified', 'input[name^="shipment_m2m-"][name$="-expiration_dt"]', function() {
-            if ($(this).is('[readonly], [disabled]')) {
-                var $shortcuts = $(this).next('.datetimeshortcuts');
-                if ($shortcuts.length) {
-                    $shortcuts.remove();
-                }
-            }
-        });
+        // Используем более надежный подход с setInterval для проверки изменений
+        setInterval(function() {
+            $('input[name^="shipment_m2m-"][name$="-expiration_dt"][readonly], input[name^="shipment_m2m-"][name$="-expiration_dt"][disabled]')
+                .each(function() {
+                    var $shortcuts = $(this).next('.datetimeshortcuts');
+                    if ($shortcuts.length) {
+                        $shortcuts.remove();
+                        console.log('Удален datetime shortcuts (интервал):', this.name);
+                    }
+                });
+        }, 500);
     });
 })(django.jQuery);

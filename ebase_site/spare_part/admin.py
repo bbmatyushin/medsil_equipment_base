@@ -204,6 +204,11 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             'admin/js/jquery.init.js',
             'spare_part/js/remove_datetime_shortcuts.js',
         )
+        
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['debug_info'] = 'SparePartShipmentV2Admin loaded'
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     @admin.display(description="Создал")
     def user_name(self, obj):
