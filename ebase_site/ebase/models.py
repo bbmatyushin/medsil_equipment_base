@@ -268,6 +268,10 @@ class EquipmentAccounting(EbaseModel):
         null=False, blank=False, default=True, verbose_name='Поставлен нами',
         db_comment='True, если оборудование было поставлено нами',
     )
+    is_our_reagents = models.BooleanField(
+        null=False, blank=False, default=False, verbose_name='Поставка реагентов',
+        db_comment='True, если реагенты поставляются нами',
+    )
     row_update_dt = models.DateTimeField(
         auto_now=True, editable=False, verbose_name='Дата обновления строки',
         db_comment='Дата обновления строки.',

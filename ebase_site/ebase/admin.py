@@ -199,7 +199,7 @@ class EquipmentAccountingAdmin(MainAdmin):
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
-                                                     ('is_our_supply', 'is_our_service',),
+                                                     ('is_our_supply', 'is_our_reagents', 'is_our_service',),
                                                      ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
