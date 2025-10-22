@@ -715,6 +715,11 @@ class ServiceAdmin(MainAdmin):
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
+        if obj.beg_dt < date(2025, 10, 22):
+            # Если дата начала ремонта меньше указанной даты, то ничего не делаем.
+            # Иначе переходим на сохранение в SparePartShipmentV2
+            return super().save_model(request, obj, form, change)
+
         with transaction.atomic():
             if not change:
                 obj.user = request.user

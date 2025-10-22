@@ -196,8 +196,8 @@ class SparePartShipmentV2(SparePartAbs):
                             "несколькими запчастями используется таблица spare_part_shipment_m2m, в которй "
                             "указывается количество отгруженного товара."
                             "\r\n\r\n--Матюшин")
-        verbose_name = 'Пробная модель - Отгрузка запчастей V2'
-        verbose_name_plural = 'Отгрузки запчастей V2 (тестовый режим)'
+        verbose_name = 'Отгрузка запчастей'
+        verbose_name_plural = 'Отгрузки запчастей'
         indexes = [
             models.Index(fields=["service"]),
             models.Index(fields=["user"]),
@@ -263,8 +263,8 @@ class SparePartShipment(SparePartAbs):
     class Meta:
         db_table = f'{company}."spare_part_shipment"'
         db_table_comment = 'Отслеживание отгрузок запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Отгрузка запчастей'
-        verbose_name_plural = 'Отгрузки запчастей'
+        verbose_name = 'Отгрузка запчастей (до 22.10.2025)'
+        verbose_name_plural = 'Отгрузки запчастей (до 22.10.2025)'
 
     def __str__(self):
         art = f" (арт. {self.spare_part_count.spare_part.article})" if self.spare_part_count.spare_part.article else ''
