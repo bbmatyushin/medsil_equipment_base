@@ -330,6 +330,12 @@ class SparePartShipmentAdmin(MainAdmin):
 
     )
 
+    class Media:
+        js = (
+            'admin/js/jquery.init.js',
+            'spare_part/js/remove_shipment_add_link.js',
+        )
+
     @admin.display(description='Запчасть')
     def spare_part_name(self, obj):
         return obj.spare_part_count.spare_part.name
