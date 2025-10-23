@@ -147,10 +147,36 @@ class CreateServiceAkt:
                     cells[2].text = str(part[2])  # количество
                 else:
                     cells[2].text = "1"  # значение по умолчанию, если количество не указано
+                
+                # Выравниваем количество по центру
+                if len(cells) > 2:
+                    self._set_cell_alignment(cells[2], align='center')
 
                 if self.file_name == 'Akt_from_service.docx':
                     for cell in cells:
                         cell.paragraphs[0].runs[0].font.size = Pt(11)  # задаем разме шрифта
+
+    @staticmethod
+    def _set_cell_alignment(cell: _Cell, align: str = 'center'):
+        """Устанавливает выравнивание текста в ячейке
+        
+        Args:
+            cell: ячейка таблицы
+            align: тип выравнивания ('left', 'center', 'right', 'both', 'distribute')
+        """
+        # Получаем или создаем свойства ячейки
+        cell_tcPr = cell._tc.get_or_add_tcPr()
+        
+        # Создаем элемент для выравнивания
+        cell_alignment = OxmlElement('w:vAlign')
+        cell_alignment.set(qn('w:val'), align)
+        
+        # Добавляем выравнивание в свойства ячейки
+        cell_tcPr.append(cell_alignment)
+        
+        # Также устанавливаем выравнивание для параграфа
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = align
 
     @staticmethod
     def _set_cell_borders(cell: _Cell):
