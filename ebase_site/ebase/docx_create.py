@@ -10,6 +10,7 @@ from docx.table import Table, _Cell
 from docx.shared import Pt
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from .models import Service
 
@@ -167,16 +168,38 @@ class CreateServiceAkt:
         # Получаем или создаем свойства ячейки
         cell_tcPr = cell._tc.get_or_add_tcPr()
         
-        # Создаем элемент для выравнивания
+        # Создаем элемент для вертикального выравнивания
         cell_alignment = OxmlElement('w:vAlign')
-        cell_alignment.set(qn('w:val'), align)
+        # Преобразуем строковое значение в правильный формат для вертикального выравнивания
+        if align == 'center':
+            v_align = 'center'
+        elif align == 'top':
+            v_align = 'top'
+        elif align == 'bottom':
+            v_align = 'bottom'
+        else:
+            v_align = 'center'  # значение по умолчанию
+            
+        cell_alignment.set(qn('w:val'), v_align)
         
         # Добавляем выравнивание в свойства ячейки
         cell_tcPr.append(cell_alignment)
         
-        # Также устанавливаем выравнивание для параграфа
+        # Также устанавливаем выравнивание для параграфа (горизонтальное выравнивание)
+        # Импортируем необходимые константы
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        
+        align_mapping = {
+            'left': WD_ALIGN_PARAGRAPH.LEFT,
+            'center': WD_ALIGN_PARAGRAPH.CENTER,
+            'right': WD_ALIGN_PARAGRAPH.RIGHT,
+            'both': WD_ALIGN_PARAGRAPH.JUSTIFY,
+            'distribute': WD_ALIGN_PARAGRAPH.DISTRIBUTE
+        }
+        
+        paragraph_align = align_mapping.get(align, WD_ALIGN_PARAGRAPH.CENTER)
         for paragraph in cell.paragraphs:
-            paragraph.alignment = align
+            paragraph.alignment = paragraph_align
 
     @staticmethod
     def _set_cell_borders(cell: _Cell):
