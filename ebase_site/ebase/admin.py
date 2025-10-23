@@ -13,7 +13,7 @@ from django.urls import path
 from django.http import JsonResponse
 
 from spare_part.models import SparePart, SparePartCount, SparePartShipment, SparePartShipmentV2, SparePartShipmentM2M
-from directory.models import Position
+from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
@@ -209,7 +209,7 @@ class EquipmentAccountingAdmin(MainAdmin):
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
-                                                     ('is_our_supply', 'is_our_reagents', 'last_maintenance_date',),
+                                                     ('is_our_supply', 'is_our_reagents', ), 'last_maintenance_date',
                                                      ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
