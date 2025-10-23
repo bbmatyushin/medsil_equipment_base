@@ -183,6 +183,7 @@ class EquipmentAccountingAdmin(MainAdmin):
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
     # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
+    readonly_fields = ('last_maintenance_date',)
 
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
@@ -403,7 +404,7 @@ class ServiceAdmin(MainAdmin):
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
-    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url', 'last_maintenance_date',)
+    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url',)
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
                      'equipment_accounting__serial_number',)
