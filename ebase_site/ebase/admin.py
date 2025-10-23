@@ -403,7 +403,7 @@ class ServiceAdmin(MainAdmin):
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
-    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url',)
+    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url', 'last_maintenance_date',)
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
                      'equipment_accounting__serial_number',)
