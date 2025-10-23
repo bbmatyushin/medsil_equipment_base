@@ -150,27 +150,36 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
     model = EquipmentAccDepartment
     fk_name = 'equipment_accounting'
     extra = 0
-    # autocomplete_fields = ('department',)  # С ним не отрабатывает def formfield_for_foreignkey
-    # max_num = 1  # Не ограничивать, т.к. есть возможность снимать галочку "У клиента"
     verbose_name = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
     verbose_name_plural = 'ИНФОРМАЦИЯ О МОНТАЖЕ ОБОРУДОВАНИЯ'
 
     fieldsets = (
         (None, {'fields': (('department', 'is_active',), ('engineer', 'install_dt',),),}),
-        # ('Монтаж', {'fields': (('engineer', 'install_dt',),),}),
     )
 
-    # Модно переопределить get_formsets_with_inlines или get_formset для вывода поля город
-    # def get_formset(self, request, obj=None, **kwargs):
-    #     formset = super().get_formset(request, obj, **kwargs)
-    #     # formset.form.base_fields['department'].queryset = Department.objects.filter(client=obj.client)
-    #     return formset
+    def get_queryset(self, request):
+        # Используем предзагруженные данные из родительского queryset
+        qs = super().get_queryset(request)
+        # Оптимизируем запросы для связанных данных
+        return qs.select_related(
+            'department',
+            'department__city',
+            'department__client',
+            'department__client__city',
+            'engineer'
+        )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "department":
             city = request.GET.get('city')
             if city:
                 kwargs["queryset"] = Department.objects.filter(city__name__iexact=city)
+            else:
+                # Оптимизируем queryset для поля department
+                kwargs["queryset"] = Department.objects.select_related('city', 'client')
+        elif db_field.name == "engineer":
+            # Оптимизируем queryset для поля engineer
+            kwargs["queryset"] = Engineer.objects.all()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
