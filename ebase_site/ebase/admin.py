@@ -273,7 +273,6 @@ class EquipmentAccountingAdmin(MainAdmin):
 
         return queryset
 
-
     @admin.display(description='Установлено')
     def dept_name(self, obj):
         # Используем предзагруженные данные
