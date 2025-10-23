@@ -199,7 +199,7 @@ class EquipmentAccountingAdmin(MainAdmin):
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
-                                                     ('is_our_supply', 'is_our_reagents', 'is_our_service',),
+                                                     ('is_our_supply', 'is_our_reagents', 'last_maintenance_date',),
                                                      ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
@@ -211,6 +211,35 @@ class EquipmentAccountingAdmin(MainAdmin):
         if user_position:
             # Для менеджреров не отображаем оборудование посталенное не нами
             queryset = queryset.filter(is_our_supply__exact=1)
+
+        # Получаем последнюю дату техобслуживания через подзапрос
+        from django.db.models import OuterRef, Subquery, Max
+        from directory.models import ServiceType
+        
+        # Найдём ID типа "Тех. обслуживание"
+        try:
+            maintenance_type = ServiceType.objects.get(name='Тех. обслуживание')
+        except ServiceType.DoesNotExist:
+            maintenance_type = None
+        
+        # Подзапрос для получения последней даты техобслуживания
+        if maintenance_type:
+            last_maintenance_subquery = Service.objects.filter(
+                equipment_accounting=OuterRef('pk'),
+                service_type=maintenance_type,
+                end_dt__isnull=False
+            ).order_by('-end_dt').values('end_dt')[:1]
+            
+            queryset = queryset.annotate(
+                last_maintenance_date=Subquery(last_maintenance_subquery)
+            )
+        else:
+            # Если тип техобслуживания не найден, устанавливаем None
+            from django.db.models import Value
+            from django.db.models.fields import DateField
+            queryset = queryset.annotate(
+                last_maintenance_date=Value(None, output_field=DateField())
+            )
 
         queryset = queryset.select_related(
             'equipment',
@@ -270,6 +299,12 @@ class EquipmentAccountingAdmin(MainAdmin):
     @admin.display(description='Добавил')
     def user_name(self, obj):
         return obj.user.username if obj.user else '-'
+
+    @admin.display(description='Последнее ТО')
+    def last_maintenance_date(self, obj):
+        if hasattr(obj, 'last_maintenance_date') and obj.last_maintenance_date:
+            return obj.last_maintenance_date.strftime('%d.%m.%Y г.')
+        return 'Не проводилось'
 
     @admin.action(description='Установить - Проведено ТО')
     def set_is_our_service(self, request, queryset):
