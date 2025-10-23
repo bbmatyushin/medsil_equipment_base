@@ -10,6 +10,7 @@ from docx.table import Table, _Cell
 from docx.shared import Pt
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from .models import Service
 
@@ -141,11 +142,64 @@ class CreateServiceAkt:
                 cells = new_row.cells
                 cells[0].text = str(row_idx)  # №
                 cells[1].text = f"{part[0]} (арт. {part[1]})"  # Наименование + Артикул
-                cells[2].text = f""  # здесь должно быть количество
+                # Добавляем количество запчастей (предполагаем, что количество находится в part[2])
+                # Если в spare_parts передаются кортежи (name, article, quantity)
+                if len(part) >= 3:
+                    cells[2].text = str(part[2])  # количество
+                else:
+                    cells[2].text = "1"  # значение по умолчанию, если количество не указано
+                
+                # Выравниваем количество по центру
+                if len(cells) > 2:
+                    self._set_cell_alignment(cells[2], align='center')
 
                 if self.file_name == 'Akt_from_service.docx':
                     for cell in cells:
                         cell.paragraphs[0].runs[0].font.size = Pt(11)  # задаем разме шрифта
+
+    @staticmethod
+    def _set_cell_alignment(cell: _Cell, align: str = 'center'):
+        """Устанавливает выравнивание текста в ячейке
+        
+        Args:
+            cell: ячейка таблицы
+            align: тип выравнивания ('left', 'center', 'right', 'both', 'distribute')
+        """
+        # Получаем или создаем свойства ячейки
+        cell_tcPr = cell._tc.get_or_add_tcPr()
+        
+        # Создаем элемент для вертикального выравнивания
+        cell_alignment = OxmlElement('w:vAlign')
+        # Преобразуем строковое значение в правильный формат для вертикального выравнивания
+        if align == 'center':
+            v_align = 'center'
+        elif align == 'top':
+            v_align = 'top'
+        elif align == 'bottom':
+            v_align = 'bottom'
+        else:
+            v_align = 'center'  # значение по умолчанию
+            
+        cell_alignment.set(qn('w:val'), v_align)
+        
+        # Добавляем выравнивание в свойства ячейки
+        cell_tcPr.append(cell_alignment)
+        
+        # Также устанавливаем выравнивание для параграфа (горизонтальное выравнивание)
+        # Импортируем необходимые константы
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        
+        align_mapping = {
+            'left': WD_ALIGN_PARAGRAPH.LEFT,
+            'center': WD_ALIGN_PARAGRAPH.CENTER,
+            'right': WD_ALIGN_PARAGRAPH.RIGHT,
+            'both': WD_ALIGN_PARAGRAPH.JUSTIFY,
+            'distribute': WD_ALIGN_PARAGRAPH.DISTRIBUTE
+        }
+        
+        paragraph_align = align_mapping.get(align, WD_ALIGN_PARAGRAPH.CENTER)
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = paragraph_align
 
     @staticmethod
     def _set_cell_borders(cell: _Cell):
@@ -201,7 +255,20 @@ def create_service_atk(obj: Service, akt_name: str):
     }
     description = obj.description.replace("\r\n", "\n") if obj.description else ''
     job_content = obj.job_content.replace("\r\n", "\n") if obj.job_content else ''
-    spare_parts = list(obj.spare_part.values_list('name', 'article'))
+    # Получаем информацию о запчастях с количеством
+    spare_parts = []
+    for spare_part in obj.spare_part.all():
+        # Получаем количество из spare_part_count
+        quantity = 1  # значение по умолчанию
+        spare_part_id = str(spare_part.id)
+        if spare_part_id in obj.spare_part_count:
+            # Берем первое количество из списка
+            part_info = obj.spare_part_count[spare_part_id]
+            if isinstance(part_info, list) and len(part_info) > 0:
+                quantity = part_info[0].get('service_part_count', 1)
+            elif isinstance(part_info, dict):
+                quantity = part_info.get('service_part_count', 1)
+        spare_parts.append((spare_part.name, spare_part.article, quantity))
     create_akt = CreateServiceAkt(client, job_content, description, spare_parts, template_path)
     create_akt.update_tables()
 
