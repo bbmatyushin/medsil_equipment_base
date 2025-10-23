@@ -242,7 +242,7 @@ class EquipmentAccountingAdmin(MainAdmin):
                 last_maintenance_date=Value(None, output_field=DateField())
             )
 
-        # Оптимизация запросов для избежания N+1
+        # Глубокая оптимизация запросов для избежания N+1
         queryset = queryset.select_related(
             'equipment',
             'equipment_status',
@@ -250,6 +250,8 @@ class EquipmentAccountingAdmin(MainAdmin):
             'equipment__med_direction',
             'equipment__manufacturer',
             'equipment__supplier',
+            'equipment__manufacturer__city',
+            'equipment__supplier__city',
         ).prefetch_related(
             Prefetch(
                 'equipment_acc_department_equipment_accounting',
@@ -257,6 +259,7 @@ class EquipmentAccountingAdmin(MainAdmin):
                     'department',
                     'department__city',
                     'department__client',
+                    'department__client__city',
                     'engineer'
                 )
             ),
@@ -270,42 +273,49 @@ class EquipmentAccountingAdmin(MainAdmin):
 
         return queryset
 
-    def get_instance(self, obj):
-        # Используем предзагруженные данные из prefetch_related
-        # Берем первый активный департамент или любой доступный
-        try:
-            # Ищем активный департамент
-            for dept in obj.equipment_acc_department_equipment_accounting.all():
-                if dept.is_active:
-                    return dept
-            # Если активного нет, берем первый
-            return obj.equipment_acc_department_equipment_accounting.all()[0]
-        except (IndexError, AttributeError):
-            logger.warning(f"get_instance WARNING: No department found for equipment_accounting {obj.pk}")
-            return None
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
-        instance = self.get_instance(obj)
-        if isinstance(instance, list):
-            instance = instance[0]
-        return instance.department if instance else "--"
+        # Используем предзагруженные данные
+        for dept in obj.equipment_acc_department_equipment_accounting.all():
+            if dept.is_active:
+                return dept.department.name if dept.department else "--"
+        # Если активного нет, берем первый
+        try:
+            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
+            return dept.department.name if dept.department else "--"
+        except IndexError:
+            return "--"
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
-        instance = self.get_instance(obj)
-        if isinstance(instance, list):
-            instance = instance[0]
-        return instance.engineer if instance else "--"
+        # Используем предзагруженные данные
+        for dept in obj.equipment_acc_department_equipment_accounting.all():
+            if dept.is_active:
+                return dept.engineer.name if dept.engineer else "--"
+        # Если активного нет, берем первый
+        try:
+            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
+            return dept.engineer.name if dept.engineer else "--"
+        except IndexError:
+            return "--"
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
-        instance = self.get_instance(obj)
-        if isinstance(instance, list):
-            instance = instance[0]
-        if instance:
-            return instance.install_dt.strftime('%d.%m.%Y г.') if instance.install_dt else '--'
-        return "--"
+        # Используем предзагруженные данные
+        for dept in obj.equipment_acc_department_equipment_accounting.all():
+            if dept.is_active:
+                if dept.install_dt:
+                    return dept.install_dt.strftime('%d.%m.%Y г.')
+                return '--'
+        # Если активного нет, берем первый
+        try:
+            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
+            if dept.install_dt:
+                return dept.install_dt.strftime('%d.%m.%Y г.')
+            return '--'
+        except IndexError:
+            return "--"
 
     @admin.display(description='Добавил')
     def user_name(self, obj):
