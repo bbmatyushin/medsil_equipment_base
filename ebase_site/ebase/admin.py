@@ -242,33 +242,43 @@ class EquipmentAccountingAdmin(MainAdmin):
                 last_maintenance_date=Value(None, output_field=DateField())
             )
 
+        # Оптимизация запросов для избежания N+1
         queryset = queryset.select_related(
             'equipment',
             'equipment_status',
-            'user'
+            'user',
+            'equipment__med_direction',
+            'equipment__manufacturer',
+            'equipment__supplier',
         ).prefetch_related(
             Prefetch(
                 'equipment_acc_department_equipment_accounting',
                 queryset=EquipmentAccDepartment.objects.select_related(
                     'department',
+                    'department__city',
+                    'department__client',
                     'engineer'
                 )
             ),
-            "service_equipment_accounting"
+            Prefetch(
+                "service_equipment_accounting",
+                queryset=Service.objects.select_related(
+                    'service_type'
+                )
+            )
         )
 
         return queryset
 
     def get_instance(self, obj):
-        # try:
-        #     instance = obj.equipment_acc_department_equipment_accounting.get(equipment_accounting=obj.pk)
-        # except Exception as e:  #TODO: заглушка, чтобы не падала с ошибкой. Исправить.
-        #     logger.warning("get_instance WARNING:", exc_info=e)
-        #     instance = list(obj.equipment_acc_department_equipment_accounting.filter(equipment_accounting=obj.pk))
-        # return instance
-
-        # Используем уже предзагруженные данные из prefetch_related -- Claude
+        # Используем предзагруженные данные из prefetch_related
+        # Берем первый активный департамент или любой доступный
         try:
+            # Ищем активный департамент
+            for dept in obj.equipment_acc_department_equipment_accounting.all():
+                if dept.is_active:
+                    return dept
+            # Если активного нет, берем первый
             return obj.equipment_acc_department_equipment_accounting.all()[0]
         except (IndexError, AttributeError):
             logger.warning(f"get_instance WARNING: No department found for equipment_accounting {obj.pk}")
