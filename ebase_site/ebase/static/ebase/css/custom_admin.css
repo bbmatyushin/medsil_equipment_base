@@ -1,0 +1,72 @@
+/* Кастомные стили для админ панели */
+#header {
+    min-height: 70px;
+    height: auto;
+    padding: 5px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#branding {
+    height: auto;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+#site-name {
+    line-height: 1.4;
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+#site-name a {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-decoration: none;
+    color: #fff;
+    padding: 5px 0;
+}
+
+#site-name img {
+    flex-shrink: 0;
+    display: block;
+}
+
+#user-tools {
+    padding: 10px 0;
+    line-height: 1.4;
+    text-align: right;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    #header {
+        flex-direction: column;
+        align-items: flex-start;
+        min-height: auto;
+    }
+    
+    #branding {
+        margin-bottom: 10px;
+    }
+    
+    #site-name {
+        font-size: 1.2rem;
+    }
+    
+    #site-name a {
+        flex-direction: column;
+        gap: 5px;
+        text-align: center;
+    }
+    
+    #user-tools {
+        text-align: left;
+        width: 100%;
+    }
+}
