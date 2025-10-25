@@ -237,10 +237,29 @@ def create_service_atk(obj: Service, akt_name: str):
     client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
     address = f"{client_city} {dept.client.address if dept.client.address else ''}"
     # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
+    # Словарь для перевода месяцев на русский
+    month_translation = {
+        1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+        5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+        9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+    }
+    
     if akt_name == 'acceptInAkt':
-        akt_date = obj.beg_dt.strftime('«%d» %B %Y г.') if obj.beg_dt else "«     »_______________202__г."
+        if obj.beg_dt:
+            day = obj.beg_dt.day
+            month = month_translation[obj.beg_dt.month]
+            year = obj.beg_dt.year
+            akt_date = f'«{day}» {month} {year} г.'
+        else:
+            akt_date = "«     »_______________202__г."
     elif akt_name == 'acceptFromAkt':
-        akt_date = obj.end_dt.strftime('«%d» %B %Y г.') if obj.end_dt else "«     »_______________202__г."
+        if obj.end_dt:
+            day = obj.end_dt.day
+            month = month_translation[obj.end_dt.month]
+            year = obj.end_dt.year
+            akt_date = f'«{day}» {month} {year} г.'
+        else:
+            akt_date = "«     »_______________202__г."
     else:
         akt_date = "«     »_______________202__г."
     
