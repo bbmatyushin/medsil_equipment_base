@@ -23,6 +23,7 @@
     margin: 0;
     font-size: 0.88rem;
     font-weight: normal;
+    padding: 8px 0; /* Одинаковые отступы сверху и снизу */
 }
 
 #branding #site-name a {
@@ -31,7 +32,7 @@
     gap: 15px;
     text-decoration: none;
     color: #fff;
-    padding: 5px 0;
+    padding: 0; /* Убираем padding у ссылки, так как он теперь у родителя */
     font-size: inherit;
     font-weight: inherit;
 }
@@ -62,6 +63,7 @@
     
     #branding #site-name {
         font-size: 0.96rem;
+        padding: 6px 0; /* Адаптивные отступы для мобильных */
     }
     
     #branding #site-name a {
