@@ -241,9 +241,40 @@ def create_service_atk(obj: Service, akt_name: str):
     contact_person = "__________________________________"
     if hasattr(obj, 'contact_person_data') and obj.contact_person_data:
         contact_person_fio = obj.contact_person_data.get('fio', '').strip()
-        # Если ФИО не пустое, используем его, иначе оставляем подчеркивания
+        contact_person_position = obj.contact_person_data.get('position', '').strip()
+        
+        # Формируем строку контактного лица с дополнительной информацией
+        contact_person_parts = []
         if contact_person_fio:
-            contact_person = contact_person_fio
+            contact_person_parts.append(contact_person_fio)
+        
+        # Добавляем позицию, если она есть
+        if contact_person_position:
+            contact_person_parts.append(contact_person_position)
+        
+        # Получаем телефоны из объекта контактного лица
+        contact_person_obj = None
+        if hasattr(obj, 'contact_person') and obj.contact_person:
+            contact_person_obj = obj.contact_person
+        elif obj.contact_person_data.get('contact_person_id'):
+            try:
+                from directory.models import DeptContactPers
+                contact_person_obj = DeptContactPers.objects.get(
+                    id=obj.contact_person_data['contact_person_id']
+                )
+            except (DeptContactPers.DoesNotExist, KeyError):
+                pass
+        
+        # Добавляем телефоны в указанном порядке
+        if contact_person_obj:
+            if contact_person_obj.mob_phone:
+                contact_person_parts.append(contact_person_obj.mob_phone)
+            elif contact_person_obj.work_phone:
+                contact_person_parts.append(contact_person_obj.work_phone)
+        
+        # Формируем итоговую строку
+        if contact_person_parts:
+            contact_person = ', '.join(contact_person_parts)
     
     # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
     # Словарь для перевода месяцев на русский

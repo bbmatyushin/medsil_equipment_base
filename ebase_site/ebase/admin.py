@@ -838,8 +838,11 @@ class ServiceAdmin(MainAdmin):
             obj.contact_person_data = {
                 'fio': fio,
                 'position': contact_person.position.name if contact_person.position else '',
-                'department': contact_person.department.name if contact_person.department else ''
+                'department': contact_person.department.name if contact_person.department else '',
+                'contact_person_id': contact_person.id  # Сохраняем ID для доступа к телефонам
             }
+            # Сохраняем сам объект контактного лица для удобства доступа
+            obj.contact_person = contact_person
 
         if obj.beg_dt < date(2025, 10, 24):
             # Если дата начала ремонта меньше указанной даты, то ничего не делаем.
