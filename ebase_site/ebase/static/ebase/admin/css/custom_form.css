@@ -148,3 +148,36 @@ label[for$="search_button"] {
 .search-equipment-button:hover {
     background: var(--default-button-hover-bg);
 }
+
+/* Стили для поля выбора контактного лица */
+.field-contact_person {
+    margin-bottom: 15px;
+}
+
+.field-contact_person .field-box {
+    padding: 10px;
+    border-bottom: 1px solid var(--hairline-color);
+}
+
+.field-contact_person label {
+    display: block;
+    padding: 4px 10px 0 0;
+    min-width: 160px;
+    width: 160px;
+    word-wrap: break-word;
+    line-height: 1;
+    float: left;
+}
+
+.field-contact_person .help {
+    clear: both;
+    margin-left: 170px;
+    padding-top: 5px;
+    color: var(--body-quiet-color);
+    font-size: 0.75rem;
+}
+
+.field-contact_person select {
+    width: auto;
+    max-width: 400px;
+}
