@@ -1,6 +1,6 @@
 /* Кастомные стили для админ панели */
 #header {
-    min-height: 70px;
+    min-height: 55px;
     height: auto;
     padding: 5px 0;
     display: flex;
@@ -20,7 +20,7 @@
 #site-name {
     line-height: 1.4;
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.1rem;
 }
 
 #site-name a {
