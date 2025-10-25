@@ -15,12 +15,13 @@
     display: flex;
     align-items: center;
     flex: 1;
+    padding-left: 15px;
 }
 
 #site-name {
     line-height: 1.4;
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 0.88rem;
 }
 
 #site-name a {
@@ -38,7 +39,7 @@
 }
 
 #user-tools {
-    padding: 10px 0;
+    padding: 10px 15px 10px 0;
     line-height: 1.4;
     text-align: right;
 }
@@ -53,10 +54,11 @@
     
     #branding {
         margin-bottom: 10px;
+        padding-left: 10px;
     }
     
     #site-name {
-        font-size: 1.2rem;
+        font-size: 0.96rem;
     }
     
     #site-name a {
@@ -68,5 +70,6 @@
     #user-tools {
         text-align: left;
         width: 100%;
+        padding: 10px;
     }
 }
