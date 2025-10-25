@@ -258,7 +258,7 @@ def create_service_atk(obj: Service, akt_name: str):
             contact_person_obj = obj.contact_person
         elif obj.contact_person_data.get('contact_person_id'):
             try:
-                from directory.models import DeptContactPers
+                from ebase.models import DeptContactPers
                 contact_person_obj = DeptContactPers.objects.get(
                     id=obj.contact_person_data['contact_person_id']
                 )

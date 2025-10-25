@@ -17,6 +17,7 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
+from .models import DeptContactPers
 
 logger = logging.getLogger('ebase')
 
@@ -839,7 +840,7 @@ class ServiceAdmin(MainAdmin):
                 'fio': fio,
                 'position': contact_person.position.name if contact_person.position else '',
                 'department': contact_person.department.name if contact_person.department else '',
-                'contact_person_id': contact_person.id  # Сохраняем ID для доступа к телефонам
+                'contact_person_id': str(contact_person.id)  # Сохраняем ID для доступа к телефонам
             }
             # Сохраняем сам объект контактного лица для удобства доступа
             obj.contact_person = contact_person
