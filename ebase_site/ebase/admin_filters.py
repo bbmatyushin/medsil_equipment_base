@@ -24,7 +24,7 @@ class MedDirectionFilter(admin.SimpleListFilter):
 
     def lookups(self, request, model_admin):
         from directory.models import MedDirection
-        directions = MedDirection.objects.all()
+        directions = MedDirection.objects.all().order_by('name')
         return [(direction.id, direction.name) for direction in directions]
 
     def queryset(self, request, queryset):
