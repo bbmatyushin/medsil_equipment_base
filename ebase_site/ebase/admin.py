@@ -97,9 +97,16 @@ class DeptContactPersAdmin(MainAdmin):
 
     @admin.display(description='ФИО')
     def fio(self, obj):
-        return (f"{obj.surname if obj.surname else ''} "
-                f"{obj.name if obj.name else ''} "
-                f"{obj.patron if obj.patron else ''}")
+        # Формируем ФИО, исключая None и пустые строки
+        fio_parts = []
+        if obj.surname:
+            fio_parts.append(obj.surname)
+        if obj.name:
+            fio_parts.append(obj.name)
+        if obj.patron:
+            fio_parts.append(obj.patron)
+        
+        return ' '.join(fio_parts).strip()
 
     @admin.display(description='Телефон')
     def phone(self, obj):
@@ -817,8 +824,19 @@ class ServiceAdmin(MainAdmin):
         # Сохраняем данные контактного лица
         contact_person = form.cleaned_data.get('contact_person')
         if contact_person:
+            # Формируем ФИО, исключая None и пустые строки
+            fio_parts = []
+            if contact_person.surname:
+                fio_parts.append(contact_person.surname)
+            if contact_person.name:
+                fio_parts.append(contact_person.name)
+            if contact_person.patron:
+                fio_parts.append(contact_person.patron)
+            
+            fio = ' '.join(fio_parts).strip()
+            
             obj.contact_person_data = {
-                'fio': f"{contact_person.surname} {contact_person.name} {contact_person.patron}".strip(),
+                'fio': fio,
                 'position': contact_person.position.name if contact_person.position else '',
                 'department': contact_person.department.name if contact_person.department else ''
             }

@@ -240,7 +240,10 @@ def create_service_atk(obj: Service, akt_name: str):
     # Получаем выбранное контактное лицо из сохраненных данных
     contact_person = "__________________________________"
     if hasattr(obj, 'contact_person_data') and obj.contact_person_data:
-        contact_person = obj.contact_person_data.get('fio', "__________________________________")
+        contact_person_fio = obj.contact_person_data.get('fio', '').strip()
+        # Если ФИО не пустое, используем его, иначе оставляем подчеркивания
+        if contact_person_fio:
+            contact_person = contact_person_fio
     
     # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
     # Словарь для перевода месяцев на русский
