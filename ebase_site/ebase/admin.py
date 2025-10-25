@@ -205,7 +205,7 @@ class EquipmentAccountingAdmin(MainAdmin):
     ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
                 'equipment', 'serial_number', 'user',)
     list_select_related = True
-    list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply',)
+    list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply', MedDirectionFilter,)
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
@@ -358,7 +358,7 @@ class EquipmentAccountingAdmin(MainAdmin):
         list_filter = super().get_list_filter(request)
         user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
         if user_position:
-            list_filter = (InstallDtFilter, 'equipment_status__name',)
+            list_filter = (InstallDtFilter, 'equipment_status__name', MedDirectionFilter,)
         return list_filter
 
 

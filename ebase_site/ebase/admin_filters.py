@@ -16,3 +16,18 @@ class InstallDtFilter(admin.SimpleListFilter):
             return queryset.filter(equipment_acc_department_equipment_accounting__install_dt__isnull=False)
         elif self.value() == 'nulldt':
             return queryset.filter(equipment_acc_department_equipment_accounting__install_dt__isnull=True)
+
+
+class MedDirectionFilter(admin.SimpleListFilter):
+    title = 'Направление оборудования'
+    parameter_name = 'med_direction'
+
+    def lookups(self, request, model_admin):
+        from directory.models import MedDirection
+        directions = MedDirection.objects.all()
+        return [(direction.id, direction.name) for direction in directions]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(equipment__med_direction_id=self.value())
+        return queryset
