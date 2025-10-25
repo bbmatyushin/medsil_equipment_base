@@ -17,6 +17,7 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
+from .models import DeptContactPers
 
 logger = logging.getLogger('ebase')
 
@@ -97,9 +98,16 @@ class DeptContactPersAdmin(MainAdmin):
 
     @admin.display(description='ФИО')
     def fio(self, obj):
-        return (f"{obj.surname if obj.surname else ''} "
-                f"{obj.name if obj.name else ''} "
-                f"{obj.patron if obj.patron else ''}")
+        # Формируем ФИО, исключая None и пустые строки
+        fio_parts = []
+        if obj.surname:
+            fio_parts.append(obj.surname)
+        if obj.name:
+            fio_parts.append(obj.name)
+        if obj.patron:
+            fio_parts.append(obj.patron)
+        
+        return ' '.join(fio_parts).strip()
 
     @admin.display(description='Телефон')
     def phone(self, obj):
@@ -205,7 +213,7 @@ class EquipmentAccountingAdmin(MainAdmin):
     ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
                 'equipment', 'serial_number', 'user',)
     list_select_related = True
-    list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply',)
+    list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply', MedDirectionFilter,)
 #
     fieldsets = (
         ('НОВОЕ ОБОРУДОВАНИЕ ДЛЯ УЧЁТА', {'fields': ('equipment', ('serial_number', 'equipment_status'),
@@ -358,7 +366,7 @@ class EquipmentAccountingAdmin(MainAdmin):
         list_filter = super().get_list_filter(request)
         user_position = request.user.position.filter(type='employee', name__iexact='менеджер')
         if user_position:
-            list_filter = (InstallDtFilter, 'equipment_status__name',)
+            list_filter = (InstallDtFilter, 'equipment_status__name', MedDirectionFilter,)
         return list_filter
 
 
@@ -450,7 +458,7 @@ class ServiceAdmin(MainAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
-        ('Документы по ремонту', {'fields': ('accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
+        ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
 
     class Media:
@@ -647,7 +655,37 @@ class ServiceAdmin(MainAdmin):
                 self.message_user(request,
                                   message=f"{start_msg_text} сформирован для "
                                           f"{create_akt[0]} (s/n {create_akt[1]})")
-        return super().get_form(request, obj=None, change=False, **kwargs)
+        form = super().get_form(request, obj=None, change=False, **kwargs)
+
+        # Обновляем queryset для поля contact_person
+        if obj and obj.equipment_accounting:
+            # Получаем активное подразделение оборудования
+            active_department = obj.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
+                is_active=True
+            ).first()
+
+            if active_department and active_department.department:
+                # Получаем контактные лица для этого подразделения
+                contact_persons = DeptContactPers.objects.filter(
+                    department=active_department.department,
+                    is_active=True
+                ).select_related('department')
+
+                form.base_fields['contact_person'].queryset = contact_persons
+
+                # Устанавливаем начальное значение, если оно сохранено в contact_person_data
+                if obj.contact_person_data and 'contact_person_id' in obj.contact_person_data:
+                    try:
+                        contact_person_id = obj.contact_person_data['contact_person_id']
+                        form.base_fields['contact_person'].initial = contact_person_id
+                    except (ValueError, DeptContactPers.DoesNotExist):
+                        pass
+            else:
+                form.base_fields['contact_person'].queryset = DeptContactPers.objects.none()
+        else:
+            form.base_fields['contact_person'].queryset = DeptContactPers.objects.none()
+
+        return form
     
     def get_changeform_initial_data(self, request):
         """использовалось для отработки подставления значений оборудования при фильтрации
@@ -738,6 +776,11 @@ class ServiceAdmin(MainAdmin):
                 except (Service.DoesNotExist, IndexError, ValueError):
                     # Fallback к базовому queryset
                     pass
+        elif db_field.name == 'contact_person':
+            # Оптимизируем queryset для контактных лиц
+            kwargs["queryset"] = DeptContactPers.objects.select_related(
+                'department', 'position'
+            ).all()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
@@ -779,6 +822,29 @@ class ServiceAdmin(MainAdmin):
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
+        # Сохраняем данные контактного лица
+        contact_person = form.cleaned_data.get('contact_person')
+        if contact_person:
+            # Формируем ФИО, исключая None и пустые строки
+            fio_parts = []
+            if contact_person.surname:
+                fio_parts.append(contact_person.surname)
+            if contact_person.name:
+                fio_parts.append(contact_person.name)
+            if contact_person.patron:
+                fio_parts.append(contact_person.patron)
+            
+            fio = ' '.join(fio_parts).strip()
+            
+            obj.contact_person_data = {
+                'fio': fio,
+                'position': contact_person.position.name if contact_person.position else '',
+                'department': contact_person.department.name if contact_person.department else '',
+                'contact_person_id': str(contact_person.id)  # Сохраняем ID для доступа к телефонам
+            }
+            # Сохраняем сам объект контактного лица для удобства доступа
+            obj.contact_person = contact_person
+
         if obj.beg_dt < date(2025, 10, 24):
             # Если дата начала ремонта меньше указанной даты, то ничего не делаем.
             # Иначе переходим на сохранение в SparePartShipmentV2

@@ -51,6 +51,12 @@ class ServiceForm(forms.ModelForm):
         widget=ButtonWidget,
         label='',  # ширину поля для label задаем в custom_form.css стр.126
     )
+    contact_person = forms.ModelChoiceField(
+        queryset=DeptContactPers.objects.all(),
+        required=False,
+        label="Контактное лицо",
+        help_text="Выберите контактное лицо для актов"
+    )
 
     class Meta:
         model = Service

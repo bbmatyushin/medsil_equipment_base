@@ -236,9 +236,76 @@ def create_service_atk(obj: Service, akt_name: str):
     dept = obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
     client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
     address = f"{client_city} {dept.client.address if dept.client.address else ''}"
+    
+    # Получаем выбранное контактное лицо из сохраненных данных
+    contact_person = "__________________________________"
+    if hasattr(obj, 'contact_person_data') and obj.contact_person_data:
+        contact_person_fio = obj.contact_person_data.get('fio', '').strip()
+        contact_person_position = obj.contact_person_data.get('position', '').strip()
+        
+        # Формируем строку контактного лица с дополнительной информацией
+        contact_person_parts = []
+        if contact_person_fio:
+            contact_person_parts.append(contact_person_fio)
+        
+        # Добавляем позицию, если она есть
+        if contact_person_position:
+            contact_person_parts.append(contact_person_position)
+        
+        # Получаем телефоны из объекта контактного лица
+        contact_person_obj = None
+        if hasattr(obj, 'contact_person') and obj.contact_person:
+            contact_person_obj = obj.contact_person
+        elif obj.contact_person_data.get('contact_person_id'):
+            try:
+                from ebase.models import DeptContactPers
+                contact_person_obj = DeptContactPers.objects.get(
+                    id=obj.contact_person_data['contact_person_id']
+                )
+            except (DeptContactPers.DoesNotExist, KeyError):
+                pass
+        
+        # Добавляем телефоны в указанном порядке
+        if contact_person_obj:
+            if contact_person_obj.mob_phone:
+                contact_person_parts.append(contact_person_obj.mob_phone)
+            elif contact_person_obj.work_phone:
+                contact_person_parts.append(contact_person_obj.work_phone)
+        
+        # Формируем итоговую строку
+        if contact_person_parts:
+            contact_person = ', '.join(contact_person_parts)
+    
+    # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
+    # Словарь для перевода месяцев на русский
+    month_translation = {
+        1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+        5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+        9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+    }
+    
+    if akt_name == 'acceptInAkt':
+        if obj.beg_dt:
+            day = obj.beg_dt.day
+            month = month_translation[obj.beg_dt.month]
+            year = obj.beg_dt.year
+            akt_date = f'«{day}» {month} {year} г.'
+        else:
+            akt_date = "«     »_______________202__г."
+    elif akt_name == 'acceptFromAkt':
+        if obj.end_dt:
+            day = obj.end_dt.day
+            month = month_translation[obj.end_dt.month]
+            year = obj.end_dt.year
+            akt_date = f'«{day}» {month} {year} г.'
+        else:
+            akt_date = "«     »_______________202__г."
+    else:
+        akt_date = "«     »_______________202__г."
+    
     client = {
         '{{ CLIENT }}': dept.client.name,
-        '{{ CLIENT_CONTACT }}': "__________________________________",
+        '{{ CLIENT_CONTACT }}': contact_person,
         '{{ ADDRESS }}': address,
         '{{ PHONE }}': dept.client.phone if dept.client.phone else '',
         '{{ EMAIL }}': dept.client.email if dept.client.email else '',
@@ -248,7 +315,7 @@ def create_service_atk(obj: Service, akt_name: str):
         if obj.equipment_accounting.equipment.full_name else '',
         '{{ SERIAL_NUM }}': obj.equipment_accounting.serial_number,
         '{{ DATE }}': obj.end_dt.strftime('%d.%m.%Y') if obj.end_dt else '________________',
-        '{{ AKT_DATE }}': "«     »_______________202__г.",
+        '{{ AKT_DATE }}': akt_date,
         '{{ CITY }}': "__________________",
         'equipment_short_name': obj.equipment_accounting.equipment.short_name
         if obj.equipment_accounting.equipment.short_name else obj.equipment_accounting.equipment.full_name,
