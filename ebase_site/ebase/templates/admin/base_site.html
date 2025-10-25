@@ -9,12 +9,12 @@
 {% endblock %}
 
 {% block branding %}
-<h1 id="site-name">
+<div id="site-name">
     <a href="{% url 'admin:index' %}">
         <img src="{% static 'images/logo.png' %}" height="40px">
         ООО "Фирма МЕДСИЛ" - Сервис
     </a>
-</h1>
+</div>
 {% if user.is_anonymous %}
   {% include "admin/color_theme_toggle.html" %}
 {% endif %}
