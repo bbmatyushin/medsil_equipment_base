@@ -236,6 +236,12 @@ def create_service_atk(obj: Service, akt_name: str):
     dept = obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
     client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
     address = f"{client_city} {dept.client.address if dept.client.address else ''}"
+    
+    # Получаем выбранное контактное лицо из сохраненных данных
+    contact_person = "__________________________________"
+    if hasattr(obj, 'contact_person_data') and obj.contact_person_data:
+        contact_person = obj.contact_person_data.get('fio', "__________________________________")
+    
     # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
     # Словарь для перевода месяцев на русский
     month_translation = {
@@ -265,7 +271,7 @@ def create_service_atk(obj: Service, akt_name: str):
     
     client = {
         '{{ CLIENT }}': dept.client.name,
-        '{{ CLIENT_CONTACT }}': "__________________________________",
+        '{{ CLIENT_CONTACT }}': contact_person,
         '{{ ADDRESS }}': address,
         '{{ PHONE }}': dept.client.phone if dept.client.phone else '',
         '{{ EMAIL }}': dept.client.email if dept.client.email else '',
