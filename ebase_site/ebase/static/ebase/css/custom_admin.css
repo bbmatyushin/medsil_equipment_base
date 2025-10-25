@@ -1,6 +1,6 @@
 /* Кастомные стили для админ панели */
 #header {
-    min-height: 50px;
+    min-height: 30px;
     height: auto;
     padding: 5px 0;
     display: flex;
@@ -11,7 +11,7 @@
 
 #branding {
     height: auto;
-    min-height: 50px;
+    min-height: 30px;
     display: flex;
     align-items: center;
     flex: 1;
