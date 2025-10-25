@@ -19,7 +19,7 @@ class InstallDtFilter(admin.SimpleListFilter):
 
 
 class MedDirectionFilter(admin.SimpleListFilter):
-    title = 'Направление оборудования'
+    title = 'Направления'
     parameter_name = 'med_direction'
 
     def lookups(self, request, model_admin):
