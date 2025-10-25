@@ -1,20 +1,9 @@
 {% extends "admin/base.html" %}
-{% load static %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
 
-{% block extrahead %}
-    <link rel="shortcut icon" href="{% static 'images/favicon.ico' %}" />
-    <link rel="stylesheet" href="{% static 'ebase/css/custom_admin.css' %}">
-{% endblock %}
-
 {% block branding %}
-<div id="site-name">
-    <a href="{% url 'admin:index' %}">
-        <img src="{% static 'images/logo.png' %}" height="40px">
-        ООО "Фирма МЕДСИЛ" - Сервис
-    </a>
-</div>
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
 {% if user.is_anonymous %}
   {% include "admin/color_theme_toggle.html" %}
 {% endif %}
