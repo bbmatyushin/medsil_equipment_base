@@ -1,0 +1,80 @@
+/* Кастомные стили для админ панели */
+#header {
+    min-height: 30px;
+    height: auto;
+    padding: 5px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#branding {
+    height: auto;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    padding-left: 15px;
+}
+
+#branding #site-name {
+    line-height: 1.4;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: normal;
+    padding: 8px 0px; /* Одинаковые отступы сверху и снизу */
+}
+
+#branding #site-name a {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-decoration: none;
+    color: #fff;
+    padding: 0; /* Убираем padding у ссылки, так как он теперь у родителя */
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+#branding #site-name img {
+    flex-shrink: 0;
+    display: block;
+}
+
+#user-tools {
+    padding: 10px 15px 10px 0;
+    line-height: 1.4;
+    text-align: right;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    #header {
+        flex-direction: column;
+        align-items: flex-start;
+        min-height: auto;
+    }
+    
+    #branding {
+        margin-bottom: 10px;
+        padding-left: 10px;
+    }
+    
+    #branding #site-name {
+        font-size: 0.96rem;
+        padding: 6px 0; /* Адаптивные отступы для мобильных */
+    }
+    
+    #branding #site-name a {
+        flex-direction: column;
+        gap: 5px;
+        text-align: center;
+    }
+    
+    #user-tools {
+        text-align: left;
+        width: 100%;
+        padding: 10px;
+    }
+}

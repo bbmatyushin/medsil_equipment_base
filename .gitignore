@@ -20,6 +20,9 @@ gpt/
 CONVENTIONS.md
 .vscode/
 .pylintrc
+ebase_site/static/images/
+ebase_site/ebase/templates/admin/base_site.html.backup
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
