@@ -236,6 +236,14 @@ def create_service_atk(obj: Service, akt_name: str):
     dept = obj.equipment_accounting.equipment_acc_department_equipment_accounting.first().department
     client_city = dept.client.city.name if dept.client.city.name != 'Не указан' else ''
     address = f"{client_city} {dept.client.address if dept.client.address else ''}"
+    # Определяем дату для поля {{ AKT_DATE }} в зависимости от типа акта
+    if akt_name == 'acceptInAkt':
+        akt_date = obj.beg_dt.strftime('«%d» %B %Y г.') if obj.beg_dt else "«     »_______________202__г."
+    elif akt_name == 'acceptFromAkt':
+        akt_date = obj.end_dt.strftime('«%d» %B %Y г.') if obj.end_dt else "«     »_______________202__г."
+    else:
+        akt_date = "«     »_______________202__г."
+    
     client = {
         '{{ CLIENT }}': dept.client.name,
         '{{ CLIENT_CONTACT }}': "__________________________________",
@@ -248,7 +256,7 @@ def create_service_atk(obj: Service, akt_name: str):
         if obj.equipment_accounting.equipment.full_name else '',
         '{{ SERIAL_NUM }}': obj.equipment_accounting.serial_number,
         '{{ DATE }}': obj.end_dt.strftime('%d.%m.%Y') if obj.end_dt else '________________',
-        '{{ AKT_DATE }}': "«     »_______________202__г.",
+        '{{ AKT_DATE }}': akt_date,
         '{{ CITY }}': "__________________",
         'equipment_short_name': obj.equipment_accounting.equipment.short_name
         if obj.equipment_accounting.equipment.short_name else obj.equipment_accounting.equipment.full_name,
