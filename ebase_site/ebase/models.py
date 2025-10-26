@@ -420,8 +420,70 @@ class Manufacturer(EbaseModel):
         return f'<Manufacturer {self.name=!r}, {self.city=!r}>'
 
 
+class ReplacementEquipment(EbaseModel):
+    """Подменное оборудование для временной замены"""
+    equipment = models.ForeignKey(
+        'Equipment', on_delete=models.RESTRICT, null=False, blank=False,
+        related_name="replacement_equipment_equipment", verbose_name='Модель оборудования',
+        db_comment='ID модели подменного оборудования',
+        help_text='Модель подменного оборудования'
+    )
+    serial_number = models.CharField(
+        max_length=50, null=False, blank=False, verbose_name='Серийный номер',
+        db_comment='Серийный номер подменного прибора',
+        help_text='Серийный номер подменного прибора'
+    )
+    accessories = models.ForeignKey(
+        'directory.Accessories', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="replacement_equipment_accessories", verbose_name='Комплектующие',
+        db_comment='ID комплектующих к прибору',
+        help_text='Комплектующие, которые передаются с прибором'
+    )
+    state = models.CharField(
+        max_length=20, null=False, blank=False, verbose_name='Состояние',
+        db_comment='Состояние оборудования: рабочий/не рабочий',
+        help_text='Состояние оборудования',
+        choices=[('working', 'Рабочий'), ('not_working', 'Не рабочий')],
+        default='working'
+    )
+    comment = models.TextField(
+        null=True, blank=True, verbose_name='Комментарий',
+        db_comment='Комментарий к подменному оборудованию'
+    )
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="replacement_equipment_user", verbose_name='Пользователь',
+        db_comment='Пользователь, который добавил запись о подменном оборудовании',
+        help_text='Пользователь, который добавил запись о подменном оборудовании'
+    )
+
+    class Meta:
+        db_table = f'{company}."replacement_equipment"'
+        db_table_comment = 'Подменное оборудование для временной замены.\n\n-- BMatyushin'
+        verbose_name = 'Подменное оборудование'
+        verbose_name_plural = 'Подменное оборудование'
+        indexes = [
+            models.Index(fields=['equipment']),
+            models.Index(fields=['serial_number']),
+            models.Index(fields=['state']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.equipment.short_name} [{self.serial_number}] - {self.get_state_display()}"
+
+    def __repr__(self):
+        return f'<ReplacementEquipment {self.serial_number=!r}, {self.state=!r}>'
+
+
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
+    replacement_equipment = models.ForeignKey(
+        'ReplacementEquipment', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="service_replacement_equipment", verbose_name='Передается на время ремонта',
+        db_comment='ID подменного оборудования, передаваемого на время ремонта',
+        help_text='Подменное оборудование, передаваемое на время ремонта'
+    )
     service_type = models.ForeignKey(
         'directory.ServiceType', on_delete=models.SET_NULL, null=True, blank=False,
         related_name="service_service_type", verbose_name='Типа ремонта',
