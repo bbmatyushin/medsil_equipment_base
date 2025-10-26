@@ -76,7 +76,7 @@ class SparePartShipmentM2MForm(forms.ModelForm):
                             self.add_error(
                                 'expiration_dt',
                                 f'Указанного срока годности нет на складе. '
-                                f'Доступные сроки годности: {available_dates_str}'
+                                f'Доступные сроки: {available_dates_str}'
                             )
                         else:
                             self.add_error(
