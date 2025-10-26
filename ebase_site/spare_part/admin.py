@@ -322,6 +322,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def save_related(self, request, form, formsets, change):
+        """Вызывается после сохранения основной модели и имеет доступ к inline формам"""
         with transaction.atomic():
             # Сохраняем оригинальные значения перед сохранением
             original_spare_parts = {}
