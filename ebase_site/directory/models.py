@@ -233,36 +233,6 @@ class ServiceType(models.Model):
         return f'<ServiceType {self.name=!r}>'
 
 
-class Accessories(models.Model):
-    """Комплектующие для подменного оборудования."""
-    name = models.CharField(
-        max_length=200, null=False, blank=False, verbose_name='Наименование комплектующих',
-        db_comment='Наименование комплектующих',
-        help_text='Описание комплектующих, которые передаются с подменным оборудованием'
-    )
-    description = models.TextField(
-        null=True, blank=True, verbose_name='Описание',
-        db_comment='Подробное описание комплектующих'
-    )
-    create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-        help_text='Дата создания записи. Заполняется автоматически'
-    )
-
-    class Meta:
-        db_table = f'{company}."accessories"'
-        db_table_comment = 'Комплектующие для подменного оборудования.\n\n-- BMatyushin'
-        verbose_name = 'Комплектующие'
-        verbose_name_plural = 'Комплектующие'
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return f'<Accessories {self.name=!r}>'
-
-
 class Unit(models.Model):
     """Единицы измерения."""
     short_name = models.CharField(
