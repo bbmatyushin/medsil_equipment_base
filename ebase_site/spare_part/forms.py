@@ -53,33 +53,36 @@ class SparePartShipmentM2MForm(forms.ModelForm):
             if spare_part.is_expiration:
                 # Проверяем, что expiration_dt указан
                 if not expiration_dt:
-                    raise forms.ValidationError(
+                    self.add_error(
+                        'expiration_dt',
                         f'Для запчасти "{spare_part.name}" необходимо указать срок годности.'
                     )
-                
-                # Получаем доступные сроки годности из SparePartCount
-                available_dates = SparePartCount.objects.filter(
-                    spare_part=spare_part
-                ).values_list('expiration_dt', flat=True).distinct()
-                
-                # Проверяем, есть ли введённая дата среди доступных
-                if expiration_dt not in available_dates:
-                    # Форматируем доступные даты для сообщения об ошибке
-                    formatted_dates = []
-                    for date in available_dates:
-                        if date:
-                            formatted_dates.append(date.strftime('%d.%m.%Y'))
+                else:
+                    # Получаем доступные сроки годности из SparePartCount
+                    available_dates = SparePartCount.objects.filter(
+                        spare_part=spare_part
+                    ).values_list('expiration_dt', flat=True).distinct()
                     
-                    if formatted_dates:
-                        available_dates_str = ', '.join(formatted_dates)
-                        raise forms.ValidationError(
-                            f'Указанного срока годности нет на складе. '
-                            f'Доступные сроки годности: {available_dates_str}'
-                        )
-                    else:
-                        raise forms.ValidationError(
-                            f'Для запчасти "{spare_part.name}" нет доступных сроков годности на складе.'
-                        )
+                    # Проверяем, есть ли введённая дата среди доступных
+                    if expiration_dt not in available_dates:
+                        # Форматируем доступные даты для сообщения об ошибке
+                        formatted_dates = []
+                        for date in available_dates:
+                            if date:
+                                formatted_dates.append(date.strftime('%d.%m.%Y'))
+                        
+                        if formatted_dates:
+                            available_dates_str = ', '.join(formatted_dates)
+                            self.add_error(
+                                'expiration_dt',
+                                f'Указанного срока годности нет на складе. '
+                                f'Доступные сроки годности: {available_dates_str}'
+                            )
+                        else:
+                            self.add_error(
+                                'expiration_dt',
+                                f'Для запчасти "{spare_part.name}" нет доступных сроков годности на складе.'
+                            )
             else:
                 # Если у запчасти нет срока годности, устанавливаем expiration_dt в None
                 cleaned_data['expiration_dt'] = None
