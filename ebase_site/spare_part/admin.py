@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from django.contrib import admin
 from django.utils import timezone
@@ -12,6 +13,8 @@ from ebase.models import Service, EquipmentAccDepartment
 from .models import *
 from .forms import *
 from .admin_filters import WhoShipment
+
+logger = logging.getLogger('spare_part')
 
 
 class SparePartPhotoInline(admin.StackedInline):
@@ -65,6 +68,43 @@ class SparePartAdmin(MainAdmin):
             'admin/js/jquery.init.js',
             'spare_part/js/toggle_filter.js',
         )
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('<path:object_id>/get_expiration_dates/', self.admin_site.admin_view(self.get_expiration_dates),
+                 name='spare_part_get_expiration_dates'),
+        ]
+        return custom_urls + urls
+
+    def get_expiration_dates(self, request, object_id):
+        from django.http import JsonResponse
+        from django.shortcuts import get_object_or_404
+        from django.utils.dateformat import format
+        
+        spare_part = get_object_or_404(SparePart, pk=object_id)
+        
+        # Get available expiration dates from SparePartCount where amount > 0
+        available_dates = spare_part.spare_part_count_spare_part.filter(amount__gt=0)\
+            .values('expiration_dt', 'amount')\
+            .order_by('expiration_dt')
+        
+        # Format dates for display
+        formatted_dates = []
+        for date_info in available_dates:
+            if date_info['expiration_dt']:
+                display_date = format(date_info['expiration_dt'], 'd E Y')
+                formatted_dates.append({
+                    'date': date_info['expiration_dt'].isoformat(),
+                    'display': display_date,
+                    'amount': int(date_info['amount']) if date_info['amount'] % 1 == 0 else date_info['amount']
+                })
+        
+        return JsonResponse({
+            'is_expiration': spare_part.is_expiration,
+            'available_dates': formatted_dates
+        })
 
     @admin.display(description='Оборудование')
     def equipment_name(self, obj):
@@ -182,6 +222,29 @@ class SparePartShipmentM2MInline(admin.TabularInline):
             kwargs["queryset"] = SparePart.objects.select_related("unit")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        # This method is not used for expiration_dt since it's a DateField, not a ChoiceField
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        from django import forms
+        form = super().get_form(request, obj, **kwargs)
+        
+        # Add a custom method to the form to handle expiration_dt field
+        original_formfield_callback = form.formfield_callback
+        
+        def custom_formfield_callback(db_field, **field_kwargs):
+            formfield = original_formfield_callback(db_field, **field_kwargs)
+            if db_field.name == 'expiration_dt':
+                # Initially, we'll make it a choice field with empty choices
+                # JavaScript will populate it based on the selected spare_part
+                formfield.widget = forms.Select(choices=[('', '--')])
+                formfield.required = False
+            return formfield
+        
+        form.formfield_callback = custom_formfield_callback
+        return form
+
 
 @admin.register(SparePartShipmentV2)
 class SparePartShipmentV2Admin(admin.ModelAdmin):
@@ -212,6 +275,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         js = (
             'admin/js/jquery.init.js',
             'spare_part/js/remove_datetime_shortcuts.js',
+            'spare_part/js/expiration_dt_control.js',
         )
 
     @admin.display(description="Создал")
