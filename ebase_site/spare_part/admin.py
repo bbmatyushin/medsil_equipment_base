@@ -257,12 +257,12 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
                 .select_related("service_type", "equipment_accounting__equipment", "user")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
-    def save_model(self, request, obj, form, change):
+    def save_related(self, request, form, formsets, change):
         with transaction.atomic():
             # Сохраняем оригинальные значения перед сохранением
             original_spare_parts = {}
-            if change and obj.pk:
-                original = SparePartShipmentV2.objects.get(pk=obj.pk)
+            if change and form.instance.pk:
+                original = SparePartShipmentV2.objects.get(pk=form.instance.pk)
                 original_spare_parts = {
                     str(item.spare_part.id): {
                         'quantity': item.quantity,
@@ -270,44 +270,51 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
                     }
                     for item in original.shipment_m2m.all()
                 }
-
-            # Сохраняем основную модель
-            super().save_model(request, obj, form, change)
+            
+            # Вызываем родительский метод для сохранения связанных объектов
+            super().save_related(request, form, formsets, change)
             
             # Обрабатываем изменения количества для каждой запчасти через inline формы
-            # Используем form.forms для доступа к inline формам
-            for i, inline_form in enumerate(form.forms):
-                if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
-                    data = inline_form.cleaned_data
-                    # Пропускаем удаленные записи
-                    if data and not data.get('DELETE', False):
-                        spare_part = data.get('spare_part')
-                        quantity = data.get('quantity', 0)
-                        expiration_dt = data.get('expiration_dt')
-                        
-                        if spare_part and quantity > 0:
-                            try:
-                                # Получаем оригинальное количество
-                                original_data = original_spare_parts.get(str(spare_part.id), {})
-                                original_qty = original_data.get('quantity', 0)
-                                delta = quantity - original_qty
+            for formset in formsets:
+                if formset.model == SparePartShipmentM2M:
+                    for inline_form in formset:
+                        if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
+                            data = inline_form.cleaned_data
+                            # Пропускаем удаленные записи
+                            if data and not data.get('DELETE', False):
+                                spare_part = data.get('spare_part')
+                                quantity = data.get('quantity', 0)
+                                expiration_dt = data.get('expiration_dt')
                                 
-                                if delta != 0:
-                                    # Обновляем остаток с учетом срока годности
-                                    SparePartCount.objects.filter(
-                                        spare_part=spare_part,
-                                        expiration_dt=expiration_dt
-                                    ).update(amount=F('amount') - delta)
+                                if spare_part and quantity > 0:
+                                    try:
+                                        # Получаем оригинальное количество
+                                        original_data = original_spare_parts.get(str(spare_part.id), {})
+                                        original_qty = original_data.get('quantity', 0)
+                                        delta = quantity - original_qty
+                                        
+                                        if delta != 0:
+                                            # Обновляем остаток с учетом срока годности
+                                            # Используем amount__gt=0 чтобы не обновлять записи с нулевым количеством
+                                            SparePartCount.objects.filter(
+                                                spare_part=spare_part,
+                                                expiration_dt=expiration_dt,
+                                                amount__gt=0
+                                            ).update(amount=F('amount') - delta)
 
-                                    logger.info(
-                                        f"Обновление остатка для запчасти {spare_part.name}: "
-                                        f"изменение на {delta} (было {original_qty}, стало {quantity}), "
-                                        f"срок годности: {expiration_dt}"
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
-                                )
+                                            logger.info(
+                                                f"Обновление остатка для запчасти {spare_part.name}: "
+                                                f"изменение на {delta} (было {original_qty}, стало {quantity}), "
+                                                f"срок годности: {expiration_dt}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
+                                        )
+    
+    def save_model(self, request, obj, form, change):
+        # Сохраняем основную модель
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(SparePartShipment)
