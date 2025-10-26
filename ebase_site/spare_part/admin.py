@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from django.contrib import admin
 from django.utils import timezone
@@ -12,6 +13,8 @@ from ebase.models import Service, EquipmentAccDepartment
 from .models import *
 from .forms import *
 from .admin_filters import WhoShipment
+
+logger = logging.getLogger('spare_part')
 
 
 class SparePartPhotoInline(admin.StackedInline):
@@ -65,6 +68,43 @@ class SparePartAdmin(MainAdmin):
             'admin/js/jquery.init.js',
             'spare_part/js/toggle_filter.js',
         )
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('<path:object_id>/get_expiration_dates/', self.admin_site.admin_view(self.get_expiration_dates),
+                 name='spare_part_get_expiration_dates'),
+        ]
+        return custom_urls + urls
+
+    def get_expiration_dates(self, request, object_id):
+        from django.http import JsonResponse
+        from django.shortcuts import get_object_or_404
+        from django.utils.dateformat import format
+        
+        spare_part = get_object_or_404(SparePart, pk=object_id)
+        
+        # Get available expiration dates from SparePartCount where amount > 0
+        available_dates = spare_part.spare_part_count_spare_part.filter(amount__gt=0)\
+            .values('expiration_dt', 'amount')\
+            .order_by('expiration_dt')
+        
+        # Format dates for display
+        formatted_dates = []
+        for date_info in available_dates:
+            if date_info['expiration_dt']:
+                display_date = format(date_info['expiration_dt'], 'd E Y')
+                formatted_dates.append({
+                    'date': date_info['expiration_dt'].isoformat(),
+                    'display': display_date,
+                    'amount': int(date_info['amount']) if date_info['amount'] % 1 == 0 else date_info['amount']
+                })
+        
+        return JsonResponse({
+            'is_expiration': spare_part.is_expiration,
+            'available_dates': formatted_dates
+        })
 
     @admin.display(description='Оборудование')
     def equipment_name(self, obj):
@@ -152,6 +192,7 @@ class SparePartSupplyAdmin(MainAdmin):
 
 class SparePartShipmentM2MInline(admin.TabularInline):
     model = SparePartShipmentM2M
+    form = SparePartShipmentM2MForm
     extra = 1
     autocomplete_fields = ("spare_part",)
     fields = ("spare_part", "quantity", "expiration_dt")
@@ -166,10 +207,6 @@ class SparePartShipmentM2MInline(admin.TabularInline):
             for field_name in formset.form.base_fields:
                 formset.form.base_fields[field_name].disabled = True
                 formset.form.base_fields[field_name].widget.attrs['readonly'] = True
-                # if field_name == "expiration_dt":
-                #     formset.form.base_fields[field_name].widget.attrs.pop("today", None)
-                #     formset.form.base_fields[field_name].widget.attrs.pop("calendar", None)
-
 
         return formset
 
@@ -181,6 +218,29 @@ class SparePartShipmentM2MInline(admin.TabularInline):
         if db_field.name == "spare_part":
             kwargs["queryset"] = SparePart.objects.select_related("unit")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        # This method is not used for expiration_dt since it's a DateField, not a ChoiceField
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        from django import forms
+        form = super().get_form(request, obj, **kwargs)
+        
+        # Add a custom method to the form to handle expiration_dt field
+        original_formfield_callback = form.formfield_callback
+        
+        def custom_formfield_callback(db_field, **field_kwargs):
+            formfield = original_formfield_callback(db_field, **field_kwargs)
+            if db_field.name == 'expiration_dt':
+                # Initially, we'll make it a choice field with empty choices
+                # JavaScript will populate it based on the selected spare_part
+                formfield.widget = forms.Select(choices=[('', '--')])
+                formfield.required = False
+            return formfield
+        
+        form.formfield_callback = custom_formfield_callback
+        return form
 
 
 @admin.register(SparePartShipmentV2)
@@ -212,6 +272,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         js = (
             'admin/js/jquery.init.js',
             'spare_part/js/remove_datetime_shortcuts.js',
+            'spare_part/js/expiration_dt_control.js',
         )
 
     @admin.display(description="Создал")
@@ -257,12 +318,13 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
                 .select_related("service_type", "equipment_accounting__equipment", "user")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
-    def save_model(self, request, obj, form, change):
+    def save_related(self, request, form, formsets, change):
+        """Вызывается после сохранения основной модели и имеет доступ к inline формам"""
         with transaction.atomic():
             # Сохраняем оригинальные значения перед сохранением
             original_spare_parts = {}
-            if change and obj.pk:
-                original = SparePartShipmentV2.objects.get(pk=obj.pk)
+            if change and form.instance.pk:
+                original = SparePartShipmentV2.objects.get(pk=form.instance.pk)
                 original_spare_parts = {
                     str(item.spare_part.id): {
                         'quantity': item.quantity,
@@ -270,44 +332,51 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
                     }
                     for item in original.shipment_m2m.all()
                 }
-
-            # Сохраняем основную модель
-            super().save_model(request, obj, form, change)
+            
+            # Вызываем родительский метод для сохранения связанных объектов
+            super().save_related(request, form, formsets, change)
             
             # Обрабатываем изменения количества для каждой запчасти через inline формы
-            # Используем form.forms для доступа к inline формам
-            for i, inline_form in enumerate(form.forms):
-                if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
-                    data = inline_form.cleaned_data
-                    # Пропускаем удаленные записи
-                    if data and not data.get('DELETE', False):
-                        spare_part = data.get('spare_part')
-                        quantity = data.get('quantity', 0)
-                        expiration_dt = data.get('expiration_dt')
-                        
-                        if spare_part and quantity > 0:
-                            try:
-                                # Получаем оригинальное количество
-                                original_data = original_spare_parts.get(str(spare_part.id), {})
-                                original_qty = original_data.get('quantity', 0)
-                                delta = quantity - original_qty
+            for formset in formsets:
+                if formset.model == SparePartShipmentM2M:
+                    for inline_form in formset:
+                        if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
+                            data = inline_form.cleaned_data
+                            # Пропускаем удаленные записи
+                            if data and not data.get('DELETE', False):
+                                spare_part = data.get('spare_part')
+                                quantity = data.get('quantity', 0)
+                                expiration_dt = data.get('expiration_dt')
                                 
-                                if delta != 0:
-                                    # Обновляем остаток с учетом срока годности
-                                    SparePartCount.objects.filter(
-                                        spare_part=spare_part,
-                                        expiration_dt=expiration_dt
-                                    ).update(amount=F('amount') - delta)
+                                if spare_part and quantity > 0:
+                                    try:
+                                        # Получаем оригинальное количество
+                                        original_data = original_spare_parts.get(str(spare_part.id), {})
+                                        original_qty = original_data.get('quantity', 0)
+                                        delta = quantity - original_qty
+                                        
+                                        if delta != 0:
+                                            # Обновляем остаток с учетом срока годности
+                                            # Используем amount__gt=0 чтобы не обновлять записи с нулевым количеством
+                                            SparePartCount.objects.filter(
+                                                spare_part=spare_part,
+                                                expiration_dt=expiration_dt,
+                                                amount__gt=0
+                                            ).update(amount=F('amount') - delta)
 
-                                    logger.info(
-                                        f"Обновление остатка для запчасти {spare_part.name}: "
-                                        f"изменение на {delta} (было {original_qty}, стало {quantity}), "
-                                        f"срок годности: {expiration_dt}"
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
-                                )
+                                            logger.info(
+                                                f"Обновление остатка для запчасти {spare_part.name}: "
+                                                f"изменение на {delta} (было {original_qty}, стало {quantity}), "
+                                                f"срок годности: {expiration_dt}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
+                                        )
+    
+    def save_model(self, request, obj, form, change):
+        # Сохраняем основную модель
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(SparePartShipment)

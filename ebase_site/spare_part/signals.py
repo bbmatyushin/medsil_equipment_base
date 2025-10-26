@@ -91,30 +91,30 @@ def spare_part_shipment_m2m_post_delete(sender, instance, **kwargs):
         logger.exception(f'Error restoring SparePartCount: {str(e)}')
 
 
-# @receiver(post_save, sender=SparePartShipmentV2)
-# def spare_part_shipment_v2_post_save(sender, instance, created, **kwargs):
-#     """Сигнал для уменьшения количества запчастей на склад при добавлении записи из SparePartShipmentV2."""
-#     if created:
-#         if instance.shipment_m2m.exists():
-#             for shipment_item in instance.shipment_m2m.all():
-#                 spare_part = shipment_item.spare_part
-#                 quantity = shipment_item.quantity
-#
-#                 try:
-#                     spare_part_info = instance.service.spare_part_count.get(str(spare_part.pk))
-#                     for item in spare_part_info:
-#                         SparePartCount.objects.filter(
-#                             spare_part=spare_part,
-#                             expiration_dt=item['expiration_dt']
-#                         ).update(amount=F('amount') - quantity)
-#                     else:  # при обновлении в SparePartShipmentV2 заменяем amount на quantity
-#                         SparePartCount.objects.filter(
-#                             spare_part=spare_part,
-#                             expiration_dt=item['expiration_dt']
-#                         ).update(amount=quantity)
-#                     logger.info(f'Update Shipment spare part. Updated amount for spare_part_id {str(spare_part.id)}')
-#                 except SparePartCount.DoesNotExist:
-#                     logger.error(f'SparePartCount not found for spare_part_id {str(spare_part.id)}')
+@receiver(post_save, sender=SparePartShipmentV2)
+def spare_part_shipment_v2_post_save(sender, instance, created, **kwargs):
+    """Сигнал для уменьшения количества запчастей на склад при добавлении записи из SparePartShipmentV2."""
+    if created:
+        if instance.shipment_m2m.exists():
+            for shipment_item in instance.shipment_m2m.all():
+                spare_part = shipment_item.spare_part
+                quantity = shipment_item.quantity
+
+                try:
+                    spare_part_info = instance.service.spare_part_count.get(str(spare_part.pk))
+                    for item in spare_part_info:
+                        SparePartCount.objects.filter(
+                            spare_part=spare_part,
+                            expiration_dt=item['expiration_dt']
+                        ).update(amount=F('amount') - quantity)
+                    else:  # при обновлении в SparePartShipmentV2 заменяем amount на quantity
+                        SparePartCount.objects.filter(
+                            spare_part=spare_part,
+                            expiration_dt=item['expiration_dt']
+                        ).update(amount=quantity)
+                    logger.info(f'Update Shipment spare part. Updated amount for spare_part_id {str(spare_part.id)}')
+                except SparePartCount.DoesNotExist:
+                    logger.error(f'SparePartCount not found for spare_part_id {str(spare_part.id)}')
 
 
 @receiver(post_delete, sender=SparePartShipmentV2)

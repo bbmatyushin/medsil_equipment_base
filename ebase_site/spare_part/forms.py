@@ -38,6 +38,58 @@ class SparePartCountForm(forms.ModelForm):
         return cleaned_data
 
 
+class SparePartShipmentM2MForm(forms.ModelForm):
+    class Meta:
+        model = SparePartShipmentM2M
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        spare_part = cleaned_data.get('spare_part')
+        expiration_dt = cleaned_data.get('expiration_dt')
+        
+        if spare_part:
+            # Если у запчасти есть срок годности
+            if spare_part.is_expiration:
+                # Проверяем, что expiration_dt указан
+                if not expiration_dt:
+                    self.add_error(
+                        'expiration_dt',
+                        f'Для запчасти "{spare_part.name}" необходимо указать срок годности.'
+                    )
+                else:
+                    # Получаем доступные сроки годности из SparePartCount
+                    available_dates = SparePartCount.objects.filter(
+                        spare_part=spare_part
+                    ).values_list('expiration_dt', flat=True).distinct()
+                    
+                    # Проверяем, есть ли введённая дата среди доступных
+                    if expiration_dt not in available_dates:
+                        # Форматируем доступные даты для сообщения об ошибке
+                        formatted_dates = []
+                        for date in available_dates:
+                            if date:
+                                formatted_dates.append(date.strftime('%d.%m.%Y'))
+                        
+                        if formatted_dates:
+                            available_dates_str = ', '.join(formatted_dates)
+                            self.add_error(
+                                'expiration_dt',
+                                f'Указанного срока годности нет на складе. '
+                                f'Доступные сроки: {available_dates_str}'
+                            )
+                        else:
+                            self.add_error(
+                                'expiration_dt',
+                                f'Для запчасти "{spare_part.name}" нет доступных сроков годности на складе.'
+                            )
+            else:
+                # Если у запчасти нет срока годности, устанавливаем expiration_dt в None
+                cleaned_data['expiration_dt'] = None
+        
+        return cleaned_data
+
+
 class SparePartShipmentV2Form(forms.ModelForm):
     comment = forms.CharField(
         label='Комментарий',
