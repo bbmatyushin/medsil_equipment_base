@@ -999,7 +999,7 @@ class ServiceAdmin(MainAdmin):
 class ReplacementEquipmentAdmin(MainAdmin):
     autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
-    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'comment_short')
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'transferred_to', 'comment_short')
     list_display_links = ("equipment", "serial_number",)
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
     search_help_text = 'Поиск по модели оборудования или серийному номеру'
@@ -1017,7 +1017,8 @@ class ReplacementEquipmentAdmin(MainAdmin):
             'equipment',
             'user'
         ).prefetch_related(
-            'accessories'
+            'accessories',
+            'service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department'
         )
 
     @admin.display(description='Комплектующие')
@@ -1028,6 +1029,29 @@ class ReplacementEquipmentAdmin(MainAdmin):
     @admin.display(description='Состояние')
     def state_display(self, obj):
         return obj.get_state_display()
+
+    @admin.display(description='Передано')
+    def transferred_to(self, obj):
+        # Получаем активные сервисы, где это подменное оборудование используется
+        active_services = obj.service_replacement_equipment.filter(
+            end_dt__isnull=True  # Ремонт еще не завершен
+        ).select_related(
+            'equipment_accounting__equipment_acc_department_equipment_accounting__department'
+        )
+        
+        departments = []
+        for service in active_services:
+            # Получаем активные подразделения для оборудования в сервисе
+            active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
+                is_active=True
+            )
+            for dept in active_departments:
+                if dept.department:
+                    departments.append(dept.department.name)
+        
+        if departments:
+            return ', '.join(set(departments))  # Убираем дубликаты
+        return 'В офисе'
 
     @admin.display(description='Добавил')
     def user_name(self, obj):
