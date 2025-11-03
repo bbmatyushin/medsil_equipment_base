@@ -17,6 +17,10 @@ from .admin_filters import WhoShipment
 logger = logging.getLogger('spare_part')
 
 
+class SparePartAccessoriesAdmin(MainAdmin):
+    pass
+
+
 class SparePartPhotoInline(admin.StackedInline):
     model = SparePartPhoto
     # classes = ['wide',]

@@ -26,7 +26,7 @@ class SparePartAbs(models.Model):
         abstract = True
 
 
-class Accessories(SparePartAbs):
+class SparePartAccessories(SparePartAbs):
     """Комплектующие для подменного оборудования."""
     name = models.CharField(
         max_length=200, null=False, blank=False, verbose_name='Наименование комплектующих',
