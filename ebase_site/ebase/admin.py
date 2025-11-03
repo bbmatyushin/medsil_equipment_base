@@ -966,6 +966,7 @@ class ServiceAdmin(MainAdmin):
 
 @admin.register(ReplacementEquipment)
 class ReplacementEquipmentAdmin(MainAdmin):
+    autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
     list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'comment_short')
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
