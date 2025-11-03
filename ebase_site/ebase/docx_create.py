@@ -71,7 +71,7 @@ class CreateServiceAkt:
                 if self.file_name == "service_akt_MEDSIL.docx":
                     self.job_content_update(table)
                 elif self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] and len(self.spare_parts) > 0:
-                    pass
+                    self.fill_accessories_table_for_service(table)
 
             if i == 5:
                 if self.file_name == "service_akt_MEDSIL.docx" and len(self.spare_parts) > 0:
@@ -242,6 +242,40 @@ class CreateServiceAkt:
                 for cell in cells:
                     cell.paragraphs[0].runs[0].font.size = Pt(11)
 
+    def fill_accessories_table_for_service(self, table: Table):
+        """Заполняет таблицу комплектующих для актов приема-передачи в ремонт и из ремонта"""
+        # Формируем список комплектующих с их количеством
+        accessories_with_quantity = []
+        for accessory_data in self.spare_parts:
+            # spare_parts содержит данные в формате (name, article, quantity)
+            if len(accessory_data) >= 3:
+                name = accessory_data[0]
+                quantity = accessory_data[2]
+                accessories_with_quantity.append((name, quantity))
+        
+        # Проходим по строкам, начиная со второй (индекс 1), если первая - заголовок
+        for row_idx in range(1, max(len(accessories_with_quantity) + 1, len(table.rows))):
+            if row_idx >= len(table.rows):
+                new_row = table.add_row()  # Добавляем новую строку, если не хватает
+                # Добавляем границы для всех ячеек новой строки
+                for cell in new_row.cells:
+                    self._set_cell_borders(cell)
+
+            # Заполняем ячейки строки, если есть соответствующий аксессуар
+            if row_idx - 1 < len(accessories_with_quantity):
+                accessory_name, quantity = accessories_with_quantity[row_idx - 1]
+                cells = table.rows[row_idx].cells
+                cells[0].text = str(row_idx)  # №
+                cells[1].text = accessory_name  # Наименование
+                cells[2].text = str(quantity)  # Количество из ServiceAccessoriesInline
+                # Выравниваем количество по центру
+                if len(cells) > 2:
+                    self._set_cell_alignment(cells[2], align='center')
+
+                # Настройка шрифта
+                for cell in cells:
+                    cell.paragraphs[0].runs[0].font.size = Pt(11)
+
     def replacement_equipment_table(self, table: Table):
         """Заполняет таблицу с подменным оборудованием для акта приема-передачи в ремонт"""
         # Таблица должна содержать одну строку и две ячейки
@@ -398,7 +432,20 @@ def create_service_atk(obj: Service, akt_name: str):
             elif isinstance(part_info, dict):
                 quantity = part_info.get('service_part_count', 1)
         spare_parts.append((spare_part.name, spare_part.article, quantity))
-    create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
+    
+    # Получаем информацию о комплектующих с количеством из ServiceAccessories
+    accessories_with_quantity = []
+    for service_accessory in obj.service_accessories.all():
+        accessory_name = service_accessory.accessory.name
+        quantity = service_accessory.quantity
+        accessories_with_quantity.append((accessory_name, '', quantity))
+    
+    # Объединяем запчасти и комплектующие для актов приема-передачи
+    if akt_name in ['acceptInAkt', 'acceptFromAkt']:
+        all_parts = spare_parts + accessories_with_quantity
+    else:
+        all_parts = spare_parts
+    create_akt = CreateServiceAkt(client, job_content, description, all_parts,
                                   template_path, accessories, replacement_equipment)
     create_akt.update_tables()
 
