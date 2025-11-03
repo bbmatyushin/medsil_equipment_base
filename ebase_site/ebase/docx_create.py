@@ -67,12 +67,11 @@ class CreateServiceAkt:
 
             if i == 3: self.description_update(table)
 
-            if i == 4 and self.file_name == "service_akt_MEDSIL.docx":
-                self.job_content_update(table)
-            # Изначально заполнялось перечнем запчастей - это неверно.
-            # elif i == 4 and self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] \
-            #         and len(self.spare_parts) > 0:
-            #     self.spare_part_table(table)
+            if i == 4:
+                if self.file_name == "service_akt_MEDSIL.docx":
+                    self.job_content_update(table)
+                elif self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] and len(self.spare_parts) > 0:
+                    pass
 
             if i == 5:
                 if self.file_name == "service_akt_MEDSIL.docx" and len(self.spare_parts) > 0:
