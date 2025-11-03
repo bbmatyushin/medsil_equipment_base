@@ -7,9 +7,9 @@ from typing import Optional
 from datetime import date
 
 from django.utils.safestring import mark_safe
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import Prefetch, QuerySet
-from django.urls import path
+from django.urls import path, reverse
 from django.http import JsonResponse
 
 from spare_part.models import (
@@ -823,13 +823,24 @@ class ServiceAdmin(MainAdmin):
                 'department', 'position'
             ).all()
         elif db_field.name == 'replacement_equipment':
-            # Оптимизируем queryset для подменного оборудования
+            # Ограничиваем queryset для подменного оборудования - только те, которые не связаны с активными сервисами
+            # Исключаем подменное оборудование, которое уже связано с сервисами, где ремонт еще не завершен
+            used_replacement_equipment_ids = Service.objects.filter(
+                replacement_equipment__isnull=False,
+                end_dt__isnull=True  # Ремонт еще не завершен
+            ).exclude(
+                # При редактировании текущего сервиса, нужно исключить его из фильтрации
+                pk=request.resolver_match.kwargs.get('object_id') if request.resolver_match else None
+            ).values_list('replacement_equipment_id', flat=True)
+            
             kwargs["queryset"] = ReplacementEquipment.objects.select_related(
                 'equipment',
                 'user'
             ).prefetch_related(
                 'accessories'
-            ).all()
+            ).exclude(
+                id__in=used_replacement_equipment_ids
+            )
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
@@ -999,9 +1010,12 @@ class ServiceAdmin(MainAdmin):
 class ReplacementEquipmentAdmin(MainAdmin):
     autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
-    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'comment_short')
-    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
-    search_help_text = 'Поиск по модели оборудования или серийному номеру'
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 
+                   'related_service', 'comment_short', 'state_display')
+    list_display_links = ("equipment", "serial_number",)
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',
+                     "service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department__name")
+    search_help_text = 'Поиск по модели оборудования, серийному номеру или подразделению'
     # list_filter = ('state',)
     ordering = ('equipment__short_name', 'serial_number')
     
@@ -1012,12 +1026,34 @@ class ReplacementEquipmentAdmin(MainAdmin):
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
+        qs = super().get_queryset(request).select_related(
             'equipment',
-            'user'
+            'user',
+            'service_replacement_equipment',
+            'service_replacement_equipment__equipment_accounting',
+            'service_replacement_equipment__equipment_accounting__equipment'
         ).prefetch_related(
-            'accessories'
+            'accessories',
+            Prefetch(
+                'service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting',
+                queryset=EquipmentAccDepartment.objects.select_related('department').filter(is_active=True)
+            )
         )
+        
+        return qs
+
+    @admin.display(description='Связанный ремонт')
+    def related_service(self, obj):
+        """Отображает информацию о связанном ремонте со ссылкой"""
+        try:
+            service = obj.service_replacement_equipment
+            if service:
+                equipment = service.equipment_accounting
+                url = reverse('admin:ebase_service_change', args=[service.id])
+                return mark_safe(f'<a href="{url}">{equipment.equipment.short_name}</a>')
+        except Service.DoesNotExist:
+            pass
+        return '--'
 
     @admin.display(description='Комплектующие')
     def accessories_info(self, obj):
@@ -1027,6 +1063,27 @@ class ReplacementEquipmentAdmin(MainAdmin):
     @admin.display(description='Состояние')
     def state_display(self, obj):
         return obj.get_state_display()
+
+    @admin.display(description='Передано')
+    def transferred_to(self, obj):
+        # Получаем сервис, где это подменное оборудование используется
+        try:
+            service = obj.service_replacement_equipment
+            # Проверяем, что ремонт еще не завершен
+            if service and service.end_dt is None:
+                # Получаем активные подразделения для оборудования в сервисе
+                active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.all()
+                departments = []
+                for dept in active_departments:
+                    if dept.department:
+                        departments.append(dept.department.name)
+                
+                if departments:
+                    return ', '.join(set(departments))  # Убираем дубликаты
+        except Service.DoesNotExist:
+            pass
+        
+        return 'В офисе'
 
     @admin.display(description='Добавил')
     def user_name(self, obj):
