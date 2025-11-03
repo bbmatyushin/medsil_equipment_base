@@ -999,7 +999,7 @@ class ServiceAdmin(MainAdmin):
 class ReplacementEquipmentAdmin(MainAdmin):
     autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
-    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'transferred_to', 'comment_short')
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 'comment_short', 'state_display')
     list_display_links = ("equipment", "serial_number",)
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
     search_help_text = 'Поиск по модели оборудования или серийному номеру'
