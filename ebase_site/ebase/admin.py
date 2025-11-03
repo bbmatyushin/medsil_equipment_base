@@ -406,6 +406,11 @@ class ServiceAccessoriesInline(admin.TabularInline):
     verbose_name = 'Комплектующее'
     verbose_name_plural = 'Перечень коплектующих для передачи'
     
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.empty_permitted = True
+        return formset
+    
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "accessory":
             # Оптимизируем запрос для комплектующих
