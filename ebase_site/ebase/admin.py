@@ -404,7 +404,7 @@ class ServiceAccessoriesInline(admin.TabularInline):
     model = ServiceAccessories
     extra = 1
     verbose_name = 'Комплектующее'
-    verbose_name_plural = 'Комплектующие'
+    verbose_name_plural = 'Перечень коплектующих для передачи'
     
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "accessory":
