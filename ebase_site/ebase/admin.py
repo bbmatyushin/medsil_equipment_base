@@ -1050,10 +1050,10 @@ class ReplacementEquipmentAdmin(MainAdmin):
             if service:
                 equipment = service.equipment_accounting
                 url = reverse('admin:ebase_service_change', args=[service.id])
-                return mark_safe(f'<a href="{url}">{equipment.equipment.short_name} (s/n {equipment.serial_number})</a>')
+                return mark_safe(f'<a href="{url}">{equipment.equipment.short_name}</a>')
         except Service.DoesNotExist:
             pass
-        return '-'
+        return '--'
 
     @admin.display(description='Комплектующие')
     def accessories_info(self, obj):
@@ -1072,9 +1072,7 @@ class ReplacementEquipmentAdmin(MainAdmin):
             # Проверяем, что ремонт еще не завершен
             if service and service.end_dt is None:
                 # Получаем активные подразделения для оборудования в сервисе
-                active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
-                    is_active=True
-                )
+                active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.all()
                 departments = []
                 for dept in active_departments:
                     if dept.department:
