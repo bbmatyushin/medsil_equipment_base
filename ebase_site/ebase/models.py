@@ -434,7 +434,7 @@ class ReplacementEquipment(EbaseModel):
         help_text='Серийный номер подменного прибора'
     )
     accessories = models.ForeignKey(
-        'spare_part.Accessories', on_delete=models.SET_NULL, null=True, blank=True,
+        'spare_part.SparePartAccessories', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="replacement_equipment_accessories", verbose_name='Комплектующие',
         db_comment='ID комплектующих к прибору',
         help_text='Комплектующие, которые передаются с прибором'
