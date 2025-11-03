@@ -9,7 +9,7 @@ from datetime import date
 from django.utils.safestring import mark_safe
 from django.db import models, transaction
 from django.db.models import Prefetch, QuerySet
-from django.urls import path
+from django.urls import path, reverse
 from django.http import JsonResponse
 
 from spare_part.models import (
@@ -1010,7 +1010,8 @@ class ServiceAdmin(MainAdmin):
 class ReplacementEquipmentAdmin(MainAdmin):
     autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
-    list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 'comment_short', 'state_display')
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 
+                   'related_service', 'comment_short', 'state_display')
     list_display_links = ("equipment", "serial_number",)
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',
                      "service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department__name")
@@ -1041,6 +1042,19 @@ class ReplacementEquipmentAdmin(MainAdmin):
         
         return qs
 
+    @admin.display(description='Связанный ремонт')
+    def related_service(self, obj):
+        """Отображает информацию о связанном ремонте со ссылкой"""
+        try:
+            service = obj.service_replacement_equipment
+            if service:
+                equipment = service.equipment_accounting
+                url = reverse('admin:ebase_service_change', args=[service.id])
+                return mark_safe(f'<a href="{url}">{equipment.equipment.short_name} (s/n {equipment.serial_number})</a>')
+        except Service.DoesNotExist:
+            pass
+        return '-'
+
     @admin.display(description='Комплектующие')
     def accessories_info(self, obj):
         accessories_names = list(obj.accessories.all().values_list('name', flat=True))
@@ -1056,7 +1070,7 @@ class ReplacementEquipmentAdmin(MainAdmin):
         try:
             service = obj.service_replacement_equipment
             # Проверяем, что ремонт еще не завершен
-            if service.end_dt is None:
+            if service and service.end_dt is None:
                 # Получаем активные подразделения для оборудования в сервисе
                 active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
                     is_active=True
