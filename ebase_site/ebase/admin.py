@@ -400,6 +400,19 @@ class ManufacturerAdmin(MainAdmin):
         return obj.country.name if obj.country else '-'
 
 
+class ServiceAccessoriesInline(admin.TabularInline):
+    model = ServiceAccessories
+    extra = 1
+    verbose_name = 'Комплектующее'
+    verbose_name_plural = 'Комплектующие'
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "accessory":
+            # Оптимизируем запрос для комплектующих
+            kwargs["queryset"] = SparePartAccessories.objects.all()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 class ServicePhotosInline(admin.StackedInline):
     model = ServicePhotos
     # classes = ['wide',]
@@ -436,10 +449,10 @@ class ServiceAdmin(MainAdmin):
     form = ServiceForm
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
-    inlines = (ServicePhotosInline, )
+    inlines = (ServiceAccessoriesInline, ServicePhotosInline, )
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'photos',
-                    'description_short', 'spare_part_used',
+                    'description_short', 'spare_part_used', 'accessories_used',
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
@@ -502,6 +515,10 @@ class ServiceAdmin(MainAdmin):
                 "replacement_equipment__accessories",
                 queryset=SparePartAccessories.objects.all()
             ),
+            Prefetch(
+                "service_accessories",
+                queryset=ServiceAccessories.objects.select_related('accessory')
+            ),
         )
 
     @admin.display(description='Содержание работ')
@@ -533,6 +550,15 @@ class ServiceAdmin(MainAdmin):
         # Используем предзагруженные данные
         spare_parts_list = [sp.name for sp in obj.spare_part.all()]
         return "; ".join(spare_parts_list) if spare_parts_list else '-'
+
+    @admin.display(description='Комплектующие')
+    def accessories_used(self, obj):
+        # Используем предзагруженные данные
+        accessories_list = [
+            f"{sa.accessory.name} ({sa.quantity} шт.)" 
+            for sa in obj.service_accessories.all()
+        ]
+        return "; ".join(accessories_list) if accessories_list else '-'
 
     @admin.display(description='Подразделение')
     def dept_name(self, obj):
