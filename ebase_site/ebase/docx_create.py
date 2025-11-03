@@ -72,7 +72,8 @@ class CreateServiceAkt:
             if i == 4:
                 if self.file_name == "service_akt_MEDSIL.docx":
                     self.job_content_update(table)
-                elif self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] and len(self.spare_parts) > 0:
+                elif self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] \
+                        and len(self.accessories_with_quantity) > 0:
                     # self.fill_accessories_table_for_service(table)
                     self.spare_part_table(table, self.accessories_with_quantity)
 
