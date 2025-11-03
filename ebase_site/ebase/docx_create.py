@@ -18,13 +18,17 @@ from .models import Service
 class CreateServiceAkt:
     def __init__(self, client: dict, job_content: str,
                  description: str, spare_parts: list,
-                 template_path: Path):
+                 template_path: Path,
+                 accessories: list,
+                 replacement_equipment: str):
         self.akt = Document(str(template_path))
         self.file_name = template_path.name
         self.client = client
         self.description = description
         self.job_content = job_content
         self.spare_parts = spare_parts
+        self.accessories = accessories
+        self.replacement_equipment = replacement_equipment
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
@@ -69,9 +73,16 @@ class CreateServiceAkt:
             #         and len(self.spare_parts) > 0:
             #     self.spare_part_table(table)
 
-            if i == 5 and self.file_name == "service_akt_MEDSIL.docx" \
-                    and len(self.spare_parts) > 0:
-                self.spare_part_table(table)  # Используемые запчасти
+            if i == 5:
+                if self.file_name == "service_akt_MEDSIL.docx" and len(self.spare_parts) > 0:
+                    self.spare_part_table(table)  # Используемые запчасти
+                # Табличка с указанием подменного оборудования
+                elif self.file_name == "Akt_in_service.docx" and self.replacement_equipment:
+                    pass
+
+            if i == 6 and self.file_name == "Akt_in_service.docx" \
+                    and self.accessories:  # Табличка с перечнем коплектующих для подменного оборудования
+                pass
 
         self.akt.save(self.save_file_path)
 
@@ -322,6 +333,11 @@ def create_service_atk(obj: Service, akt_name: str):
     }
     description = obj.description.replace("\r\n", "\n") if obj.description else ''
     job_content = obj.job_content.replace("\r\n", "\n") if obj.job_content else ''
+    accessories = \
+        obj.replacement_equipment.accessories.values_list("name", flat=True) if obj.replacement_equipment else []
+    replacement_equipment = \
+        f"{obj.replacement_equipment.serial_number} [{obj.replacement_equipment.equipment.full_name}]" \
+            if obj.replacement_equipment else ""
     # Получаем информацию о запчастях с количеством
     spare_parts = []
     for spare_part in obj.spare_part.all():
@@ -336,7 +352,8 @@ def create_service_atk(obj: Service, akt_name: str):
             elif isinstance(part_info, dict):
                 quantity = part_info.get('service_part_count', 1)
         spare_parts.append((spare_part.name, spare_part.article, quantity))
-    create_akt = CreateServiceAkt(client, job_content, description, spare_parts, template_path)
+    create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
+                                  template_path, accessories, replacement_equipment)
     create_akt.update_tables()
 
     if akt_name == 'serviceAkt':
