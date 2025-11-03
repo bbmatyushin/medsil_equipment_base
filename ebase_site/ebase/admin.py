@@ -963,13 +963,15 @@ class ReplacementEquipmentAdmin(MainAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             'equipment',
-            'accessories',
             'user'
+        ).prefetch_related(
+            'accessories'
         )
 
     @admin.display(description='Комплектующие')
     def accessories_info(self, obj):
-        return obj.accessories.name if obj.accessories else '-'
+        accessories_names = list(obj.accessories.all().values_list('name', flat=True))
+        return ', '.join(accessories_names) if accessories_names else '-'
 
     @admin.display(description='Состояние')
     def state_display(self, obj):

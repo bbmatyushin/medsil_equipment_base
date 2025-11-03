@@ -433,8 +433,8 @@ class ReplacementEquipment(EbaseModel):
         db_comment='Серийный номер подменного прибора',
         help_text='Серийный номер подменного прибора'
     )
-    accessories = models.ForeignKey(
-        'spare_part.SparePartAccessories', on_delete=models.SET_NULL, null=True, blank=True,
+    accessories = models.ManyToManyField(
+        'spare_part.SparePartAccessories', blank=True,
         related_name="replacement_equipment_accessories", verbose_name='Комплектующие',
         db_comment='ID комплектующих к прибору',
         help_text='Комплектующие, которые передаются с прибором'
@@ -470,9 +470,7 @@ class ReplacementEquipment(EbaseModel):
         ]
 
     def __str__(self):
-        accessories_list = []
-        if self.accessories:
-            accessories_list.append(self.accessories.name)
+        accessories_list = list(self.accessories.all().values_list('name', flat=True))
         accessories_info = f" с комплектующими: {', '.join(accessories_list)}" if accessories_list else ""
         return f"{self.equipment.short_name} [{self.serial_number}]{accessories_info}"
 
