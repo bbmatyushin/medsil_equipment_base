@@ -948,10 +948,11 @@ class ServiceAdmin(MainAdmin):
 
 @admin.register(ReplacementEquipment)
 class ReplacementEquipmentAdmin(MainAdmin):
-    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'user_name', 'comment_short')
+    filter_horizontal = ("accessories",)
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'comment_short')
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
     search_help_text = 'Поиск по модели оборудования или серийному номеру'
-    list_filter = ('state',)
+    # list_filter = ('state',)
     ordering = ('equipment__short_name', 'serial_number')
     
     fieldsets = (
