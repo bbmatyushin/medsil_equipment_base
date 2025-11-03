@@ -1001,7 +1001,8 @@ class ReplacementEquipmentAdmin(MainAdmin):
     filter_horizontal = ("accessories",)
     list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 'comment_short', 'state_display')
     list_display_links = ("equipment", "serial_number",)
-    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',
+                     "service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department__name")
     search_help_text = 'Поиск по модели оборудования, серийному номеру или подразделению'
     # list_filter = ('state',)
     ordering = ('equipment__short_name', 'serial_number')
@@ -1026,17 +1027,6 @@ class ReplacementEquipmentAdmin(MainAdmin):
                 queryset=EquipmentAccDepartment.objects.select_related('department').filter(is_active=True)
             )
         )
-        
-        # Обработка поиска по подразделению
-        search_term = request.GET.get('q', '')
-        if search_term:
-            # Ищем подменное оборудование, которое передано в подразделения с именем, содержащим search_term
-            qs = qs.filter(
-                models.Q(equipment__full_name__icontains=search_term) |
-                models.Q(equipment__short_name__icontains=search_term) |
-                models.Q(serial_number__icontains=search_term) |
-                models.Q(service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department__name__icontains=search_term)
-            ).distinct()
         
         return qs
 
