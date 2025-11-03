@@ -946,6 +946,51 @@ class ServiceAdmin(MainAdmin):
         #     super().delete_model(request, obj)
 
 
+@admin.register(ReplacementEquipment)
+class ReplacementEquipmentAdmin(MainAdmin):
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'user_name', 'comment_short')
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
+    search_help_text = 'Поиск по модели оборудования или серийному номеру'
+    list_filter = ('state',)
+    ordering = ('equipment__short_name', 'serial_number')
+    
+    fieldsets = (
+        ('Подменное оборудование', {
+            'fields': ('equipment', 'serial_number', 'accessories', 'state', 'comment')
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'equipment',
+            'accessories',
+            'user'
+        )
+
+    @admin.display(description='Комплектующие')
+    def accessories_info(self, obj):
+        return obj.accessories.name if obj.accessories else '-'
+
+    @admin.display(description='Состояние')
+    def state_display(self, obj):
+        return obj.get_state_display()
+
+    @admin.display(description='Добавил')
+    def user_name(self, obj):
+        return obj.user.username if obj.user else '-'
+
+    @admin.display(description='Комментарий')
+    def comment_short(self, obj):
+        if obj.comment:
+            return obj.comment[:50] + '...' if len(obj.comment) > 50 else obj.comment
+        return '-'
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
+
+
 @admin.register(Supplier)
 class SupplierAdmin(MainAdmin):
     autocomplete_fields = ('city',)
