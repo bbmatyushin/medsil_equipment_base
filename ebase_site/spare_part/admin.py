@@ -17,8 +17,17 @@ from .admin_filters import WhoShipment
 logger = logging.getLogger('spare_part')
 
 
+@admin.register(SparePartAccessories)
 class SparePartAccessoriesAdmin(MainAdmin):
-    pass
+    list_display = ("id", "name", "create_dt",)
+    list_display_links = ("name",)
+    search_fields = ("name",)
+    search_help_text = 'Поиск по названию комплектующего'
+    ordering = ("name",)
+
+    fieldsets = (
+        ("Комплектующая к прибору", {"fields": ("name", "description",),}),
+    )
 
 
 class SparePartPhotoInline(admin.StackedInline):
