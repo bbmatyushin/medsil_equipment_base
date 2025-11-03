@@ -26,7 +26,7 @@ class SparePartAccessoriesAdmin(MainAdmin):
     ordering = ("name",)
 
     fieldsets = (
-        ("Комплектующая к прибору", {"fields": ("name", "description",),}),
+        ("Комплектующие к прибору", {"fields": ("name", "description",),}),
     )
 
 
