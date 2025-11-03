@@ -516,7 +516,7 @@ class ServiceAccessories(models.Model):
 
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
-    replacement_equipment = models.ForeignKey(
+    replacement_equipment = models.OneToOneField(
         'ReplacementEquipment', on_delete=models.SET_NULL, null=True, blank=True,
         related_name="service_replacement_equipment", verbose_name='Передается на время ремонта',
         db_comment='ID подменного оборудования, передаваемого на время ремонта',

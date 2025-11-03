@@ -1015,10 +1015,16 @@ class ReplacementEquipmentAdmin(MainAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             'equipment',
-            'user'
+            'user',
+            'service_replacement_equipment',
+            'service_replacement_equipment__equipment_accounting',
+            'service_replacement_equipment__equipment_accounting__equipment'
         ).prefetch_related(
             'accessories',
-            'service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting__department'
+            Prefetch(
+                'service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting',
+                queryset=EquipmentAccDepartment.objects.select_related('department').filter(is_active=True)
+            )
         )
 
     @admin.display(description='Комплектующие')
@@ -1032,25 +1038,25 @@ class ReplacementEquipmentAdmin(MainAdmin):
 
     @admin.display(description='Передано')
     def transferred_to(self, obj):
-        # Получаем активные сервисы, где это подменное оборудование используется
-        active_services = obj.service_replacement_equipment.filter(
-            end_dt__isnull=True  # Ремонт еще не завершен
-        ).select_related(
-            'equipment_accounting__equipment_acc_department_equipment_accounting__department'
-        )
+        # Получаем сервис, где это подменное оборудование используется
+        try:
+            service = obj.service_replacement_equipment
+            # Проверяем, что ремонт еще не завершен
+            if service.end_dt is None:
+                # Получаем активные подразделения для оборудования в сервисе
+                active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
+                    is_active=True
+                )
+                departments = []
+                for dept in active_departments:
+                    if dept.department:
+                        departments.append(dept.department.name)
+                
+                if departments:
+                    return ', '.join(set(departments))  # Убираем дубликаты
+        except Service.DoesNotExist:
+            pass
         
-        departments = []
-        for service in active_services:
-            # Получаем активные подразделения для оборудования в сервисе
-            active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.filter(
-                is_active=True
-            )
-            for dept in active_departments:
-                if dept.department:
-                    departments.append(dept.department.name)
-        
-        if departments:
-            return ', '.join(set(departments))  # Убираем дубликаты
         return 'В офисе'
 
     @admin.display(description='Добавил')
