@@ -478,6 +478,42 @@ class ReplacementEquipment(EbaseModel):
         return f'<ReplacementEquipment {self.serial_number=!r}, {self.state=!r}>'
 
 
+class ServiceAccessories(models.Model):
+    """Промежуточная модель для связи сервиса и комплектующих с количеством"""
+    service = models.ForeignKey(
+        'Service', on_delete=models.CASCADE, null=False, blank=False,
+        related_name="service_accessories", verbose_name='Ремонт',
+        db_comment='ID ремонта'
+    )
+    accessory = models.ForeignKey(
+        'spare_part.SparePartAccessories', on_delete=models.CASCADE, null=False, blank=False,
+        related_name="service_accessories_accessory", verbose_name='Комплектующее',
+        db_comment='ID комплектующего'
+    )
+    quantity = models.PositiveIntegerField(
+        default=1, verbose_name='Количество',
+        db_comment='Количество комплектующих',
+        help_text='Количество используемых комплектующих'
+    )
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
+        db_comment='Дата создания записи'
+    )
+
+    class Meta:
+        db_table = f'{company}."service_accessories"'
+        db_table_comment = 'Связь ремонта с комплектующими и их количеством.\n\n-- BMatyushin'
+        verbose_name = 'Комплектующее для ремонта'
+        verbose_name_plural = 'Комплектующие для ремонта'
+        unique_together = ('service', 'accessory')
+
+    def __str__(self):
+        return f"{self.accessory.name} - {self.quantity} шт."
+
+    def __repr__(self):
+        return f'<ServiceAccessories {self.accessory.name=!r}, {self.quantity=!r}>'
+
+
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
     replacement_equipment = models.ForeignKey(
@@ -542,6 +578,13 @@ class Service(EbaseModel):
         default=dict, blank=True, editable=False,
         db_comment='Для хранения данных выбранного контактного лица. '
                    'Формат - {contact_person_id: id, fio: "ФИО"}'
+    )
+    accessories = models.ManyToManyField(
+        "spare_part.SparePartAccessories", 
+        through='ServiceAccessories',
+        blank=True,
+        verbose_name='Комплектующие',
+        help_text='Комплектующие, используемые в ремонте'
     )
     service_akt = models.CharField(
         max_length=2056, null=True, blank=True, verbose_name='Акт',

@@ -21,7 +21,8 @@ class CreateServiceAkt:
                  description: str, spare_parts: list,
                  template_path: Path,
                  accessories: QuerySet,
-                 replacement_equipment: str):
+                 replacement_equipment: str,
+                 accessories_with_quantity: list):
         self.akt = Document(str(template_path))
         self.file_name = template_path.name
         self.client = client
@@ -30,6 +31,7 @@ class CreateServiceAkt:
         self.spare_parts = spare_parts
         self.accessories = accessories
         self.replacement_equipment = replacement_equipment
+        self.accessories_with_quantity = accessories_with_quantity
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
@@ -67,12 +69,12 @@ class CreateServiceAkt:
 
             if i == 3: self.description_update(table)
 
-            if i == 4 and self.file_name == "service_akt_MEDSIL.docx":
-                self.job_content_update(table)
-            # Изначально заполнялось перечнем запчастей - это неверно.
-            # elif i == 4 and self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] \
-            #         and len(self.spare_parts) > 0:
-            #     self.spare_part_table(table)
+            if i == 4:
+                if self.file_name == "service_akt_MEDSIL.docx":
+                    self.job_content_update(table)
+                elif self.file_name in ["Akt_in_service.docx", "Akt_from_service.docx"] and len(self.spare_parts) > 0:
+                    # self.fill_accessories_table_for_service(table)
+                    self.spare_part_table(table, self.accessories_with_quantity)
 
             if i == 5:
                 if self.file_name == "service_akt_MEDSIL.docx" and len(self.spare_parts) > 0:
@@ -136,6 +138,7 @@ class CreateServiceAkt:
 
     def spare_part_table(self, table: Table, rows_data: list):
         """Обновляем данные в таблице Замененные детали.
+        И комплектующих для актов приема-передачи в ремонт и из ремонта
 
         :param table - таблица с которой будем работать
         :param rows_data - список данных, которыми будет наполняться таблица
@@ -157,7 +160,11 @@ class CreateServiceAkt:
                 part = rows_data[row_idx - 1]  # Индекс запчасти: 0, 1, 2...
                 cells = new_row.cells
                 cells[0].text = str(row_idx)  # №
-                cells[1].text = f"{part[0]} (арт. {part[1]})"  # Наименование + Артикул
+                if part[1]:
+                    text_name = f"{part[0]} (арт. {part[1]})"  # Наименование + Артикул
+                else:
+                    text_name = f"{part[0]}"  # Наименование
+                cells[1].text = text_name
                 # Добавляем количество запчастей (предполагаем, что количество находится в part[2])
                 # Если в spare_parts передаются кортежи (name, article, quantity)
                 if len(part) >= 3:
@@ -169,9 +176,9 @@ class CreateServiceAkt:
                 if len(cells) > 2:
                     self._set_cell_alignment(cells[2], align='center')
 
-                if self.file_name == 'Akt_from_service.docx':
-                    for cell in cells:
-                        cell.paragraphs[0].runs[0].font.size = Pt(11)  # задаем разме шрифта
+                # if self.file_name == 'Akt_from_service.docx':
+                for cell in cells:
+                    cell.paragraphs[0].runs[0].font.size = Pt(11)  # задаем разме шрифта
 
     @staticmethod
     def _set_cell_alignment(cell: _Cell, align: str = 'center'):
@@ -399,8 +406,20 @@ def create_service_atk(obj: Service, akt_name: str):
             elif isinstance(part_info, dict):
                 quantity = part_info.get('service_part_count', 1)
         spare_parts.append((spare_part.name, spare_part.article, quantity))
+    
+    # Получаем информацию о комплектующих с количеством из ServiceAccessories
+    accessories_with_quantity = []
+    for service_accessory in obj.service_accessories.all():
+        accessory_name = service_accessory.accessory.name
+        quantity = service_accessory.quantity
+        accessories_with_quantity.append((accessory_name, '', quantity))
+
+    #TODO: accessories можно создать таким же списком как и accessories_with_quantity,
+    # чтобы использовать один метод для заполнения таблицы
+
     create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
-                                  template_path, accessories, replacement_equipment)
+                                  template_path, accessories, replacement_equipment,
+                                  accessories_with_quantity,)
     create_akt.update_tables()
 
     if akt_name == 'serviceAkt':
