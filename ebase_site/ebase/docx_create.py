@@ -78,7 +78,7 @@ class CreateServiceAkt:
                     self.spare_part_table(table)  # Используемые запчасти
                 # Табличка с указанием подменного оборудования
                 elif self.file_name == "Akt_in_service.docx" and self.replacement_equipment:
-                    pass
+                    self.replacement_equipment_table(table)
 
             if i == 6 and self.file_name == "Akt_in_service.docx" \
                     and self.accessories:  # Табличка с перечнем коплектующих для подменного оборудования
@@ -211,6 +211,22 @@ class CreateServiceAkt:
         paragraph_align = align_mapping.get(align, WD_ALIGN_PARAGRAPH.CENTER)
         for paragraph in cell.paragraphs:
             paragraph.alignment = paragraph_align
+
+    def replacement_equipment_table(self, table: Table):
+        """Заполняет таблицу с подменным оборудованием для акта приема-передачи в ремонт"""
+        # Таблица должна содержать одну строку и две ячейки
+        if len(table.rows) > 0:
+            row = table.rows[0]
+            if len(row.cells) >= 2:
+                # Заполняем вторую ячейку (индекс 1) значением подменного оборудования
+                cell = row.cells[1]
+                cell.text = self.replacement_equipment
+                # Устанавливаем размер шрифта
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(11)
+                # Устанавливаем границы ячейки
+                self._set_cell_borders(cell)
 
     @staticmethod
     def _set_cell_borders(cell: _Cell):
