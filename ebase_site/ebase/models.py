@@ -470,7 +470,11 @@ class ReplacementEquipment(EbaseModel):
         ]
 
     def __str__(self):
-        return f"{self.equipment.short_name} [{self.serial_number}] - {self.get_state_display()}"
+        accessories_list = []
+        if self.accessories:
+            accessories_list.append(self.accessories.name)
+        accessories_info = f" с комплектующими: {', '.join(accessories_list)}" if accessories_list else ""
+        return f"{self.equipment.short_name} [{self.serial_number}]{accessories_info}"
 
     def __repr__(self):
         return f'<ReplacementEquipment {self.serial_number=!r}, {self.state=!r}>'
