@@ -12,7 +12,10 @@ from django.db.models import Prefetch, QuerySet
 from django.urls import path
 from django.http import JsonResponse
 
-from spare_part.models import SparePart, SparePartCount, SparePartShipment, SparePartShipmentV2, SparePartShipmentM2M
+from spare_part.models import (
+    SparePart, SparePartCount, SparePartShipment,
+    SparePartShipmentV2, SparePartShipmentM2M, SparePartAccessories
+)
 from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
@@ -458,6 +461,7 @@ class ServiceAdmin(MainAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
+        ('Подменное оборудование', {'fields': ('replacement_equipment',),}),
         ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
 
@@ -476,7 +480,9 @@ class ServiceAdmin(MainAdmin):
             "equipment_accounting",
             "equipment_accounting__equipment",
             "service_type",
-            "user"
+            "user",
+            "replacement_equipment",
+            "replacement_equipment__equipment"
         ).prefetch_related(
             "spare_part",
             Prefetch(
@@ -491,6 +497,10 @@ class ServiceAdmin(MainAdmin):
             Prefetch(
                 "service_photos",
                 queryset=ServicePhotos.objects.all()
+            ),
+            Prefetch(
+                "replacement_equipment__accessories",
+                queryset=SparePartAccessories.objects.all()
             ),
         )
 
@@ -781,6 +791,14 @@ class ServiceAdmin(MainAdmin):
             kwargs["queryset"] = DeptContactPers.objects.select_related(
                 'department', 'position'
             ).all()
+        elif db_field.name == 'replacement_equipment':
+            # Оптимизируем queryset для подменного оборудования
+            kwargs["queryset"] = ReplacementEquipment.objects.select_related(
+                'equipment',
+                'user'
+            ).prefetch_related(
+                'accessories'
+            ).all()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
@@ -944,6 +962,54 @@ class ServiceAdmin(MainAdmin):
         #                 pass
         #
         #     super().delete_model(request, obj)
+
+
+@admin.register(ReplacementEquipment)
+class ReplacementEquipmentAdmin(MainAdmin):
+    filter_horizontal = ("accessories",)
+    list_display = ('equipment', 'serial_number', 'accessories_info', 'state_display', 'comment_short')
+    search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number')
+    search_help_text = 'Поиск по модели оборудования или серийному номеру'
+    # list_filter = ('state',)
+    ordering = ('equipment__short_name', 'serial_number')
+    
+    fieldsets = (
+        ('Подменное оборудование', {
+            'fields': ('equipment', 'serial_number', 'accessories', 'state', 'comment')
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'equipment',
+            'user'
+        ).prefetch_related(
+            'accessories'
+        )
+
+    @admin.display(description='Комплектующие')
+    def accessories_info(self, obj):
+        accessories_names = list(obj.accessories.all().values_list('name', flat=True))
+        return ', '.join(accessories_names) if accessories_names else '-'
+
+    @admin.display(description='Состояние')
+    def state_display(self, obj):
+        return obj.get_state_display()
+
+    @admin.display(description='Добавил')
+    def user_name(self, obj):
+        return obj.user.username if obj.user else '-'
+
+    @admin.display(description='Комментарий')
+    def comment_short(self, obj):
+        if obj.comment:
+            return obj.comment[:50] + '...' if len(obj.comment) > 50 else obj.comment
+        return '-'
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Supplier)

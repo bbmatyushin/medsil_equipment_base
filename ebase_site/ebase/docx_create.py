@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from django.conf import settings
+from django.db.models.query import QuerySet
 from docx import Document
 from docx.table import Table, _Cell
 from docx.shared import Pt
@@ -18,13 +19,17 @@ from .models import Service
 class CreateServiceAkt:
     def __init__(self, client: dict, job_content: str,
                  description: str, spare_parts: list,
-                 template_path: Path):
+                 template_path: Path,
+                 accessories: QuerySet,
+                 replacement_equipment: str):
         self.akt = Document(str(template_path))
         self.file_name = template_path.name
         self.client = client
         self.description = description
         self.job_content = job_content
         self.spare_parts = spare_parts
+        self.accessories = accessories
+        self.replacement_equipment = replacement_equipment
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
@@ -69,9 +74,16 @@ class CreateServiceAkt:
             #         and len(self.spare_parts) > 0:
             #     self.spare_part_table(table)
 
-            if i == 5 and self.file_name == "service_akt_MEDSIL.docx" \
-                    and len(self.spare_parts) > 0:
-                self.spare_part_table(table)  # Используемые запчасти
+            if i == 5:
+                if self.file_name == "service_akt_MEDSIL.docx" and len(self.spare_parts) > 0:
+                    self.spare_part_table(table, self.spare_parts)  # Используемые запчасти
+                # Табличка с указанием подменного оборудования
+                elif self.file_name == "Akt_in_service.docx" and self.replacement_equipment:
+                    self.replacement_equipment_table(table)
+
+            if i == 6 and self.file_name == "Akt_in_service.docx" \
+                    and self.accessories:  # Табличка с перечнем коплектующих для подменного оборудования
+                self.fill_accessories_table(table)
 
         self.akt.save(self.save_file_path)
 
@@ -122,9 +134,13 @@ class CreateServiceAkt:
             if n == 1:
                 paragraph.text = self.job_content
 
-    def spare_part_table(self, table: Table):
-        """Обновляем данные в таблице Замененные детали"""
-        count_parts = len(self.spare_parts)
+    def spare_part_table(self, table: Table, rows_data: list):
+        """Обновляем данные в таблице Замененные детали.
+
+        :param table - таблица с которой будем работать
+        :param rows_data - список данных, которыми будет наполняться таблица
+        """
+        count_parts = len(rows_data)
 
         # Проходим по строкам, начиная со второй (индекс 1), т.к. первая — заголовки
         for row_idx in range(1, max(count_parts + 1, len(table.rows))):
@@ -137,8 +153,8 @@ class CreateServiceAkt:
                 new_row = table.rows[row_idx]
 
             # Заполняем ячейки строки, если есть соответствующая запчасть
-            if row_idx <= count_parts and row_idx - 1 < len(self.spare_parts):
-                part = self.spare_parts[row_idx - 1]  # Индекс запчасти: 0, 1, 2...
+            if row_idx <= count_parts and row_idx - 1 < len(rows_data):
+                part = rows_data[row_idx - 1]  # Индекс запчасти: 0, 1, 2...
                 cells = new_row.cells
                 cells[0].text = str(row_idx)  # №
                 cells[1].text = f"{part[0]} (арт. {part[1]})"  # Наименование + Артикул
@@ -200,6 +216,48 @@ class CreateServiceAkt:
         paragraph_align = align_mapping.get(align, WD_ALIGN_PARAGRAPH.CENTER)
         for paragraph in cell.paragraphs:
             paragraph.alignment = paragraph_align
+
+    def fill_accessories_table(self, table: Table):
+        """Заполняет таблицу комплектующих для подменного оборудования"""
+        accessories_list = self.accessories.order_by("name")
+        # Проходим по строкам, начиная со второй (индекс 1), если первая - заголовок
+        for row_idx in range(1, max(len(accessories_list) + 1, len(table.rows))):
+            if row_idx >= len(table.rows):
+                new_row = table.add_row()  # Добавляем новую строку, если не хватает
+                # Добавляем границы для всех ячеек новой строки
+                for cell in new_row.cells:
+                    self._set_cell_borders(cell)
+
+            # Заполняем ячейки строки, если есть соответствующий аксессуар
+            if row_idx - 1 < len(accessories_list):
+                accessory = accessories_list[row_idx - 1]
+                cells = table.rows[row_idx].cells
+                cells[0].text = str(row_idx)  # №
+                cells[1].text = accessory  # Наименование
+                cells[2].text = "1"  # Количество по умолчанию
+                # Выравниваем количество по центру
+                if len(cells) > 2:
+                    self._set_cell_alignment(cells[2], align='center')
+
+                # Настройка шрифта
+                for cell in cells:
+                    cell.paragraphs[0].runs[0].font.size = Pt(11)
+
+    def replacement_equipment_table(self, table: Table):
+        """Заполняет таблицу с подменным оборудованием для акта приема-передачи в ремонт"""
+        # Таблица должна содержать одну строку и две ячейки
+        if len(table.rows) > 0:
+            row = table.rows[0]
+            if len(row.cells) >= 2:
+                # Заполняем вторую ячейку (индекс 1) значением подменного оборудования
+                cell = row.cells[1]
+                cell.text = self.replacement_equipment
+                # Устанавливаем размер шрифта
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(11)
+                # Устанавливаем границы ячейки
+                self._set_cell_borders(cell)
 
     @staticmethod
     def _set_cell_borders(cell: _Cell):
@@ -322,6 +380,11 @@ def create_service_atk(obj: Service, akt_name: str):
     }
     description = obj.description.replace("\r\n", "\n") if obj.description else ''
     job_content = obj.job_content.replace("\r\n", "\n") if obj.job_content else ''
+    accessories = \
+        obj.replacement_equipment.accessories.values_list("name", flat=True) if obj.replacement_equipment else []
+    replacement_equipment = \
+        f"{obj.replacement_equipment.equipment.full_name} (s/n {obj.replacement_equipment.serial_number})" \
+            if obj.replacement_equipment else ""
     # Получаем информацию о запчастях с количеством
     spare_parts = []
     for spare_part in obj.spare_part.all():
@@ -336,7 +399,8 @@ def create_service_atk(obj: Service, akt_name: str):
             elif isinstance(part_info, dict):
                 quantity = part_info.get('service_part_count', 1)
         spare_parts.append((spare_part.name, spare_part.article, quantity))
-    create_akt = CreateServiceAkt(client, job_content, description, spare_parts, template_path)
+    create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
+                                  template_path, accessories, replacement_equipment)
     create_akt.update_tables()
 
     if akt_name == 'serviceAkt':
