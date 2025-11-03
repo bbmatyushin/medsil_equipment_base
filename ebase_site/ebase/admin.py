@@ -823,13 +823,24 @@ class ServiceAdmin(MainAdmin):
                 'department', 'position'
             ).all()
         elif db_field.name == 'replacement_equipment':
-            # Оптимизируем queryset для подменного оборудования
+            # Ограничиваем queryset для подменного оборудования - только те, которые не связаны с активными сервисами
+            # Исключаем подменное оборудование, которое уже связано с сервисами, где ремонт еще не завершен
+            used_replacement_equipment_ids = Service.objects.filter(
+                replacement_equipment__isnull=False,
+                end_dt__isnull=True  # Ремонт еще не завершен
+            ).exclude(
+                # При редактировании текущего сервиса, нужно исключить его из фильтрации
+                pk=request.resolver_match.kwargs.get('object_id') if request.resolver_match else None
+            ).values_list('replacement_equipment_id', flat=True)
+            
             kwargs["queryset"] = ReplacementEquipment.objects.select_related(
                 'equipment',
                 'user'
             ).prefetch_related(
                 'accessories'
-            ).all()
+            ).exclude(
+                id__in=used_replacement_equipment_ids
+            )
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
