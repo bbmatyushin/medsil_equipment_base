@@ -12,7 +12,10 @@ from django.db.models import Prefetch, QuerySet
 from django.urls import path
 from django.http import JsonResponse
 
-from spare_part.models import SparePart, SparePartCount, SparePartShipment, SparePartShipmentV2, SparePartShipmentM2M
+from spare_part.models import (
+    SparePart, SparePartCount, SparePartShipment,
+    SparePartShipmentV2, SparePartShipmentM2M, SparePartAccessories
+)
 from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
@@ -458,10 +461,7 @@ class ServiceAdmin(MainAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
-        ('Подменное оборудование', {
-            'fields': ('replacement_equipment',),
-            'classes': ('collapse',),
-        }),
+        ('Подменное оборудование', {'fields': ('replacement_equipment',),}),
         ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
 
