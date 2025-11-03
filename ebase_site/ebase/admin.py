@@ -458,6 +458,10 @@ class ServiceAdmin(MainAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
+        ('Подменное оборудование', {
+            'fields': ('replacement_equipment',),
+            'classes': ('collapse',),
+        }),
         ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
 
@@ -476,7 +480,9 @@ class ServiceAdmin(MainAdmin):
             "equipment_accounting",
             "equipment_accounting__equipment",
             "service_type",
-            "user"
+            "user",
+            "replacement_equipment",
+            "replacement_equipment__equipment"
         ).prefetch_related(
             "spare_part",
             Prefetch(
@@ -491,6 +497,10 @@ class ServiceAdmin(MainAdmin):
             Prefetch(
                 "service_photos",
                 queryset=ServicePhotos.objects.all()
+            ),
+            Prefetch(
+                "replacement_equipment__accessories",
+                queryset=SparePartAccessories.objects.all()
             ),
         )
 
@@ -780,6 +790,14 @@ class ServiceAdmin(MainAdmin):
             # Оптимизируем queryset для контактных лиц
             kwargs["queryset"] = DeptContactPers.objects.select_related(
                 'department', 'position'
+            ).all()
+        elif db_field.name == 'replacement_equipment':
+            # Оптимизируем queryset для подменного оборудования
+            kwargs["queryset"] = ReplacementEquipment.objects.select_related(
+                'equipment',
+                'user'
+            ).prefetch_related(
+                'accessories'
             ).all()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
