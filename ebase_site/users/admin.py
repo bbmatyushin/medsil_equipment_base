@@ -2,11 +2,12 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 
 from .models import *
+from utils import MainModelAdmin
 
 
 @admin.register(CompanyUser)
 class CompanyUserAdmin(UserAdmin):
-    actions = ('set_admin', 'cancel_admin', 'set_active', 'cancel_active',)
+    actions = MainModelAdmin.actions + ['set_admin', 'cancel_admin', 'set_active', 'cancel_active',]
     list_display = ('last_name', 'first_name', 'patron', 'username', 'birth', 'phone',
                     'user_position',
                     'email_new', 'is_staff_new', 'date_joined', 'last_login', 'is_active',)

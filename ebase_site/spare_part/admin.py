@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.db.models import Sum, Prefetch, F
 from django.db import transaction
-from ebase.admin import MainAdmin
+from utils import MainModelAdmin
 from ebase.models import Service, EquipmentAccDepartment
 # from ebase_site.ebase.models import Service, EquipmentAccDepartment
 
@@ -18,7 +18,7 @@ logger = logging.getLogger('spare_part')
 
 
 @admin.register(SparePartAccessories)
-class SparePartAccessoriesAdmin(MainAdmin):
+class SparePartAccessoriesAdmin(MainModelAdmin):
     list_display = ("id", "name", "create_dt",)
     list_display_links = ("name",)
     search_fields = ("name",)
@@ -56,7 +56,7 @@ class SparePartPhotoInline(admin.StackedInline):
 
 
 @admin.register(SparePart)
-class SparePartAdmin(MainAdmin):
+class SparePartAdmin(MainModelAdmin):
     form = SparePartForm
 
     autocomplete_fields = ('unit',)
@@ -136,7 +136,7 @@ class SparePartAdmin(MainAdmin):
 
 
 @admin.register(SparePartCount)
-class SparePartCountAdmin(MainAdmin):
+class SparePartCountAdmin(MainModelAdmin):
     form = SparePartCountForm
 
     autocomplete_fields = ('spare_part',)
@@ -172,7 +172,7 @@ class SparePartCountAdmin(MainAdmin):
 
 
 @admin.register(SparePartSupply)
-class SparePartSupplyAdmin(MainAdmin):
+class SparePartSupplyAdmin(MainModelAdmin):
     form = SparePartSupplyForm
 
     autocomplete_fields = ('spare_part',)
@@ -393,7 +393,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
 
 @admin.register(SparePartShipment)
-class SparePartShipmentAdmin(MainAdmin):
+class SparePartShipmentAdmin(MainModelAdmin):
     form = SparePartShipmentForm
 
     autocomplete_fields = ('spare_part_count',)
