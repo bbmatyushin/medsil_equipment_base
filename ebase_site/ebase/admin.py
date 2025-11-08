@@ -11,7 +11,6 @@ from django.db import models, transaction
 from django.db.models import Prefetch, QuerySet
 from django.urls import path, reverse
 from django.http import JsonResponse
-
 from spare_part.models import (
     SparePart, SparePartCount, SparePartShipment,
     SparePartShipmentV2, SparePartShipmentM2M, SparePartAccessories
@@ -20,7 +19,7 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
-from .models import DeptContactPers
+from .models import DeptContactPers, EquipmentAccounting
 
 logger = logging.getLogger('ebase')
 
