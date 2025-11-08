@@ -53,15 +53,21 @@ def export_to_excel_formatted(modeladmin, request, queryset):
                 continue
             
             try:
-                # Получаем значение поля
-                if hasattr(obj, field_name):
+                # Пытаемся получить значение через метод админ-класса
+                if hasattr(modeladmin, field_name):
+                    admin_method = getattr(modeladmin, field_name)
+                    if callable(admin_method):
+                        value = admin_method(obj)
+                    else:
+                        value = admin_method
+                # Если нет метода в админ-классе, получаем значение из объекта
+                elif hasattr(obj, field_name):
                     value = getattr(obj, field_name)
+                    # Если это callable (метод модели), вызываем его
+                    if callable(value):
+                        value = value()
                 else:
                     value = None
-                
-                # Если это callable (метод), вызываем его
-                if callable(value):
-                    value = value()
                 
                 # Форматируем специальные типы данных
                 if hasattr(value, 'strftime'):  # datetime объекты
@@ -70,6 +76,9 @@ def export_to_excel_formatted(modeladmin, request, queryset):
                     value = ''
                 elif isinstance(value, bool):
                     value = 'Да' if value else 'Нет'
+                elif hasattr(value, '__html__'):  # Для mark_safe объектов
+                    from django.utils.html import strip_tags
+                    value = strip_tags(str(value))
                 
                 ws.cell(row=row, column=col_num, value=str(value))
                 
