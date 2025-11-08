@@ -21,11 +21,29 @@ from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
 from .models import DeptContactPers, EquipmentAccounting
 
+from utils.export_to_xlsx import export_to_excel_formatted
+
 logger = logging.getLogger('ebase')
 
 
 class MainAdmin(admin.ModelAdmin):
     list_per_page = 20
+    actions = [export_to_excel_formatted]
+
+    def get_actions(self, request):
+        # Получаем действия родительского класса
+        actions = super().get_actions(request)
+
+        # Получаем действия текущего класса
+        current_actions = getattr(self, 'actions', [])
+
+        # Если в текущем классе есть свои действия, добавляем их к родительским
+        if current_actions:
+            # Преобразуем действия в словарь для объединения
+            current_actions_dict = admin.ModelAdmin._get_actions_dict(self, current_actions, request)
+            actions.update(current_actions_dict)
+
+        return actions
 
 
 @admin.register(Client)
@@ -197,7 +215,7 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
 class EquipmentAccountingAdmin(MainAdmin):
     form = EquipmentAccountingForm
 
-    actions = ('set_is_our_service',)
+    actions = ('set_is_our_service', 'export_to_excel_formatted')
     date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
