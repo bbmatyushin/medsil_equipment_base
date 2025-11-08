@@ -1,10 +1,10 @@
 from django.contrib import admin
 from .models import *
-from ebase.admin import MainAdmin
+from utils import MainModelAdmin
 
 
 @admin.register(City)
-class CityAdmin(MainAdmin):
+class CityAdmin(MainModelAdmin):
     list_display = ('id', 'name', 'region', 'create_dt')
     list_display_links = ('name',)
     search_fields = ('name', 'region')
@@ -16,7 +16,7 @@ class CityAdmin(MainAdmin):
 
 
 @admin.register(Country)
-class CountryAdmin(MainAdmin):
+class CountryAdmin(MainModelAdmin):
     list_display = ('id', 'name', 'create_dt')
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -28,7 +28,7 @@ class CountryAdmin(MainAdmin):
 
 
 @admin.register(EquipmentStatus)
-class EquipmentStatusAdmin(MainAdmin):
+class EquipmentStatusAdmin(MainModelAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -40,7 +40,7 @@ class EquipmentStatusAdmin(MainAdmin):
 
 
 @admin.register(Engineer)
-class EngineerAdmin(MainAdmin):
+class EngineerAdmin(MainModelAdmin):
     list_display = ('name', 'user')
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -52,7 +52,7 @@ class EngineerAdmin(MainAdmin):
 
 
 @admin.register(MedDirection)
-class MedDirectionAdmin(MainAdmin):
+class MedDirectionAdmin(MainModelAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -64,7 +64,7 @@ class MedDirectionAdmin(MainAdmin):
 
 
 @admin.register(Position)
-class PositionAdmin(MainAdmin):
+class PositionAdmin(MainModelAdmin):
     list_display = ('id', 'name', 'type',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -76,7 +76,7 @@ class PositionAdmin(MainAdmin):
 
 
 @admin.register(ServiceType)
-class ServiceTypeAdmin(MainAdmin):
+class ServiceTypeAdmin(MainModelAdmin):
     list_display = ('id', 'name',)
     list_display_links = ('name',)
     search_fields = ('name',)
@@ -88,7 +88,7 @@ class ServiceTypeAdmin(MainAdmin):
 
 
 @admin.register(Unit)
-class UnitAdmin(MainAdmin):
+class UnitAdmin(MainModelAdmin):
     list_display = ('id', 'short_name', 'full_name', )
     list_display_links = ('short_name',)
     search_fields = ('short_name', 'full_name')

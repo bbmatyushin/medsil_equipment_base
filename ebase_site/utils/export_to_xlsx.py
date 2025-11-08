@@ -104,4 +104,4 @@ def export_to_excel_formatted(modeladmin, request, queryset):
     return response
 
 
-export_to_excel_formatted.short_description = "Export to Excel (formatted)"
+export_to_excel_formatted.short_description = "Выгрузить данные в Excel"

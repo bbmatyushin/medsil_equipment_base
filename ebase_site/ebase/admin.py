@@ -21,33 +21,13 @@ from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
 from .models import DeptContactPers, EquipmentAccounting
 
-from utils.export_to_xlsx import export_to_excel_formatted
+from utils import MainModelAdmin
 
 logger = logging.getLogger('ebase')
 
 
-class MainAdmin(admin.ModelAdmin):
-    list_per_page = 20
-    actions = [export_to_excel_formatted]
-
-    def get_actions(self, request):
-        # Получаем действия родительского класса
-        actions = super().get_actions(request)
-
-        # Получаем действия текущего класса
-        current_actions = getattr(self, 'actions', [])
-
-        # Если в текущем классе есть свои действия, добавляем их к родительским
-        if current_actions:
-            # Преобразуем действия в словарь для объединения
-            current_actions_dict = admin.ModelAdmin._get_actions_dict(self, current_actions, request)
-            actions.update(current_actions_dict)
-
-        return actions
-
-
 @admin.register(Client)
-class ClientAdmin(MainAdmin):
+class ClientAdmin(MainModelAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'inn')
@@ -68,7 +48,7 @@ class ClientAdmin(MainAdmin):
 
 
 @admin.register(Department)
-class DepartmentAdmin(MainAdmin):
+class DepartmentAdmin(MainModelAdmin):
     list_display = ('name', 'client_name', 'city_name', 'address', 'create_dt')
     search_fields = ('name', 'client__name')
     search_help_text = 'Поиск по подразделению или клиенту'
@@ -91,7 +71,7 @@ class DepartmentAdmin(MainAdmin):
 
 
 @admin.register(DeptContactPers)
-class DeptContactPersAdmin(MainAdmin):
+class DeptContactPersAdmin(MainModelAdmin):
     autocomplete_fields = ('department',)
     list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
     list_filter = ('position',)
@@ -142,7 +122,7 @@ class DeptContactPersAdmin(MainAdmin):
 
 
 @admin.register(Equipment)
-class EquipmentAdmin(MainAdmin):
+class EquipmentAdmin(MainModelAdmin):
     autocomplete_fields = ('manufacturer','supplier',)
     list_display = ('full_name', 'short_name', 'med_direction_name',
                     'manufacturer_name', 'supplier_name',)
@@ -212,10 +192,10 @@ class EquipmentAccDepartmentInline(admin.StackedInline):
 
 
 @admin.register(EquipmentAccounting)
-class EquipmentAccountingAdmin(MainAdmin):
+class EquipmentAccountingAdmin(MainModelAdmin):
     form = EquipmentAccountingForm
 
-    actions = ('set_is_our_service', 'export_to_excel_formatted')
+    actions = MainModelAdmin.actions + ['set_is_our_service',]
     date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
@@ -391,7 +371,7 @@ class EquipmentAccountingAdmin(MainAdmin):
 
 
 @admin.register(Manufacturer)
-class ManufacturerAdmin(MainAdmin):
+class ManufacturerAdmin(MainModelAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
@@ -464,8 +444,8 @@ class ServicePhotosInline(admin.StackedInline):
 
 
 @admin.register(Service)
-class ServiceAdmin(MainAdmin):
-    actions = ('create_service_akt_by_action',)
+class ServiceAdmin(MainModelAdmin):
+    actions = MainModelAdmin.actions + ['create_service_akt_by_action']
     # add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
     form = ServiceForm
@@ -1024,7 +1004,7 @@ class ServiceAdmin(MainAdmin):
 
 
 @admin.register(ReplacementEquipment)
-class ReplacementEquipmentAdmin(MainAdmin):
+class ReplacementEquipmentAdmin(MainModelAdmin):
     autocomplete_fields = ("equipment",)
     filter_horizontal = ("accessories",)
     list_display = ('equipment', 'serial_number', 'accessories_info', 'transferred_to', 
@@ -1119,7 +1099,7 @@ class ReplacementEquipmentAdmin(MainAdmin):
 
 
 @admin.register(Supplier)
-class SupplierAdmin(MainAdmin):
+class SupplierAdmin(MainModelAdmin):
     autocomplete_fields = ('city',)
     list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
                     'country_name', 'city_name', 'address',)
