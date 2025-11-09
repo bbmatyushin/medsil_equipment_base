@@ -53,21 +53,26 @@ def export_to_excel_formatted(modeladmin, request, queryset):
                 continue
             
             try:
-                # Пытаемся получить значение через метод админ-класса
-                if hasattr(modeladmin, field_name):
-                    admin_method = getattr(modeladmin, field_name)
-                    if callable(admin_method):
-                        value = admin_method(obj)
-                    else:
-                        value = admin_method
-                # Если нет метода в админ-классе, получаем значение из объекта
-                elif hasattr(obj, field_name):
-                    value = getattr(obj, field_name)
-                    # Если это callable (метод модели), вызываем его
-                    if callable(value):
-                        value = value()
+                # Для полей, которые являются методами админ-класса, получаем полные данные из модели
+                if field_name == 'comment_short':
+                    # Получаем полный комментарий напрямую из поля модели
+                    value = obj.comment if hasattr(obj, 'comment') else ''
                 else:
-                    value = None
+                    # Пытаемся получить значение через метод админ-класса
+                    if hasattr(modeladmin, field_name):
+                        admin_method = getattr(modeladmin, field_name)
+                        if callable(admin_method):
+                            value = admin_method(obj)
+                        else:
+                            value = admin_method
+                    # Если нет метода в админ-классе, получаем значение из объекта
+                    elif hasattr(obj, field_name):
+                        value = getattr(obj, field_name)
+                        # Если это callable (метод модели), вызываем его
+                        if callable(value):
+                            value = value()
+                    else:
+                        value = None
                 
                 # Форматируем специальные типы данных
                 if hasattr(value, 'strftime'):  # datetime объекты
