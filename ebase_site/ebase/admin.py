@@ -204,7 +204,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
 
     inlines = (EquipmentAccDepartmentInline,)
     list_display = ('equipment', 'serial_number', 'dept_name', 'engineer', 'install_dt', 'equipment_status',
-                    'is_our_service', 'is_our_supply', 'user_name', )
+                    'comment_short', 'is_our_service', 'is_our_supply',)
     search_fields = ('equipment__full_name', 'equipment__short_name', 'serial_number',
                      'equipment_acc_department_equipment_accounting__department__name',)  # поиск по названию подразделения
                      # 'equipment_acc_department_equipment_accounting__department__city__name',)  # поиск по городу подразделения
@@ -333,9 +333,15 @@ class EquipmentAccountingAdmin(MainModelAdmin):
         except IndexError:
             return "--"
 
-    @admin.display(description='Добавил')
-    def user_name(self, obj):
-        return obj.user.username if obj.user else '-'
+    @admin.display(description='Комментарий')
+    def comment_short(self, obj):
+        if obj.comment:
+            return obj.comment[:50] + '...' if len(obj.comment) > 50 else obj.comment
+        return '-'
+
+    # @admin.display(description='Добавил')
+    # def user_name(self, obj):
+    #     return obj.user.username if obj.user else '-'
 
     @admin.display(description='Последнее ТО')
     def last_maintenance_date(self, obj):
@@ -453,8 +459,7 @@ class ServiceAdmin(MainModelAdmin):
     filter_horizontal = ('spare_part',)
     inlines = (ServiceAccessoriesInline, ServicePhotosInline, )
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
-                    'photos',
-                    'description_short', 'spare_part_used', 'accessories_used',
+                    'photos', 'description_short', 'spare_part_used',
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt',)
     list_select_related = ('equipment_accounting', 'service_type',)
@@ -553,14 +558,14 @@ class ServiceAdmin(MainModelAdmin):
         spare_parts_list = [sp.name for sp in obj.spare_part.all()]
         return "; ".join(spare_parts_list) if spare_parts_list else '-'
 
-    @admin.display(description='Комплектующие')
-    def accessories_used(self, obj):
-        # Используем предзагруженные данные
-        accessories_list = [
-            f"{sa.accessory.name} ({sa.quantity} шт.)" 
-            for sa in obj.service_accessories.all()
-        ]
-        return "; ".join(accessories_list) if accessories_list else '-'
+    # @admin.display(description='Комплектующие')
+    # def accessories_used(self, obj):
+    #     # Используем предзагруженные данные
+    #     accessories_list = [
+    #         f"{sa.accessory.name} ({sa.quantity} шт.)"
+    #         for sa in obj.service_accessories.all()
+    #     ]
+    #     return "; ".join(accessories_list) if accessories_list else '-'
 
     @admin.display(description='Подразделение')
     def dept_name(self, obj):
