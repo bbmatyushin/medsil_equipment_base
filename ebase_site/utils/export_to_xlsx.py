@@ -6,7 +6,7 @@ from django.contrib import admin
 
 def export_to_excel_formatted(modeladmin, request, queryset):
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="formatted_data.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="medsil_service.xlsx"'
 
     wb = Workbook()
     ws = wb.active
