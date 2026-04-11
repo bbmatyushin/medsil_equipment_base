@@ -196,7 +196,8 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     form = EquipmentAccountingForm
 
     actions = MainModelAdmin.actions + ['set_is_our_service',]
-    date_hierarchy = 'active_install_dt'
+    # date_hierarchy не поддерживает аннотированные поля в Django Admin, поэтому отключен
+    # date_hierarchy = 'active_install_dt'
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
     # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
@@ -210,7 +211,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                      # 'equipment_acc_department_equipment_accounting__department__city__name',)  # поиск по городу подразделения
     search_help_text = ('Поиск по полному и краткому наименованию оборудования, по его серийному номеру или '
                         'по названию Подразделения клиента (где установлено)')
-    ordering = ('-active_install_dt', 'equipment', 'serial_number', 'user',)
+    # ordering вынесен в get_ordering для поддержки аннотаций
     list_select_related = True
     list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply', MedDirectionFilter,)
 #
@@ -220,6 +221,9 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                                                      ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
+
+    def get_ordering(self, request):
+        return ['-active_install_dt', 'equipment', 'serial_number', 'user']
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
