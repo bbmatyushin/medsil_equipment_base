@@ -106,7 +106,7 @@ class DeptContactPersAdmin(MainModelAdmin):
             fio_parts.append(obj.name)
         if obj.patron:
             fio_parts.append(obj.patron)
-        
+
         return ' '.join(fio_parts).strip()
 
     @admin.display(description='Телефон')
@@ -233,13 +233,13 @@ class EquipmentAccountingAdmin(MainModelAdmin):
         # Получаем последнюю дату техобслуживания через подзапрос
         from django.db.models import OuterRef, Subquery, Max
         from directory.models import ServiceType
-        
+
         # Найдём ID типа "Тех. обслуживание"
         try:
             maintenance_type = ServiceType.objects.get(name='Тех. обслуживание')
         except ServiceType.DoesNotExist:
             maintenance_type = None
-        
+
         # Подзапрос для получения последней даты техобслуживания
         if maintenance_type:
             last_maintenance_subquery = Service.objects.filter(
@@ -247,7 +247,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                 service_type=maintenance_type,
                 end_dt__isnull=False
             ).order_by('-end_dt').values('end_dt')[:1]
-            
+
             queryset = queryset.annotate(
                 last_maintenance_date=Subquery(last_maintenance_subquery)
             )
@@ -294,8 +294,8 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def dept_name(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            # if dept.is_active:
-            return dept.department.name if dept.department else "--"
+            if dept.is_active:
+                return dept.department.name if dept.department else "--"
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
@@ -307,8 +307,8 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def engineer(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            # if dept.is_active:
-            return dept.engineer.name if dept.engineer else "--"
+            if dept.is_active:
+                return dept.engineer.name if dept.engineer else "--"
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
@@ -320,10 +320,10 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def install_dt(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            # if dept.is_active:
-            if dept.install_dt:
-                return dept.install_dt.strftime('%d.%m.%Y г.')
-            return '--'
+            if dept.is_active:
+                if dept.install_dt:
+                    return dept.install_dt.strftime('%d.%m.%Y г.')
+                return '--'
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
