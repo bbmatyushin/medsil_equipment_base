@@ -294,8 +294,8 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def dept_name(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                return dept.department.name if dept.department else "--"
+            # if dept.is_active:
+            return dept.department.name if dept.department else "--"
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
@@ -307,8 +307,8 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def engineer(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                return dept.engineer.name if dept.engineer else "--"
+            # if dept.is_active:
+            return dept.engineer.name if dept.engineer else "--"
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
@@ -320,10 +320,10 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def install_dt(self, obj):
         # Используем предзагруженные данные
         for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                if dept.install_dt:
-                    return dept.install_dt.strftime('%d.%m.%Y г.')
-                return '--'
+            # if dept.is_active:
+            if dept.install_dt:
+                return dept.install_dt.strftime('%d.%m.%Y г.')
+            return '--'
         # Если активного нет, берем первый
         try:
             dept = obj.equipment_acc_department_equipment_accounting.all()[0]
