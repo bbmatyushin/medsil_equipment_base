@@ -8,7 +8,7 @@ from datetime import date
 
 from django.utils.safestring import mark_safe
 from django.db import models, transaction
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, QuerySet, Max, Q
 from django.urls import path, reverse
 from django.http import JsonResponse
 from spare_part.models import (
@@ -196,7 +196,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     form = EquipmentAccountingForm
 
     actions = MainModelAdmin.actions + ['set_is_our_service',]
-    date_hierarchy = 'equipment_acc_department_equipment_accounting__install_dt'
+    date_hierarchy = 'active_install_dt'
     # подставляет в шаблон ссылку на сайт
     add_form_template = 'ebase/admin/equipment_acc_change_form.html'
     # autocomplete_fields = ('equipment',)  # С ним не отрабатывает def formfield_for_foreignkey
@@ -210,8 +210,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                      # 'equipment_acc_department_equipment_accounting__department__city__name',)  # поиск по городу подразделения
     search_help_text = ('Поиск по полному и краткому наименованию оборудования, по его серийному номеру или '
                         'по названию Подразделения клиента (где установлено)')
-    ordering = ('-equipment_acc_department_equipment_accounting__install_dt',
-                'equipment', 'serial_number', 'user',)
+    ordering = ('-active_install_dt', 'equipment', 'serial_number', 'user',)
     list_select_related = True
     list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply', MedDirectionFilter,)
 #
@@ -259,6 +258,14 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                 last_maintenance_date=Value(None, output_field=DateField())
             )
 
+        # Аннотация для активной даты установки (для сортировки и date_hierarchy)
+        queryset = queryset.annotate(
+            active_install_dt=Max(
+                'equipment_acc_department_equipment_accounting__install_dt',
+                filter=Q(equipment_acc_department_equipment_accounting__is_active=True)
+            )
+        )
+
         # Глубокая оптимизация запросов для избежания N+1
         queryset = queryset.select_related(
             'equipment',
@@ -278,7 +285,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                     'department__client',
                     'department__client__city',
                     'engineer'
-                )
+                ).filter(is_active=True)
             ),
             Prefetch(
                 "service_equipment_accounting",
@@ -288,50 +295,30 @@ class EquipmentAccountingAdmin(MainModelAdmin):
             )
         )
 
+        # Убираем дубликаты
+        queryset = queryset.distinct()
+
         return queryset
 
     @admin.display(description='Установлено')
     def dept_name(self, obj):
-        # Используем предзагруженные данные
-        for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                return dept.department.name if dept.department else "--"
-        # Если активного нет, берем первый
-        try:
-            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
-            return dept.department.name if dept.department else "--"
-        except IndexError:
-            return "--"
+        # Используем предзагруженные активные данные
+        dept = next(iter(obj.equipment_acc_department_equipment_accounting.all()), None)
+        return dept.department.name if dept and dept.department else "--"
 
     @admin.display(description='Инженер')
     def engineer(self, obj):
-        # Используем предзагруженные данные
-        for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                return dept.engineer.name if dept.engineer else "--"
-        # Если активного нет, берем первый
-        try:
-            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
-            return dept.engineer.name if dept.engineer else "--"
-        except IndexError:
-            return "--"
+        # Используем предзагруженные активные данные
+        dept = next(iter(obj.equipment_acc_department_equipment_accounting.all()), None)
+        return dept.engineer.name if dept and dept.engineer else "--"
 
     @admin.display(description='Дата монтажа')
     def install_dt(self, obj):
-        # Используем предзагруженные данные
-        for dept in obj.equipment_acc_department_equipment_accounting.all():
-            if dept.is_active:
-                if dept.install_dt:
-                    return dept.install_dt.strftime('%d.%m.%Y г.')
-                return '--'
-        # Если активного нет, берем первый
-        try:
-            dept = obj.equipment_acc_department_equipment_accounting.all()[0]
-            if dept.install_dt:
-                return dept.install_dt.strftime('%d.%m.%Y г.')
-            return '--'
-        except IndexError:
-            return "--"
+        # Используем предзагруженные активные данные
+        dept = next(iter(obj.equipment_acc_department_equipment_accounting.all()), None)
+        if dept and dept.install_dt:
+            return dept.install_dt.strftime('%d.%m.%Y г.')
+        return '--'
 
     @admin.display(description='Комментарий')
     def comment_short(self, obj):
