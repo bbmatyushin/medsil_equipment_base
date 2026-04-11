@@ -211,7 +211,7 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                      # 'equipment_acc_department_equipment_accounting__department__city__name',)  # поиск по городу подразделения
     search_help_text = ('Поиск по полному и краткому наименованию оборудования, по его серийному номеру или '
                         'по названию Подразделения клиента (где установлено)')
-    # ordering вынесен в get_ordering для поддержки аннотаций
+    # ordering вынесен в get_queryset для корректной работы с аннотациями
     list_select_related = True
     list_filter = (InstallDtFilter, 'equipment_status__name', 'is_our_supply', MedDirectionFilter,)
 #
@@ -221,9 +221,6 @@ class EquipmentAccountingAdmin(MainModelAdmin):
                                                      ('comment',),)}),
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
-
-    def get_ordering(self, request):
-        return ['-active_install_dt', 'equipment', 'serial_number', 'user']
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -301,6 +298,9 @@ class EquipmentAccountingAdmin(MainModelAdmin):
 
         # Убираем дубликаты
         queryset = queryset.distinct()
+
+        # Применяем сортировку после аннотации, чтобы избежать FieldError
+        queryset = queryset.order_by('-active_install_dt', 'equipment', 'serial_number', 'user')
 
         return queryset
 
