@@ -222,6 +222,16 @@ class EquipmentAccountingAdmin(MainModelAdmin):
         ('YOUJAIL', {'fields': ('url_youjail',)}),
     )
 
+    def get_search_results(self, request, queryset, search_term):
+        """
+        Переопределяем поиск, чтобы учитывать только активные установки оборудования.
+        Стандартный search_fields делает JOIN без условий, поэтому фильтруем queryset
+        перед применением поисковых условий.
+        """
+        if search_term:
+            queryset = queryset.filter(equipment_acc_department_equipment_accounting__is_active=True)
+        return super().get_search_results(request, queryset, search_term)
+
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         # Проверяем, что у сотрудника установлена должность менеджер
