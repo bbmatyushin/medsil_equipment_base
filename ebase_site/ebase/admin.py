@@ -19,7 +19,7 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
-from .models import DeptContactPers, EquipmentAccounting
+from .models import DeptContactPers, EquipmentAccounting, EquipmentAccDepartment
 
 from utils import MainModelAdmin
 
@@ -225,12 +225,38 @@ class EquipmentAccountingAdmin(MainModelAdmin):
     def get_search_results(self, request, queryset, search_term):
         """
         Переопределяем поиск, чтобы учитывать только активные установки оборудования.
-        Стандартный search_fields делает JOIN без условий, поэтому фильтруем queryset
-        перед применением поисковых условий.
+        Используем Exists для корректной фильтрации по активным подразделениям без дублей и 
+        ложных срабатываний на неактивные записи.
         """
-        if search_term:
-            queryset = queryset.filter(equipment_acc_department_equipment_accounting__is_active=True)
-        return super().get_search_results(request, queryset, search_term)
+        if not search_term:
+            return super().get_search_results(request, queryset, search_term)
+
+        from django.db.models import Exists, OuterRef
+
+        # Разбиваем поисковый запрос на слова, как это делает Django по умолчанию
+        search_terms = search_term.split()
+        query = Q()
+
+        for term in search_terms:
+            # Поиск по основным полям оборудования
+            equipment_query = Q(equipment__full_name__icontains=term) | \
+                              Q(equipment__short_name__icontains=term) | \
+                              Q(serial_number__icontains=term)
+
+            # Поиск по названию подразделения ТОЛЬКО среди активных установок
+            dept_query = Exists(
+                EquipmentAccDepartment.objects.filter(
+                    equipment_accounting=OuterRef('pk'),
+                    is_active=True,
+                    department__name__icontains=term
+                )
+            )
+
+            # Объединяем условия для текущего слова (OR между полями)
+            query &= (equipment_query | dept_query)
+
+        queryset = queryset.filter(query)
+        return queryset, True
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
