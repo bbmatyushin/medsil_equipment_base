@@ -154,6 +154,7 @@ SHELL_PLUS = "ipython"
 SHELL_PLUS_PRINT_SQL = True
 
 STATIC_ROOT = config("STATIC_ROOT")  # расположение всех static файлов
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 
 LOGGING = {
     "version": 1,
