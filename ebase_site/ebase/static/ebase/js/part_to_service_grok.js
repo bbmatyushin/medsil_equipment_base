@@ -202,11 +202,17 @@ class SparePartsManager {
                 }
             });
 
-            // Также добавляем обработчик на кнопки submit
+            // Обработчик на кнопки submit: предотвращаем двойной вызов handleFormSubmit
             const submitButtons = document.querySelectorAll('.submit-row input[type="submit"]');
             submitButtons.forEach((button, btnIndex) => {
                 console.log(`Adding click listener to submit button ${btnIndex}:`, button);
-                button.addEventListener('click', async (e) => this.handleFormSubmit(e));
+                button.addEventListener('click', async (e) => {
+                    const ok = await this.handleFormSubmit(e);
+                    if (!ok) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
             });
         }
     }
@@ -349,7 +355,7 @@ class SparePartsManager {
                 <strong>${sparePartData.name}</strong>
             </div>
             <div style="margin-right: 10px;">
-                Доступно: <span class="available-qty">${displayAvailable}</span> шт.
+                <span class="available-qty">Доступно: ${displayAvailable} шт.</span>
             </div>
             <div style="margin-right: 10px;">
                 <label for="qty-${uniqueKey}">Количество:</label>
@@ -370,13 +376,21 @@ class SparePartsManager {
         const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
 
         qtyInput.addEventListener('change', (e) => {
-            const newQty = parseFloat(e.target.value) || 0;
+            let newQty = parseFloat(e.target.value) || 0;
+            if (newQty < 0) {
+                newQty = 0;
+                e.target.value = 0;
+            }
             this.currentQuantities.set(uniqueKey, newQty);
             this.updateAvailableDisplay(uniqueKey);
         });
 
         qtyInput.addEventListener('input', (e) => {
-            const newQty = parseFloat(e.target.value) || 0;
+            let newQty = parseFloat(e.target.value) || 0;
+            if (newQty < 0) {
+                newQty = 0;
+                e.target.value = 0;
+            }
             this.currentQuantities.set(uniqueKey, newQty);
             this.updateAvailableDisplay(uniqueKey);
         });
@@ -394,7 +408,14 @@ class SparePartsManager {
         if (sparePartData) {
             const originalAvailable = sparePartData.quantity || 0;
             const displayAvailable = originalAvailable - currentQty + originalQty;
-            availableSpan.textContent = this.formatQty(Math.max(0, displayAvailable));
+            availableSpan.textContent = `Доступно: ${this.formatQty(displayAvailable)} шт.`;
+
+            // Если ушли в минус — сразу подсвечиваем красным
+            if (displayAvailable < 0) {
+                row.classList.add('insufficient');
+            } else {
+                row.classList.remove('insufficient');
+            }
 
             // Обновляем максимальное значение в input
             const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
@@ -473,32 +494,73 @@ class SparePartsManager {
         });
 
         // Валидация количеств
-//        const isValid = this.validateQuantities();
-//        if (!isValid) {
-//            e.preventDefault();
-//            alert('Проверьте количества запчастей. Некоторые значения превышают доступное количество.');
-//            return false;
-//        }
+        const { errors, insufficientKeys } = this.validateQuantities();
+
+        // Снимаем старую подсветку и наносим новую
+        this.updateInsufficientHighlights(insufficientKeys);
+
+        if (errors.length > 0) {
+            const message = [
+                '⚠️ Недостаточно запчастей на складе:',
+                '',
+                ...errors,
+                '',
+                'Уменьшите количество или уберите запчасть из списка выбранных.'
+            ].join('\n');
+            alert(message);
+            return false;
+        }
 
         return true;
     }
 
     validateQuantities() {
+        const errors = [];
+        const insufficientKeys = new Set();
+
         for (let [uniqueKey, currentQty] of this.currentQuantities) {
             const sparePartData = this.sparePartsData.get(uniqueKey);
             const originalQty = this.originalQuantities.get(uniqueKey) || 0;
 
-            if (sparePartData) {
+            if (sparePartData && currentQty > 0) {
                 const availableQty = sparePartData.quantity || 0;
-                const maxAllowed = availableQty + originalQty;
+                // Доступно сейчас = то что на складе + то что уже было списано в этой записи
+                const effectiveAvailable = availableQty + originalQty;
 
-                if (currentQty > maxAllowed) {
-                    console.error(`Spare part batch ${uniqueKey}: ${currentQty} > ${maxAllowed}`);
-                    return false;
+                if (currentQty > effectiveAvailable) {
+                    insufficientKeys.add(uniqueKey);
+                    const deficit = currentQty - effectiveAvailable;
+                    const expInfo = sparePartData.expiration_dt
+                        ? ` (срок: ${sparePartData.expiration_dt})`
+                        : '';
+                    errors.push(
+                        `• «${sparePartData.name}»${expInfo}: ` +
+                        `запрошено ${this.formatQty(currentQty)}, ` +
+                        `в наличии ${this.formatQty(effectiveAvailable)} ` +
+                        `(не хватает ${this.formatQty(deficit)})`
+                    );
                 }
             }
         }
-        return true;
+
+        return { errors, insufficientKeys };
+    }
+
+    /**
+     * Подсвечивает красным строки с нехваткой, снимает подсветку с остальных.
+     */
+    updateInsufficientHighlights(insufficientKeys) {
+        if (!this.customBlock) return;
+
+        const rows = this.customBlock.querySelectorAll('.spare-part-row');
+        rows.forEach(row => {
+            const key = row.getAttribute('data-unique-key');
+            if (insufficientKeys.has(key)) {
+                row.classList.add('insufficient');
+            } else {
+                row.classList.remove('insufficient');
+            }
+        });
     }
 
     getCSRFToken() {

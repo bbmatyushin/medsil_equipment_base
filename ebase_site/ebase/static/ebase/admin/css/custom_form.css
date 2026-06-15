@@ -181,3 +181,9 @@ label[for$="search_button"] {
     width: auto;
     max-width: 400px;
 }
+
+/* Подсветка нехватки запчастей при ремонте */
+.spare-part-row.insufficient .available-qty {
+    color: #ba2121;
+    font-weight: bold;
+}
