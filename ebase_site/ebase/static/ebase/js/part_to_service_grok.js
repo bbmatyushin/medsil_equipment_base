@@ -327,6 +327,7 @@ class SparePartsManager {
 
         // Рассчитываем максимально допустимое количество для ввода
         const maxAllowed = availableQty + originalQty;
+        const displayAvailable = this.formatQty(availableQty - currentQty + originalQty);
 
         const row = document.createElement('div');
         row.className = 'spare-part-row';
@@ -348,7 +349,7 @@ class SparePartsManager {
                 <strong>${sparePartData.name}</strong>
             </div>
             <div style="margin-right: 10px;">
-                Доступно: <span class="available-qty">${(availableQty - currentQty + originalQty).toFixed(1)}</span> шт.
+                Доступно: <span class="available-qty">${displayAvailable}</span> шт.
             </div>
             <div style="margin-right: 10px;">
                 <label for="qty-${uniqueKey}">Количество:</label>
@@ -393,12 +394,21 @@ class SparePartsManager {
         if (sparePartData) {
             const originalAvailable = sparePartData.quantity || 0;
             const displayAvailable = originalAvailable - currentQty + originalQty;
-            availableSpan.textContent = Math.max(0, displayAvailable);
+            availableSpan.textContent = this.formatQty(Math.max(0, displayAvailable));
 
             // Обновляем максимальное значение в input
             const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
             // qtyInput.max = originalAvailable + originalQty;  // расскомментировать если выше добавляем max="${maxAllowed}"
         }
+    }
+
+    /**
+     * Форматирует количество: убирает floating-point шум и лишние нули.
+     * 4.55 - 1.35 = 3.1999999999999997 → 3.2
+     * 5 - 2 = 3.0 → 3
+     */
+    formatQty(value) {
+        return Math.round(value * 100) / 100;
     }
 
     async getSparePartData(sparePartId) {

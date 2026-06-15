@@ -20,6 +20,7 @@ gpt/
 CONVENTIONS.md
 .vscode/
 .pylintrc
+.pi/
 ebase_site/static/images/
 ebase_site/ebase/templates/admin/base_site.html.backup
 

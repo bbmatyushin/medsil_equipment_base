@@ -163,8 +163,9 @@ class SparePartShipmentM2M(models.Model):
                                    related_name="spare_part_m2m", verbose_name="Запчасть")
     shipment = models.ForeignKey("spare_part.SparePartShipmentV2", on_delete=models.CASCADE,
                                  related_name="shipment_m2m")
-    quantity = models.PositiveIntegerField(help_text="Количество отгружаемых единиц товара",
-                                           verbose_name="Кол-во")
+    quantity = models.FloatField(help_text="Количество отгружаемых единиц товара",
+                                           verbose_name="Кол-во",
+                                           validators=[MinValueValidator(0)])
     expiration_dt = models.DateField(
         null=True, blank=True, verbose_name='Срок годности',
         db_comment='Срок годности для запчастей со сроком годности',
@@ -300,10 +301,14 @@ class SparePartShipment(SparePartAbs):
         verbose_name_plural = 'Отгрузки запчастей (до 24.10.2025)'
 
     def __str__(self):
+        if self.spare_part_count is None:
+            return f'Отгрузка #{self.doc_num} (запчасть удалена)'
         art = f" (арт. {self.spare_part_count.spare_part.article})" if self.spare_part_count.spare_part.article else ''
         return f'{self.spare_part_count.spare_part.name}{art}'
 
     def __repr__(self):
+        if self.spare_part_count is None:
+            return f"<SparePartShipment: spare_part_count=None, count_shipment={self.count_shipment!r}>"
         return f"<SparePartShipment: {self.spare_part_count=!r}, {self.count_shipment=!r}>"
 
 

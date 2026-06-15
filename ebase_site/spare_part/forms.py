@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Sum
 from .models import *
 
 
@@ -43,10 +44,24 @@ class SparePartShipmentM2MForm(forms.ModelForm):
         model = SparePartShipmentM2M
         fields = '__all__'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Заменяем виджет поля expiration_dt на Select — варианты заполнит JS
+        if 'expiration_dt' in self.fields:
+            choices = [('', '--')]
+            # Если редактируется существующая запись — добавляем текущий срок годности,
+            # чтобы он отображался сразу до загрузки опций через JS
+            if self.instance and self.instance.pk and self.instance.expiration_dt:
+                val = self.instance.expiration_dt
+                choices.append((val.isoformat(), val.strftime('%d.%m.%Y')))
+            self.fields['expiration_dt'].widget = forms.Select(choices=choices)
+            self.fields['expiration_dt'].required = False
+
     def clean(self):
         cleaned_data = super().clean()
         spare_part = cleaned_data.get('spare_part')
         expiration_dt = cleaned_data.get('expiration_dt')
+        quantity = cleaned_data.get('quantity', 0)
         
         if spare_part:
             # Если у запчасти есть срок годности
@@ -55,19 +70,28 @@ class SparePartShipmentM2MForm(forms.ModelForm):
                 if not expiration_dt:
                     self.add_error(
                         'expiration_dt',
-                        f'Для запчасти "{spare_part.name}" необходимо указать срок годности.'
+                        'Необходимо указать срок годности'
                     )
                 else:
-                    # Получаем доступные сроки годности из SparePartCount
-                    available_dates = SparePartCount.objects.filter(
-                        spare_part=spare_part
-                    ).values_list('expiration_dt', flat=True).distinct()
+                    # Получаем доступные сроки годности из SparePartCount (с amount > 0)
+                    available_dates = set(
+                        SparePartCount.objects.filter(
+                            spare_part=spare_part,
+                            amount__gt=0
+                        ).values_list('expiration_dt', flat=True)
+                    )
+
+                    # Для существующей записи: её собственный срок годности всегда валиден
+                    # (даже если остаток по нему уже исчерпан — он был отгружен ранее)
+                    is_existing = self.instance and self.instance.pk
+                    if is_existing and self.instance.expiration_dt:
+                        available_dates.add(self.instance.expiration_dt)
                     
                     # Проверяем, есть ли введённая дата среди доступных
                     if expiration_dt not in available_dates:
-                        # Форматируем доступные даты для сообщения об ошибке
+                        available_dates.discard(None)
                         formatted_dates = []
-                        for date in available_dates:
+                        for date in sorted(available_dates):
                             if date:
                                 formatted_dates.append(date.strftime('%d.%m.%Y'))
                         
@@ -81,11 +105,68 @@ class SparePartShipmentM2MForm(forms.ModelForm):
                         else:
                             self.add_error(
                                 'expiration_dt',
-                                f'Для запчасти "{spare_part.name}" нет доступных сроков годности на складе.'
+                                f'Для запчасти "{spare_part.name}" нет доступных сроков годности на складе'
                             )
             else:
                 # Если у запчасти нет срока годности, устанавливаем expiration_dt в None
                 cleaned_data['expiration_dt'] = None
+            
+            # --- Валидация количества: запрет отгрузки при отсутствии / нехватке остатка ---
+            if quantity is not None and quantity > 0:
+                count_filter = {'spare_part': spare_part}
+                if expiration_dt is not None:
+                    count_filter['expiration_dt'] = expiration_dt
+
+                real_available = SparePartCount.objects.filter(**count_filter).aggregate(
+                    total=Sum('amount')
+                )['total'] or 0
+
+                # --- Корректировка для существующих записей ---
+                # Если запись уже существует, её текущее количество УЖЕ списано со склада.
+                # Поэтому для проверки доступности прибавляем его обратно.
+                # Если же запчасть или срок годности изменились — старое количество
+                # будет возвращено на старый склад сигналом, поэтому не прибавляем.
+                is_existing = self.instance and self.instance.pk
+                already_shipped = 0
+                if is_existing:
+                    part_changed = (self.instance.spare_part_id != spare_part.pk)
+                    exp_changed = (self.instance.expiration_dt != expiration_dt)
+                    if not part_changed and not exp_changed:
+                        # Запчасть и срок не изменились — текущее кол-во уже списано
+                        already_shipped = self.instance.quantity or 0
+
+                effective_available = real_available + already_shipped
+
+                # Вспомогательные форматтеры
+                exp_suffix = f' (срок {expiration_dt.strftime("%d.%m.%Y")})' if expiration_dt else ''
+                fmt_qty = lambda v: int(v) if v % 1 == 0 else v
+
+                if effective_available <= 0:
+                    if already_shipped > 0:
+                        msg = (f'Недостаточно кол-ва на складе: '
+                               f'остаток {fmt_qty(real_available)}, '
+                               f'уже отгружено {fmt_qty(already_shipped)}, '
+                               f'запрошено {fmt_qty(quantity)}'
+                               f'{exp_suffix}')
+                    else:
+                        msg = (f'Запчасть «{spare_part.name}» отсутствует на складе'
+                               f'{exp_suffix} — отгрузка невозможна')
+                    self.add_error('quantity', msg)
+                elif quantity > effective_available:
+                    if already_shipped > 0:
+                        msg = (f'Недостаточно кол-ва на складе: '
+                               f'остаток {fmt_qty(real_available)}, '
+                               f'уже отгружено {fmt_qty(already_shipped)}, '
+                               f'запрошено {fmt_qty(quantity)}'
+                               f'{exp_suffix}')
+                    else:
+                        msg = (f'Недостаточно кол-ва на складе: '
+                               f'доступно {fmt_qty(effective_available)}, '
+                               f'запрошено {fmt_qty(quantity)}'
+                               f'{exp_suffix}')
+                    self.add_error('quantity', msg)
+            elif quantity is not None and quantity <= 0:
+                self.add_error('quantity', 'Количество должно быть больше нуля')
         
         return cleaned_data
 

@@ -4,8 +4,7 @@ import logging
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.db.models import Sum, Prefetch, F
-from django.db import transaction
+from django.db.models import Sum
 from utils import MainModelAdmin
 from ebase.models import Service, EquipmentAccDepartment
 # from ebase_site.ebase.models import Service, EquipmentAccDepartment
@@ -116,7 +115,8 @@ class SparePartAdmin(MainModelAdmin):
         
         return JsonResponse({
             'is_expiration': spare_part.is_expiration,
-            'available_dates': formatted_dates
+            'available_dates': formatted_dates,
+            'unit': spare_part.unit.short_name if spare_part.unit else None,
         })
 
     @admin.display(description='Оборудование')
@@ -140,7 +140,7 @@ class SparePartCountAdmin(MainModelAdmin):
     form = SparePartCountForm
 
     autocomplete_fields = ('spare_part',)
-    list_display = ('spare_part', 'amount_field', 'expiration_dt', 'is_overdue',)
+    list_display = ('spare_part', 'unit_field', 'amount_field', 'expiration_dt', 'is_overdue',)
     list_filter = ('is_overdue',)
     search_fields = ('spare_part__name', 'spare_part__article',)
     search_help_text = 'Поиск по названию запчасти или её артикулу'
@@ -155,10 +155,15 @@ class SparePartCountAdmin(MainModelAdmin):
     def amount_field(self, obj):
         return obj.amount if obj.amount % 1 else int(obj.amount)
 
+    @admin.display(description='Ед. изм.')
+    def unit_field(self, obj):
+        return obj.spare_part.unit.short_name if obj.spare_part.unit else '-'
+
     def get_queryset(self, request):
         """Обноление состояни просроченности при отображение страницы"""
         today = timezone.now().date()
         qs = super().get_queryset(request)
+        qs = qs.select_related('spare_part__unit')
         qs.filter(expiration_dt__lt=today).update(is_overdue=False)
         return qs
 
@@ -208,12 +213,17 @@ class SparePartShipmentM2MInline(admin.TabularInline):
     form = SparePartShipmentM2MForm
     extra = 1
     autocomplete_fields = ("spare_part",)
-    fields = ("spare_part", "quantity", "expiration_dt")
-    readonly_fields = ("create_dt",)
+    fields = ("spare_part", "unit_display", "quantity", "expiration_dt")
+    readonly_fields = ("create_dt", "unit_display")
+
+    def get_extra(self, request, obj=None, **kwargs):
+        # Если отгрузка создана из Ремонта оборудования — не даём добавлять новые строки
+        if obj and obj.service:
+            return 0
+        return super().get_extra(request, obj, **kwargs)
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['expiration_dt'].required = False
 
         # Если объект существует и связан с Service, делаем поля недоступными для редактирования
         if obj and obj.service:
@@ -225,35 +235,16 @@ class SparePartShipmentM2MInline(admin.TabularInline):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related('spare_part', 'shipment',)
+        return qs.select_related('spare_part__unit', 'shipment',)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "spare_part":
             kwargs["queryset"] = SparePart.objects.select_related("unit")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def formfield_for_choice_field(self, db_field, request, **kwargs):
-        # This method is not used for expiration_dt since it's a DateField, not a ChoiceField
-        return super().formfield_for_choice_field(db_field, request, **kwargs)
-
-    def get_form(self, request, obj=None, **kwargs):
-        from django import forms
-        form = super().get_form(request, obj, **kwargs)
-        
-        # Add a custom method to the form to handle expiration_dt field
-        original_formfield_callback = form.formfield_callback
-        
-        def custom_formfield_callback(db_field, **field_kwargs):
-            formfield = original_formfield_callback(db_field, **field_kwargs)
-            if db_field.name == 'expiration_dt':
-                # Initially, we'll make it a choice field with empty choices
-                # JavaScript will populate it based on the selected spare_part
-                formfield.widget = forms.Select(choices=[('', '--')])
-                formfield.required = False
-            return formfield
-        
-        form.formfield_callback = custom_formfield_callback
-        return form
+    @admin.display(description='Ед. изм.')
+    def unit_display(self, obj):
+        return obj.spare_part.unit.short_name if obj.spare_part.unit else '-'
 
 
 @admin.register(SparePartShipmentV2)
@@ -263,6 +254,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
     list_display = ("doc_num", "shipment_dt", "client_shipment", "service_equipment", "user_name")
     readonly_fields = ("client_shipment",)
+    ordering = ('-shipment_dt',)
     search_fields = ("service__equipment_accounting__equipment__short_name",
                      "service__equipment_accounting__equipment_acc_department_equipment_accounting__department__name")
     search_help_text = "Поиск по клиенту или названию оборудования"
@@ -318,6 +310,22 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             "service__equipment_accounting__equipment", # Добавляем связи для департаментов
         ).prefetch_related("spare_part", "service")
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Поле «Ремонт оборудования» неактивно:
+        #   — при создании новой отгрузки вручную (obj is None)
+        #   — при редактировании отгрузки, созданной пользователем (is_auto_comment != True)
+        # Заполняется автоматически только при создании из карточки Ремонта.
+        if obj is None:
+            form.base_fields['service'].disabled = True
+        elif obj and not obj.is_auto_comment:
+            form.base_fields['service'].disabled = True
+        elif obj and obj.is_auto_comment and obj.service:
+            # Авто-отгрузка со связью: убираем пустой выбор «---------»
+            form.base_fields['service'].empty_label = None
+            form.base_fields['service'].required = True
+        return form
+
     def get_changeform_initial_data(self, request):
         """Устанавливает начальные значения при открытии формы"""
         return {
@@ -327,65 +335,26 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "service":
-            kwargs["queryset"] = Service.objects \
+            qs = Service.objects \
                 .select_related("service_type", "equipment_accounting__equipment", "user")
+
+            # Для авто-отгрузки (is_auto_comment=True) — сужаем queryset до текущего ремонта,
+            # чтобы нельзя было переключиться на другой.
+            object_id = request.resolver_match.kwargs.get('object_id')
+            if object_id:
+                try:
+                    obj = self.get_object(request, object_id)
+                    if obj and obj.is_auto_comment and obj.service:
+                        qs = qs.filter(pk=obj.service.pk)
+                except self.model.DoesNotExist:
+                    pass
+
+            kwargs["queryset"] = qs
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def save_related(self, request, form, formsets, change):
-        """Вызывается после сохранения основной модели и имеет доступ к inline формам"""
-        with transaction.atomic():
-            # Сохраняем оригинальные значения перед сохранением
-            original_spare_parts = {}
-            if change and form.instance.pk:
-                original = SparePartShipmentV2.objects.get(pk=form.instance.pk)
-                original_spare_parts = {
-                    str(item.spare_part.id): {
-                        'quantity': item.quantity,
-                        'expiration_dt': item.expiration_dt
-                    }
-                    for item in original.shipment_m2m.all()
-                }
-            
-            # Вызываем родительский метод для сохранения связанных объектов
-            super().save_related(request, form, formsets, change)
-            
-            # Обрабатываем изменения количества для каждой запчасти через inline формы
-            for formset in formsets:
-                if formset.model == SparePartShipmentM2M:
-                    for inline_form in formset:
-                        if hasattr(inline_form, 'cleaned_data') and inline_form.cleaned_data:
-                            data = inline_form.cleaned_data
-                            # Пропускаем удаленные записи
-                            if data and not data.get('DELETE', False):
-                                spare_part = data.get('spare_part')
-                                quantity = data.get('quantity', 0)
-                                expiration_dt = data.get('expiration_dt')
-                                
-                                if spare_part and quantity > 0:
-                                    try:
-                                        # Получаем оригинальное количество
-                                        original_data = original_spare_parts.get(str(spare_part.id), {})
-                                        original_qty = original_data.get('quantity', 0)
-                                        delta = quantity - original_qty
-                                        
-                                        if delta != 0:
-                                            # Обновляем остаток с учетом срока годности
-                                            # Используем amount__gt=0 чтобы не обновлять записи с нулевым количеством
-                                            SparePartCount.objects.filter(
-                                                spare_part=spare_part,
-                                                expiration_dt=expiration_dt,
-                                                amount__gt=0
-                                            ).update(amount=F('amount') - delta)
-
-                                            logger.info(
-                                                f"Обновление остатка для запчасти {spare_part.name}: "
-                                                f"изменение на {delta} (было {original_qty}, стало {quantity}), "
-                                                f"срок годности: {expiration_dt}"
-                                            )
-                                    except Exception as e:
-                                        logger.error(
-                                            f"Ошибка обновления остатка для запчасти {spare_part.name}: {str(e)}"
-                                        )
+        """Учёт остатков полностью обслуживается сигналами модели SparePartShipmentM2M."""
+        super().save_related(request, form, formsets, change)
     
     def save_model(self, request, obj, form, change):
         # Сохраняем основную модель
@@ -420,6 +389,8 @@ class SparePartShipmentAdmin(MainModelAdmin):
 
     @admin.display(description='Запчасть')
     def spare_part_name(self, obj):
+        if obj.spare_part_count is None:
+            return '—'
         return obj.spare_part_count.spare_part.name
 
     @admin.display(description='Кол-во')
@@ -428,6 +399,8 @@ class SparePartShipmentAdmin(MainModelAdmin):
 
     @admin.display(description='Годен до')
     def exp_dt(self, obj):
+        if obj.spare_part_count is None:
+            return '—'
         return obj.spare_part_count.expiration_dt if obj.spare_part_count.expiration_dt else '-'
 
     # def get_search_results(self, request, queryset, search_term):

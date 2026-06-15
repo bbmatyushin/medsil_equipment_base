@@ -3,3 +3,11 @@ input[name^="shipment_m2m-"][name$="-expiration_dt"][readonly] + .datetimeshortc
 input[name^="shipment_m2m-"][name$="-expiration_dt"][disabled] + .datetimeshortcuts {
     display: none !important;
 }
+
+/* Затемнение неактивного поля «Ремонт оборудования» при ручном создании отгрузки */
+.form-row.field-service select[disabled] {
+    background-color: #e9ecef !important;
+    color: #6c757d !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
