@@ -78,7 +78,6 @@ class SparePartAdmin(MainModelAdmin):
     class Media:
         js = (
             'admin/js/jquery.init.js',
-            'spare_part/js/toggle_filter.js',
         )
 
     def get_urls(self):
