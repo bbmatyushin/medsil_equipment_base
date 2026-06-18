@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('ebase', '0006_update_content_types'),
+        ('ebase', '0007_update_content_types'),
     ]
 
     state_operations = [

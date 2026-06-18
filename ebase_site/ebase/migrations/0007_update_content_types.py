@@ -29,7 +29,7 @@ def update_content_types(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('ebase', '0005_servicephotos'),
+        ('ebase', '0006_alter_fk_references'),
         ('clients', '0001_initial'),
         ('directory', '0003_supplier_manufacturer'),
     ]
