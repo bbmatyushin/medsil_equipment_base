@@ -508,7 +508,10 @@ class ServiceAdmin(MainModelAdmin):
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
-        ('Подменное оборудование', {'fields': ('replacement_equipment',),}),
+        ('Подменное оборудование', {
+            'fields': ('replacement_equipment', 'returned_to_office'),
+            'description': 'Отметьте, если подменное оборудование фактически вернулось в офис'
+        }),
         ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
     )
 
@@ -519,6 +522,7 @@ class ServiceAdmin(MainModelAdmin):
         js = (
             "ebase/js/part_to_service_grok.js",
             "ebase/js/scripts.js",
+            "ebase/js/replacement_equipment_toggle.js",
         )
 
     def get_queryset(self, request):
@@ -1098,8 +1102,8 @@ class ReplacementEquipmentAdmin(MainModelAdmin):
         # Получаем сервис, где это подменное оборудование используется
         try:
             service = obj.service_replacement_equipment
-            # Проверяем, что ремонт еще не завершен
-            if service and service.end_dt is None:
+            # Если галочка "Вернули в офис" НЕ установлена — показываем подразделение
+            if service and not service.returned_to_office:
                 # Получаем активные подразделения для оборудования в сервисе
                 active_departments = service.equipment_accounting.equipment_acc_department_equipment_accounting.all()
                 departments = []

@@ -559,6 +559,11 @@ class Service(EbaseModel):
         null=True, blank=True, verbose_name='Дата окончания',
         db_comment='Дата окончания ремонта', help_text='Дата окончания ремонта'
     )
+    returned_to_office = models.BooleanField(
+        default=False, verbose_name='Вернули в офис',
+        db_comment='Флаг, означающий что подменное оборудование физически вернулось в офис',
+        help_text='Отметьте, если подменное оборудование фактически вернулось в офис'
+    )
     comment = models.TextField(
         null=True, blank=True, verbose_name='Комментарии',
         db_comment='Примечание, комментарии по ремонту',

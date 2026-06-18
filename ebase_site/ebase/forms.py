@@ -61,3 +61,9 @@ class ServiceForm(forms.ModelForm):
     class Meta:
         model = Service
         fields = "__all__"
+        widgets = {
+            "returned_to_office": forms.CheckboxInput(attrs={
+                'title': 'Отметьте, если подменное оборудование фактически вернулось в офис. '
+                         'Влияет на отображение в столбце «Передано» на странице «Подменное оборудование».'
+            }),
+        }
