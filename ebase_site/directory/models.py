@@ -1,3 +1,4 @@
+import uuid
 from enum import Enum
 
 from django.db import models
@@ -257,3 +258,129 @@ class Unit(models.Model):
 
     def __repr__(self):
         return f'<Unit {self.short_name=!r}>'
+
+
+class Manufacturer(models.Model):
+    """Модель для перечьня производителей оборудования"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
+                          verbose_name='ID', db_comment='ID записи', help_text='ID записи')
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
+        db_comment='Дата создания записи.',
+        help_text='Дата создания записи. Заполняется автоматически'
+    )
+    name = models.CharField(
+        max_length=150, null=False, blank=False, verbose_name='Производитель',
+        db_comment='Производитель оборудования', help_text='Производитель оборудования'
+    )
+    inn = models.CharField(
+        max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True,
+        db_comment='ИНН производителя', help_text='ИНН производителя'
+    )
+    country = models.ForeignKey(
+        'Country', on_delete=models.SET_NULL, null=True, blank=False,
+        related_name="manufacturer_country", verbose_name='Страна',
+        db_comment='Страна производителя',
+    )
+    city = models.ForeignKey(
+        'City', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="manufacturer_city", verbose_name='Город',
+        db_comment='Город производителя', help_text='Город производителя',
+        default=get_instance_city
+    )
+    address = models.CharField(
+        max_length=200, null=True, blank=True, verbose_name='Адрес',
+        db_comment='Адрес производителя', help_text='Адрес производителя'
+    )
+    contact_person = models.CharField(
+        max_length=200, null=True, blank=True, verbose_name='Контактное лицо',
+        db_comment='Контактное лицо производителя', help_text='Контактное лицо производителя'
+    )
+    contact_phone = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='Телефон',
+        db_comment='Телефон производителя', help_text='Контактные телефоны производителя'
+    )
+    email = models.EmailField(
+        max_length=100, null=True, blank=True, verbose_name='E-mail',
+        db_comment='E-mail производителя'
+    )
+    is_active = models.BooleanField(
+        null=False, blank=False, default=True, verbose_name='Действующий',
+        db_comment='True, если производитель активен',
+        help_text='True, если активен. Для мягкого удаления производителя.'
+    )
+
+    class Meta:
+        db_table = f'{company}."manufacturer"'
+        db_table_comment = 'Производители оборудования. \n\n-- BMatyushin'
+        verbose_name = 'Производитель'
+        verbose_name_plural = 'Производители'
+        unique_together = ('name', 'city',)
+
+    def __str__(self):
+        return f"{self.name}{f', ({self.city.name})' if self.city.name != 'Не указан' else ''}"
+
+    def __repr__(self):
+        return f'<Manufacturer {self.name=!r}, {self.city=!r}>'
+
+
+class Supplier(models.Model):
+    """Поставщики оборудования."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
+                          verbose_name='ID', db_comment='ID записи', help_text='ID записи')
+    create_dt = models.DateTimeField(
+        auto_now_add=True, editable=False, verbose_name='Дата создания',
+        db_comment='Дата создания записи.',
+        help_text='Дата создания записи. Заполняется автоматически'
+    )
+    name = models.CharField(
+        max_length=150, null=False, blank=False, verbose_name='Поставщик',
+    )
+    inn = models.CharField(
+        max_length=12, null=True, blank=True, verbose_name='ИНН', unique=True
+    )
+    country = models.ForeignKey(
+        'Country', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="supplier_country", verbose_name='Страна',
+        db_comment='Страна производителя',
+    )
+    city = models.ForeignKey(
+        'City', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="supplier_city", verbose_name='Город',
+        db_comment='Город поставщика', help_text='Город поставщика',
+        default=get_instance_city
+    )
+    address = models.CharField(
+        max_length=200, null=True, blank=True, verbose_name='Адрес',
+        db_comment='Адрес поставщика', help_text='Адрес поставщика'
+    )
+    contact_person = models.CharField(
+        max_length=200, null=True, blank=True, verbose_name='Контактное лицо',
+        db_comment='Контактное лицо поставщика', help_text='Контактное лицо поставщика'
+    )
+    contact_phone = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='Телефон',
+        db_comment='Телефон поставщика', help_text='Контактные телефоны поставщика'
+    )
+    email = models.EmailField(
+        max_length=100, null=True, blank=True, verbose_name='E-mail',
+        db_comment='E-mail поставщика'
+    )
+    is_active = models.BooleanField(
+        null=False, blank=False, default=True, verbose_name='Действующий',
+        db_comment='True, если поставщик активен',
+        help_text='True, если активен. Для мягкого удаления поставщика.'
+    )
+
+    class Meta:
+        db_table = f'{company}."supplier"'
+        db_table_comment = 'Поставщики оборудования. \n\n-- BMatyushin'
+        verbose_name = 'Поставщик'
+        verbose_name_plural = 'Поставщики'
+        unique_together = ('name', 'city')
+
+    def __str__(self):
+        return f"{self.name}{f', ({self.city.name})' if self.city.name != 'Не указан' else ''}"
+
+    def __repr__(self):
+        return f'<Supplier {self.name=!r}, {self.city=!r}>'

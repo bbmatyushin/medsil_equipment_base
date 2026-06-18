@@ -3,7 +3,8 @@ from django.forms.widgets import URLInput
 from django.db.models import Value, CharField, Q
 from django.db.models.functions import Concat
 from django.utils.safestring import mark_safe
-from .models import *
+from .models import Equipment, EquipmentAccounting, Service, ReplacementEquipment, ServiceAccessories
+from clients.models import DeptContactPers
 from spare_part.models import SparePart
 from directory.models import MedDirection
 

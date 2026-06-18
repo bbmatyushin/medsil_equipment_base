@@ -97,3 +97,57 @@ class UnitAdmin(MainModelAdmin):
     fieldsets = (
         ('Новая единица измерения', {'fields': ('short_name', 'full_name')}),
     )
+
+
+@admin.register(Manufacturer)
+class ManufacturerAdmin(MainModelAdmin):
+    autocomplete_fields = ('city',)
+    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
+                    'country_name', 'city_name', 'address',)
+    search_fields = ('name', 'inn')
+    search_help_text = 'Поиск по Производителю или ИНН'
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новый производитель', {'fields': ('name', 'inn',)}),
+        ('Адрес', {'fields': ('country', 'city', 'address')}),
+        ('Контакты производителя', {'fields': ('contact_person', 'contact_phone', 'email')}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('city', 'country')
+
+    @admin.display(description='Город')
+    def city_name(self, obj):
+        return obj.city.name if obj.city else '-'
+
+    @admin.display(description='Страна')
+    def country_name(self, obj):
+        return obj.country.name if obj.country else '-'
+
+
+@admin.register(Supplier)
+class SupplierAdmin(MainModelAdmin):
+    autocomplete_fields = ('city',)
+    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
+                    'country_name', 'city_name', 'address',)
+    search_fields = ('name', 'inn')
+    search_help_text = 'Поиск по Поставщику или ИНН'
+    ordering = ('name',)
+
+    fieldsets = (
+        ('Новый поставщик', {'fields': ('name', 'inn')}),
+        ('Адрес', {'fields': ('country', 'city', 'address',)}),
+        ('Контакты поставщика', {'fields': ('contact_person', 'contact_phone', 'email')}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('city', 'country')
+
+    @admin.display(description='Город')
+    def city_name(self, obj):
+        return obj.city.name if obj.city else '-'
+
+    @admin.display(description='Страна')
+    def country_name(self, obj):
+        return obj.country.name if obj.country else '-'

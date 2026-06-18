@@ -19,106 +19,12 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
-from .models import DeptContactPers, EquipmentAccounting, EquipmentAccDepartment
+from .models import Equipment, EquipmentAccounting, EquipmentAccDepartment, Service, ServicePhotos, ServiceAccessories, ReplacementEquipment
+from clients.models import Department, DeptContactPers
 
 from utils import MainModelAdmin
 
 logger = logging.getLogger('ebase')
-
-
-@admin.register(Client)
-class ClientAdmin(MainModelAdmin):
-    autocomplete_fields = ('city',)
-    list_display = ('name', 'inn', 'city_name', 'address', 'create_dt')
-    search_fields = ('name', 'inn')
-    search_help_text = 'Поиск по Наименованию или ИНН'
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Клиент', {'fields': ('name',)}),
-        ('Реквизиты', {'fields': (('inn', 'kpp',), ('phone', 'email',), ('city', 'address',))})
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('city')
-
-    @admin.display(description='Город')
-    def city_name(self, obj):
-        return obj.city.name if obj.city else '-'
-
-
-@admin.register(Department)
-class DepartmentAdmin(MainModelAdmin):
-    list_display = ('name', 'client_name', 'city_name', 'address', 'create_dt')
-    search_fields = ('name', 'client__name')
-    search_help_text = 'Поиск по подразделению или клиенту'
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новое подразделение', {'fields': ('name', 'client', 'address', 'city')}),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('client', 'city')
-
-    @admin.display(description='Клиент')
-    def client_name(self, obj):
-        return obj.client.name if obj.client else '-'
-
-    @admin.display(description='Город')
-    def city_name(self, obj):
-        return obj.city.name if obj.client else '-'
-
-
-@admin.register(DeptContactPers)
-class DeptContactPersAdmin(MainModelAdmin):
-    autocomplete_fields = ('department',)
-    list_display = ('fio', 'position', 'department', 'phone', 'email', 'comment')
-    list_filter = ('position',)
-    search_fields = ('surname', 'name', 'patron', 'department__name')
-    search_help_text = 'Поиск по фамилии/имени/отчеству или по подразделению'
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новое контактное лицо', {
-            'fields': ('surname', 'name', 'patron',
-                       'department', 'position', 'mob_phone', 'work_phone',
-                       'email', 'comment')
-        }),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('department', 'position')
-
-    # Переопределяет метод для выбора должностей. Будут видны только должности типа "Клиент"
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "position":
-            kwargs["queryset"] = Position.objects.filter(type='client')
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    @admin.display(description='ФИО')
-    def fio(self, obj):
-        # Формируем ФИО, исключая None и пустые строки
-        fio_parts = []
-        if obj.surname:
-            fio_parts.append(obj.surname)
-        if obj.name:
-            fio_parts.append(obj.name)
-        if obj.patron:
-            fio_parts.append(obj.patron)
-
-        return ' '.join(fio_parts).strip()
-
-    @admin.display(description='Телефон')
-    def phone(self, obj):
-        if obj.mob_phone and obj.work_phone:
-            return f"{obj.mob_phone}, {obj.work_phone}"
-        elif obj.mob_phone:
-            return obj.mob_phone
-        elif obj.work_phone:
-            return obj.work_phone
-        else:
-            return '-'
 
 
 @admin.register(Equipment)
@@ -401,33 +307,6 @@ class EquipmentAccountingAdmin(MainModelAdmin):
         if user_position:
             list_filter = (InstallDtFilter, 'equipment_status__name', MedDirectionFilter,)
         return list_filter
-
-
-@admin.register(Manufacturer)
-class ManufacturerAdmin(MainModelAdmin):
-    autocomplete_fields = ('city',)
-    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
-                    'country_name', 'city_name', 'address',)
-    search_fields = ('name', 'inn')
-    search_help_text = 'Поиск по Производителю или ИНН'
-    ordering = ('name',)
-
-    fieldsets = (
-        ('Новый производитель', {'fields': ('name', 'inn',)}),
-        ('Адрес', {'fields': ('country', 'city', 'address')}),
-        ('Контакты производителя', {'fields': ('contact_person', 'contact_phone', 'email')}),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('city', 'country')
-
-    @admin.display(description='Город')
-    def city_name(self, obj):
-        return obj.city.name if obj.city else '-'
-
-    @admin.display(description='Страна')
-    def country_name(self, obj):
-        return obj.country.name if obj.country else '-'
 
 
 class ServiceAccessoriesInline(admin.TabularInline):
@@ -1134,28 +1013,4 @@ class ReplacementEquipmentAdmin(MainModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-@admin.register(Supplier)
-class SupplierAdmin(MainModelAdmin):
-    autocomplete_fields = ('city',)
-    list_display = ('name', 'inn', 'contact_person', 'contact_phone', 'email',
-                    'country_name', 'city_name', 'address',)
-    search_fields = ('name', 'inn')
-    search_help_text = 'Поиск по Поставщику или ИНН'
-    ordering = ('name',)
 
-    fieldsets = (
-        ('Новый поставщик', { 'fields': ('name', 'inn')}),
-        ('Адрес', {'fields': ('country', 'city', 'address',)}),
-        ('Контакты поставщика', {'fields': ('contact_person', 'contact_phone', 'email')}),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('city', 'country')
-
-    @admin.display(description='Город')
-    def city_name(self, obj):
-        return obj.city.name if obj.city else '-'
-
-    @admin.display(description='Страна')
-    def country_name(self, obj):
-        return obj.country.name if obj.country else '-'

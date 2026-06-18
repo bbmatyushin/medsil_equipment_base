@@ -37,6 +37,7 @@ INTERNAL_IPS = ['127.0.0.1',]
 INSTALLED_APPS = [
     "users.apps.UsersConfig",
     "ebase.apps.EbaseConfig",
+    "clients.apps.ClientsConfig",
     "directory.apps.DirectoryConfig",
     "spare_part.apps.SparePartConfig",
     "debug_toolbar",
