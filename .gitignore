@@ -23,6 +23,7 @@ CONVENTIONS.md
 .pi/
 ebase_site/static/images/
 ebase_site/ebase/templates/admin/base_site.html.backup
+ebase/logs/*.log*
 
 
 # Byte-compiled / optimized / DLL files
