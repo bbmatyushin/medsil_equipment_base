@@ -9,18 +9,26 @@ from django.core.validators import MinValueValidator
 from directory.models import get_instance_unit
 
 
-logger = logging.getLogger('SPARE_PART_SIGNALS')
+logger = logging.getLogger("SPARE_PART_SIGNALS")
 company = '"medsil"'  # название схемы для таблиц
 
 
 class SparePartAbs(models.Model):
     objects = models.Manager()
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,
-                          verbose_name='ID', db_comment='ID записи', help_text='ID записи')
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID",
+        db_comment="ID записи",
+        help_text="ID записи",
+    )
     create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-        help_text='Дата создания записи. Заполняется автоматически'
+        auto_now_add=True,
+        editable=False,
+        verbose_name="Дата создания",
+        db_comment="Дата создания записи.",
+        help_text="Дата создания записи. Заполняется автоматически",
     )
 
     class Meta:
@@ -29,115 +37,167 @@ class SparePartAbs(models.Model):
 
 class SparePartAccessories(models.Model):
     """Комплектующие для подменного оборудования."""
+
     name = models.CharField(
-        max_length=200, null=False, blank=False, verbose_name='Наименование комплектующих',
-        db_comment='Наименование комплектующих',
-        help_text='Описание комплектующих, которые передаются с подменным оборудованием'
+        max_length=200,
+        null=False,
+        blank=False,
+        verbose_name="Наименование комплектующих",
+        db_comment="Наименование комплектующих",
+        help_text="Описание комплектующих, которые передаются с подменным оборудованием",
     )
     description = models.TextField(
-        null=True, blank=True, verbose_name='Описание',
-        db_comment='Подробное описание комплектующих'
+        null=True,
+        blank=True,
+        verbose_name="Описание",
+        db_comment="Подробное описание комплектующих",
     )
     create_dt = models.DateTimeField(
-        auto_now_add=True, editable=False, verbose_name='Дата создания',
-        db_comment='Дата создания записи.',
-        help_text='Дата создания записи. Заполняется автоматически'
+        auto_now_add=True,
+        editable=False,
+        verbose_name="Дата создания",
+        db_comment="Дата создания записи.",
+        help_text="Дата создания записи. Заполняется автоматически",
     )
 
     class Meta:
         db_table = f'{company}."accessories"'
-        db_table_comment = 'Комплектующие для подменного оборудования.\n\n-- BMatyushin'
-        verbose_name = 'Комплектующие'
-        verbose_name_plural = 'Комплектующие'
+        db_table_comment = "Комплектующие для подменного оборудования.\n\n-- BMatyushin"
+        verbose_name = "Комплектующие"
+        verbose_name_plural = "Комплектующие"
 
     def __str__(self):
         return self.name
 
     def __repr__(self):
-        return f'<Accessories {self.name=!r}>'
+        return f"<Accessories {self.name=!r}>"
 
 
 class SparePart(SparePartAbs):
     """Запчасти."""
+
     article = models.CharField(
-        max_length=50, null=True, blank=False, verbose_name='Артикул', db_comment='Артикул',
+        max_length=50,
+        null=True,
+        blank=False,
+        verbose_name="Артикул",
+        db_comment="Артикул",
     )
     name = models.CharField(
-        max_length=300, null=False, blank=False,verbose_name='Наименование',
-        db_comment='Наименование запчасти',
+        max_length=300,
+        null=False,
+        blank=False,
+        verbose_name="Наименование",
+        db_comment="Наименование запчасти",
     )
     unit = models.ForeignKey(
-        "directory.Unit", on_delete=models.RESTRICT, null=False, blank=False,
-        related_name="spare_part_unit", verbose_name='Ед.изм.', db_comment='Ед.изм.',
-        default=get_instance_unit
+        "directory.Unit",
+        on_delete=models.RESTRICT,
+        null=False,
+        blank=False,
+        related_name="spare_part_unit",
+        verbose_name="Ед.изм.",
+        db_comment="Ед.изм.",
+        default=get_instance_unit,
     )
     comment = models.TextField(
-        null=True, blank=True, verbose_name='Примечание',
-        db_comment='Примечание к запчасти', help_text='Примечание к запчасти'
+        null=True,
+        blank=True,
+        verbose_name="Примечание",
+        db_comment="Примечание к запчасти",
+        help_text="Примечание к запчасти",
     )
     is_expiration = models.BooleanField(
-        default=False, verbose_name='Срок годности', blank=False,
-        db_comment='Отмечаются запчасти со сроками годности',
-        help_text='Флаг указывающий, что у запчасти должен быть срок годности'
+        default=False,
+        verbose_name="Срок годности",
+        blank=False,
+        db_comment="Отмечаются запчасти со сроками годности",
+        help_text="Флаг указывающий, что у запчасти должен быть срок годности",
     )
     equipment = models.ManyToManyField(
-        "ebase.Equipment", related_name="spare_part_equipment", verbose_name='Оборудование',
-        help_text="Оборудование, для которого предназначена эта запчасть. ", blank=False,
+        "ebase.Equipment",
+        related_name="spare_part_equipment",
+        verbose_name="Оборудование",
+        help_text="Оборудование, для которого предназначена эта запчасть. ",
+        blank=False,
     )
     service = models.ManyToManyField(
-        "ebase.Service", related_name="spare_part_service", verbose_name='ID Ремонта',
-        help_text="В каком ремонте использовалась эта запчасть"
+        "ebase.Service",
+        related_name="spare_part_service",
+        verbose_name="ID Ремонта",
+        help_text="В каком ремонте использовалась эта запчасть",
     )
 
     class Meta:
         db_table = f'{company}."spare_part"'
-        db_table_comment = 'Справочник запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Запчасть'
-        verbose_name_plural = 'Запчасти'
-        unique_together = ('article', 'name',)
+        db_table_comment = "Справочник запчастей. \n\n-- BMatyushin"
+        verbose_name = "Запчасть"
+        verbose_name_plural = "Запчасти"
+        unique_together = (
+            "article",
+            "name",
+        )
         indexes = [
             models.Index(fields=["article"]),
-            models.Index(fields=["name",]),
-            models.Index(fields=["unit",]),
+            models.Index(
+                fields=[
+                    "name",
+                ]
+            ),
+            models.Index(
+                fields=[
+                    "unit",
+                ]
+            ),
         ]
 
     def __str__(self):
         return f'{self.name} {f"(арт. {self.article})" if self.article else ""}'
 
     def __repr__(self):
-        return f'<SparePart {self.name=!r}>'
+        return f"<SparePart {self.name=!r}>"
 
 
 class SparePartCount(SparePartAbs):
     """Общее количество запчастей (чтобы не делать сложные запросы для вывода этой инфы)"""
+
     spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name="spare_part_count_spare_part", verbose_name='Запчасть',
-        db_comment="ID запчасти", help_text="ID запчасти"
+        "SparePart",
+        on_delete=models.RESTRICT,
+        null=False,
+        blank=False,
+        related_name="spare_part_count_spare_part",
+        verbose_name="Запчасть",
+        db_comment="ID запчасти",
+        help_text="ID запчасти",
     )
     amount = models.FloatField(
-        verbose_name='Количество', db_comment='Кол-во запчастей',
-        help_text='Кол-во запчастей. Заполняется автоматически',
+        verbose_name="Количество",
+        db_comment="Кол-во запчастей",
+        help_text="Кол-во запчастей. Заполняется автоматически",
         # validators=[MinValueValidator(0)], null=False, blank=False,
     )
     expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
-        help_text='Годен до. Срок годности для запчастей со сроком годности.',
+        null=True,
+        blank=True,
+        verbose_name="Годен до",
+        db_comment="Годен до. Срок годности для запчастей со сроком годности.",
+        help_text="Годен до. Срок годности для запчастей со сроком годности.",
         # choices=(SparePartShipment.objects.)
     )
     is_overdue = models.BooleanField(
-        default=True, verbose_name='Не просрочено',
-        db_comment='Флаг указывающий, что запчасть просрочена',
-        help_text='Флаг указывающий, что запчасть просрочена'
+        default=True,
+        verbose_name="Не просрочено",
+        db_comment="Флаг указывающий, что запчасть просрочена",
+        help_text="Флаг указывающий, что запчасть просрочена",
     )
 
     class Meta:
         db_table = f'{company}."spare_part_count"'
-        db_table_comment = 'Общее количество запчастей на остатке.\n\n-- BMatyushin'
-        verbose_name = 'Остаток запчастей'
-        verbose_name_plural = 'Остаток запчастей'
-        unique_together = ('spare_part', 'expiration_dt')
+        db_table_comment = "Общее количество запчастей на остатке.\n\n-- BMatyushin"
+        verbose_name = "Остаток запчастей"
+        verbose_name_plural = "Остаток запчастей"
+        unique_together = ("spare_part", "expiration_dt")
         indexes = [
             models.Index(fields=["spare_part"]),
         ]
@@ -147,42 +207,61 @@ class SparePartCount(SparePartAbs):
         today = datetime.today().date()
         if self.expiration_dt:
             self.is_overdue = self.expiration_dt < today
-            self.save(update_fields=['is_overdue'])
+            self.save(update_fields=["is_overdue"])
 
     def __str__(self):
-        exp_dt = self.expiration_dt.strftime("%d.%m.%Y") if self.expiration_dt else '-'
+        exp_dt = self.expiration_dt.strftime("%d.%m.%Y") if self.expiration_dt else "-"
         sp_amount = self.amount if self.amount % 1 else int(self.amount)
         return f"{self.spare_part.name}{f' (до {exp_dt})' if self.expiration_dt else ''}, остаток - {sp_amount}"
         # return f"{self.amount if self.amount else '-'}"
 
     def __repr__(self):
-        return f'<SparePartCount {self.spare_part=!r} {self.amount=!r}>'
+        return f"<SparePartCount {self.spare_part=!r} {self.amount=!r}>"
 
 
 class SparePartShipmentM2M(models.Model):
-    spare_part = models.ForeignKey("spare_part.SparePart", on_delete=models.CASCADE,
-                                   related_name="spare_part_m2m", verbose_name="Запчасть")
-    shipment = models.ForeignKey("spare_part.SparePartShipmentV2", on_delete=models.CASCADE,
-                                 related_name="shipment_m2m")
-    quantity = models.FloatField(help_text="Количество отгружаемых единиц товара",
-                                           verbose_name="Кол-во",
-                                           validators=[MinValueValidator(0)])
+    spare_part = models.ForeignKey(
+        "spare_part.SparePart",
+        on_delete=models.CASCADE,
+        related_name="spare_part_m2m",
+        verbose_name="Запчасть",
+    )
+    shipment = models.ForeignKey(
+        "spare_part.SparePartShipmentV2",
+        on_delete=models.CASCADE,
+        related_name="shipment_m2m",
+    )
+    quantity = models.FloatField(
+        help_text="Количество отгружаемых единиц товара",
+        verbose_name="Кол-во",
+        validators=[MinValueValidator(0)],
+    )
     expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Срок годности',
-        db_comment='Срок годности для запчастей со сроком годности',
-        help_text='Срок годности для запчастей со сроком годности'
+        null=True,
+        blank=True,
+        verbose_name="Срок годности",
+        db_comment="Срок годности для запчастей со сроком годности",
+        help_text="Срок годности для запчастей со сроком годности",
     )
     create_dt = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = f'{company}."spare_part_shipment_m2m"'
-        db_table_comment = ("Связывает отгрузку, запчать и количество отгруженных запчастей."
-                            "\r\n\r\n--Матюшин")
-        verbose_name = 'Выбрать запчасть'
-        verbose_name_plural = 'Выберите запчасти'
+        db_table_comment = (
+            "Связывает отгрузку, запчать и количество отгруженных запчастей."
+            "\r\n\r\n--Матюшин"
+        )
+        verbose_name = "Выбрать запчасть"
+        verbose_name_plural = "Выберите запчасти"
         indexes = [
-            models.Index(fields=['spare_part'],),
-            models.Index(fields=["shipment",])
+            models.Index(
+                fields=["spare_part"],
+            ),
+            models.Index(
+                fields=[
+                    "shipment",
+                ]
+            ),
         ]
 
     def __str__(self):
@@ -196,51 +275,81 @@ class SparePartShipmentV2(SparePartAbs):
     """Обновленная талица для отгрузки запчастей.
     Чтобы в одной отгрузке учитывать несколько видов запчастей"""
 
-    spare_part = models.ManyToManyField("spare_part.SparePart", related_name="m2m_spare_part_shipment_v2",
-                                        help_text="Для связи одной отгрузки с несколькими запчастями",
-                                        through="spare_part.SparePartShipmentM2M")
-    service = models.ForeignKey("ebase.Service", on_delete=models.CASCADE, related_name="fk_spare_part_shipment_v2",
-                                null=True, blank=True, verbose_name="Ремонт оборудования",
-                                help_text="Связь с ремонтом оборудования", db_comment="Связь с ремонтом оборудования")
+    spare_part = models.ManyToManyField(
+        "spare_part.SparePart",
+        related_name="m2m_spare_part_shipment_v2",
+        help_text="Для связи одной отгрузки с несколькими запчастями",
+        through="spare_part.SparePartShipmentM2M",
+    )
+    service = models.ForeignKey(
+        "ebase.Service",
+        on_delete=models.CASCADE,
+        related_name="fk_spare_part_shipment_v2",
+        null=True,
+        blank=True,
+        verbose_name="Ремонт оборудования",
+        help_text="Связь с ремонтом оборудования",
+        db_comment="Связь с ремонтом оборудования",
+    )
     doc_num = models.CharField(
-        max_length=20, null=False, blank=False, verbose_name='Номер документа',
-        db_comment='Номер документа отгрузки',
-        help_text='Номер документа отгрузки или внутренний номер для учёта',
-        default='б/н'
+        max_length=20,
+        null=False,
+        blank=False,
+        verbose_name="Номер документа",
+        db_comment="Номер документа отгрузки",
+        help_text="Номер документа отгрузки или внутренний номер для учёта",
+        default="б/н",
     )
     shipment_dt = models.DateField(
-        null=False, blank=False, verbose_name='Дата отгрузки',
-        db_comment='Дата отгрузки', help_text='Дата отгрузки.'
+        null=False,
+        blank=False,
+        verbose_name="Дата отгрузки",
+        db_comment="Дата отгрузки",
+        help_text="Дата отгрузки.",
     )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name='fk_spare_part_shipment_v2_user', verbose_name='Кто отгрузил',
+        "users.CompanyUser",
+        on_delete=models.RESTRICT,
+        null=False,
+        blank=False,
+        related_name="fk_spare_part_shipment_v2_user",
+        verbose_name="Кто отгрузил",
         db_comment="ID сотрудника, который оформил отгрузку",
     )
-    comment = models.TextField(null=True, blank=True,
-                               db_comment='Комментарий к отгрузке',
-                               verbose_name='Комментарий',
-                               help_text='Комментарий к отгрузке')
-    is_auto_comment = models.BooleanField(blank=True, default=False,
-                                          db_comment='true если коммент был создано на стороне django, '
-                                                     'если пользователем - false')
+    comment = models.TextField(
+        null=True,
+        blank=True,
+        db_comment="Комментарий к отгрузке",
+        verbose_name="Комментарий",
+        help_text="Комментарий к отгрузке",
+    )
+    is_auto_comment = models.BooleanField(
+        blank=True,
+        default=False,
+        db_comment="true если коммент был создано на стороне django, "
+        "если пользователем - false",
+    )
 
     class Meta:
         db_table = f'{company}."spare_part_shipment_v2"'
-        db_table_comment = ("Обновленная таблица для хранения отгрузок запчастей. Для связи одной отгрузки с "
-                            "несколькими запчастями используется таблица spare_part_shipment_m2m, в которй "
-                            "указывается количество отгруженного товара."
-                            "\r\n\r\n--Матюшин")
-        verbose_name = 'Отгрузка запчастей'
-        verbose_name_plural = 'Отгрузки запчастей'
+        db_table_comment = (
+            "Обновленная таблица для хранения отгрузок запчастей. Для связи одной отгрузки с "
+            "несколькими запчастями используется таблица spare_part_shipment_m2m, в которй "
+            "указывается количество отгруженного товара."
+            "\r\n\r\n--Матюшин"
+        )
+        verbose_name = "Отгрузка запчастей"
+        verbose_name_plural = "Отгрузки запчастей"
         indexes = [
             models.Index(fields=["service"]),
             models.Index(fields=["user"]),
         ]
 
     def __str__(self):
-        spare_parts = [(f"{part.spare_part.name} - {part.quantity} "
-                        f"{part.spare_part.unit}") for part in self.shipment_m2m.all()]
+        spare_parts = [
+            (f"{part.spare_part.name} - {part.quantity} " f"{part.spare_part.unit}")
+            for part in self.shipment_m2m.all()
+        ]
         return f"Отгрузка #{self.doc_num}: {', '.join(spare_parts)}"
 
     def __repr__(self):
@@ -258,20 +367,30 @@ class SparePartShipment(SparePartAbs):
     #     db_comment="ID запчасти",
     # )
     spare_part_count = models.ForeignKey(
-        'SparePartCount', on_delete=models.SET_NULL, null=True, blank=False,
-        related_name="spare_part_shipment_spare_part_count", verbose_name='Запчасть',
+        "SparePartCount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=False,
+        related_name="spare_part_shipment_spare_part_count",
+        verbose_name="Запчасть",
         db_comment="ID запчасти из таблицы spare_part_count",
     )
     doc_num = models.CharField(
-        max_length=20, null=False, blank=False, verbose_name='Номер документа',
-        db_comment='Номер документа отгрузки',
-        help_text='Номер документа отгрузки или внутренний номер для учёта',
-        default='б/н'
+        max_length=20,
+        null=False,
+        blank=False,
+        verbose_name="Номер документа",
+        db_comment="Номер документа отгрузки",
+        help_text="Номер документа отгрузки или внутренний номер для учёта",
+        default="б/н",
     )
     count_shipment = models.FloatField(
-        verbose_name='Кол-во', db_comment='Кол-во отгруженной запчасти',
-        help_text='Кол-во отгруженной запчасти', null=False, blank=False,
-        validators=[MinValueValidator(0)]
+        verbose_name="Кол-во",
+        db_comment="Кол-во отгруженной запчасти",
+        help_text="Кол-во отгруженной запчасти",
+        null=False,
+        blank=False,
+        validators=[MinValueValidator(0)],
     )
     # expiration_dt = models.DateField(
     #     null=True, blank=True, verbose_name='Годен до',
@@ -279,76 +398,115 @@ class SparePartShipment(SparePartAbs):
     #     help_text='Срок годности для запчастей со сроком годности.',
     # )
     shipment_dt = models.DateField(
-        null=False, blank=False, verbose_name='Дата отгрузки',
-        db_comment='Дата отгрузки', help_text='Дата отгрузки.'
+        null=False,
+        blank=False,
+        verbose_name="Дата отгрузки",
+        db_comment="Дата отгрузки",
+        help_text="Дата отгрузки.",
     )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=False,
-        related_name='spare_part_shipment_company_user', verbose_name='Кто отгрузил',
+        "users.CompanyUser",
+        on_delete=models.RESTRICT,
+        null=False,
+        blank=False,
+        related_name="spare_part_shipment_company_user",
+        verbose_name="Кто отгрузил",
         db_comment="ID сотрудника, который оформил отгрузку",
     )
-    comment = models.TextField(null=True, blank=True,
-                               db_comment='Комментарий к отгрузке',
-                               verbose_name='Комментарий',
-                               help_text='Комментарий к отгрузке')
-    is_auto_comment = models.BooleanField(blank=True, default=False,
-                                          db_comment='true если коммент был создано на стороне django, '
-                                                     'если пользователем - false')
+    comment = models.TextField(
+        null=True,
+        blank=True,
+        db_comment="Комментарий к отгрузке",
+        verbose_name="Комментарий",
+        help_text="Комментарий к отгрузке",
+    )
+    is_auto_comment = models.BooleanField(
+        blank=True,
+        default=False,
+        db_comment="true если коммент был создано на стороне django, "
+        "если пользователем - false",
+    )
 
     class Meta:
         db_table = f'{company}."spare_part_shipment"'
-        db_table_comment = 'Отслеживание отгрузок запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Отгрузка запчастей (до 24.10.2025)'
-        verbose_name_plural = 'Отгрузки запчастей (до 24.10.2025)'
+        db_table_comment = "Отслеживание отгрузок запчастей. \n\n-- BMatyushin"
+        verbose_name = "Отгрузка запчастей (до 24.10.2025)"
+        verbose_name_plural = "Отгрузки запчастей (до 24.10.2025)"
 
     def __str__(self):
         if self.spare_part_count is None:
-            return f'Отгрузка #{self.doc_num} (запчасть удалена)'
-        art = f" (арт. {self.spare_part_count.spare_part.article})" if self.spare_part_count.spare_part.article else ''
-        return f'{self.spare_part_count.spare_part.name}{art}'
+            return f"Отгрузка #{self.doc_num} (запчасть удалена)"
+        art = (
+            f" (арт. {self.spare_part_count.spare_part.article})"
+            if self.spare_part_count.spare_part.article
+            else ""
+        )
+        return f"{self.spare_part_count.spare_part.name}{art}"
 
     def __repr__(self):
         if self.spare_part_count is None:
             return f"<SparePartShipment: spare_part_count=None, count_shipment={self.count_shipment!r}>"
-        return f"<SparePartShipment: {self.spare_part_count=!r}, {self.count_shipment=!r}>"
+        return (
+            f"<SparePartShipment: {self.spare_part_count=!r}, {self.count_shipment=!r}>"
+        )
 
 
 class SparePartSupply(SparePartAbs):
     """Отслеживание поставок запчастей"""
+
     spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.SET_NULL, null=True, blank=False,
-        related_name="spare_part_supply_spare_part", verbose_name='Запчасть',
+        "SparePart",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=False,
+        related_name="spare_part_supply_spare_part",
+        verbose_name="Запчасть",
         db_comment="ID запчасти",
     )
     doc_num = models.CharField(
-        max_length=20, null=False, blank=False, verbose_name='Номер документа',
-        db_comment='Номер документа отгрузки',
-        help_text='Номер документа отгрузки или внутренний номер для учёта',
-        default='б/н',
+        max_length=20,
+        null=False,
+        blank=False,
+        verbose_name="Номер документа",
+        db_comment="Номер документа отгрузки",
+        help_text="Номер документа отгрузки или внутренний номер для учёта",
+        default="б/н",
     )
     count_supply = models.FloatField(
-        verbose_name='Кол-во', db_comment='Кол-во поставленой запчасти',
-        null=False, blank=False, validators=[MinValueValidator(0)],
+        verbose_name="Кол-во",
+        db_comment="Кол-во поставленой запчасти",
+        null=False,
+        blank=False,
+        validators=[MinValueValidator(0)],
     )
     expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Годен до. Срок годности для запчастей со сроком годности.',
-        help_text='Срок годности для запчастей со сроком годности.',
+        null=True,
+        blank=True,
+        verbose_name="Годен до",
+        db_comment="Годен до. Срок годности для запчастей со сроком годности.",
+        help_text="Срок годности для запчастей со сроком годности.",
     )
     supply_dt = models.DateField(
-        null=False, blank=False, verbose_name='Дата поставки', db_comment='Дата поставки',
+        null=False,
+        blank=False,
+        verbose_name="Дата поставки",
+        db_comment="Дата поставки",
     )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT, null=False, blank=True,
-        related_name='spare_part_supply_company_user', verbose_name='Кто добавил',
+        "users.CompanyUser",
+        on_delete=models.RESTRICT,
+        null=False,
+        blank=True,
+        related_name="spare_part_supply_company_user",
+        verbose_name="Кто добавил",
         db_comment="ID сотрудника, который оформил поставку",
     )
 
     class Meta:
         db_table = f'{company}."spare_part_supply"'
-        db_table_comment = 'Отслеживание поставок запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Поставка запчастей'
-        verbose_name_plural = 'Поставки запчастей'
+        db_table_comment = "Отслеживание поставок запчастей. \n\n-- BMatyushin"
+        verbose_name = "Поставка запчастей"
+        verbose_name_plural = "Поставки запчастей"
         indexes = [
             models.Index(fields=["spare_part"]),
             models.Index(fields=["user"]),
@@ -366,35 +524,42 @@ class SparePartSupplyV2(SparePartAbs):
 
     Старая модель SparePartSupply оставлена без изменений для сохранения истории.
     """
+
     doc_num = models.CharField(
-        max_length=255, blank=True, verbose_name='Номер документа',
-        db_comment='Номер документа поставки'
+        max_length=255,
+        blank=True,
+        verbose_name="Номер документа",
+        db_comment="Номер документа поставки",
     )
     supply_dt = models.DateField(
-        verbose_name='Дата поставки', db_comment='Дата поставки'
+        verbose_name="Дата поставки", db_comment="Дата поставки"
     )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.RESTRICT,
-        null=True, blank=True, related_name='spare_part_supply_v2_user',
-        verbose_name='Кто добавил',
-        db_comment='ID сотрудника, который оформил поставку'
+        "users.CompanyUser",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="spare_part_supply_v2_user",
+        verbose_name="Кто добавил",
+        db_comment="ID сотрудника, который оформил поставку",
     )
     note = models.TextField(
-        blank=True, verbose_name='Примечание',
-        db_comment='Примечание к поставке'
+        blank=True, verbose_name="Примечание", db_comment="Примечание к поставке"
     )
 
     class Meta:
         db_table = f'{company}."spare_part_supply_v2"'
-        db_table_comment = ('Обновлённая таблица поставок запчастей. '
-                            'Одна поставка может содержать несколько строк запчастей.'
-                            '\r\n\r\n-- Generated')
-        verbose_name = 'Поставка запчастей (v2)'
-        verbose_name_plural = 'Поставки запчастей (v2)'
-        ordering = ('-supply_dt', '-create_dt')
+        db_table_comment = (
+            "Обновлённая таблица поставок запчастей. "
+            "Одна поставка может содержать несколько строк запчастей."
+            "\r\n\r\n-- Generated"
+        )
+        verbose_name = "Поставка запчастей (v2)"
+        verbose_name_plural = "Поставки запчастей (v2)"
+        ordering = ("-supply_dt", "-create_dt")
         indexes = [
-            models.Index(fields=['supply_dt']),
-            models.Index(fields=['user']),
+            models.Index(fields=["supply_dt"]),
+            models.Index(fields=["user"]),
         ]
 
     def __str__(self):
@@ -403,80 +568,111 @@ class SparePartSupplyV2(SparePartAbs):
 
 class SparePartSupplyItem(models.Model):
     """Строка поставки: запчасть + количество + цена + сумма."""
+
     supply = models.ForeignKey(
-        SparePartSupplyV2, on_delete=models.CASCADE,
-        related_name='items', verbose_name='Поставка',
-        db_comment='ID поставки'
+        SparePartSupplyV2,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Поставка",
+        db_comment="ID поставки",
     )
     spare_part = models.ForeignKey(
-        SparePart, on_delete=models.RESTRICT,
-        related_name='spare_part_supply_item', verbose_name='Запчасть',
-        db_comment='ID запчасти'
+        SparePart,
+        on_delete=models.RESTRICT,
+        related_name="spare_part_supply_item",
+        verbose_name="Запчасть",
+        db_comment="ID запчасти",
     )
     quantity = models.FloatField(
-        validators=[MinValueValidator(0)], verbose_name='Кол-во',
-        db_comment='Количество поставленной запчасти'
+        validators=[MinValueValidator(0)],
+        verbose_name="Кол-во",
+        db_comment="Количество поставленной запчасти",
     )
     price = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0,
-        validators=[MinValueValidator(0)], verbose_name='Цена',
-        db_comment='Цена закупки за единицу'
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="Цена",
+        db_comment="Цена закупки за единицу",
     )
     sum = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0, editable=False,
-        verbose_name='Сумма', db_comment='quantity * price (авто)'
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        editable=False,
+        verbose_name="Сумма",
+        db_comment="quantity * price (авто)",
     )
     expiration_dt = models.DateField(
-        null=True, blank=True, verbose_name='Годен до',
-        db_comment='Срок годности запчасти'
+        null=True,
+        blank=True,
+        verbose_name="Годен до",
+        db_comment="Срок годности запчасти",
     )
     create_dt = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = f'{company}."spare_part_supply_item"'
-        db_table_comment = ('Строки поставки запчастей с ценой и суммой.'
-                            '\r\n\r\n-- Generated')
-        verbose_name = 'Запчасть поставки'
-        verbose_name_plural = 'Запчасти поставки'
+        db_table_comment = (
+            "Строки поставки запчастей с ценой и суммой." "\r\n\r\n-- Generated"
+        )
+        verbose_name = "Запчасть поставки"
+        verbose_name_plural = "Запчасти поставки"
         indexes = [
-            models.Index(fields=['supply']),
-            models.Index(fields=['spare_part']),
+            models.Index(fields=["supply"]),
+            models.Index(fields=["spare_part"]),
         ]
 
     def __str__(self):
-        return f'{self.spare_part.name} — {self.quantity} шт.'
+        return f"{self.spare_part.name} — {self.quantity} шт."
 
     def save(self, *args, **kwargs):
         self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.price or 0))
-        update_fields = kwargs.get('update_fields')
+        update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs['update_fields'] = set(update_fields) | {'sum'}
+            kwargs["update_fields"] = set(update_fields) | {"sum"}
         super().save(*args, **kwargs)
 
 
 class SparePartPhoto(SparePartAbs):
     """Набор фото связанных с запчастями"""
+
     spare_part = models.ForeignKey(
-        'SparePart', on_delete=models.CASCADE, null=False, blank=False,
-        related_name="spare_part_photo", verbose_name='Запчасть',
-        db_comment='ID запчасти',
+        "SparePart",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name="spare_part_photo",
+        verbose_name="Запчасть",
+        db_comment="ID запчасти",
     )
-    photo = models.ImageField(upload_to='spare_part/%Y/', blank=True, null=True,
-                              verbose_name='Фото запчасти',
-                              db_comment='Ссылка на поле для фото связанных с запчастей')
+    photo = models.ImageField(
+        upload_to="spare_part/%Y/",
+        blank=True,
+        null=True,
+        verbose_name="Фото запчасти",
+        db_comment="Ссылка на поле для фото связанных с запчастей",
+    )
     user = models.ForeignKey(
-        'users.CompanyUser', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="spare_part_photo_user", verbose_name='ID Пользователя',
-        db_comment='ID Пользователя (сотрудника)',
-        help_text='Пользователь из таблицы "Пользователи"'
+        "users.CompanyUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="spare_part_photo_user",
+        verbose_name="ID Пользователя",
+        db_comment="ID Пользователя (сотрудника)",
+        help_text='Пользователь из таблицы "Пользователи"',
     )
-    create_dt = models.DateTimeField(auto_now_add=True, verbose_name='Когда было добавлено фото')
+    create_dt = models.DateTimeField(
+        auto_now_add=True, verbose_name="Когда было добавлено фото"
+    )
 
     class Meta:
         db_table = f'{company}."spare_part_photo"'
-        db_table_comment = 'Фотографии запчастей. \n\n-- BMatyushin'
-        verbose_name = 'Фото запчасти'
-        verbose_name_plural = 'Фото запчастей'
+        db_table_comment = "Фотографии запчастей. \n\n-- BMatyushin"
+        verbose_name = "Фото запчасти"
+        verbose_name_plural = "Фото запчастей"
 
     def delete(self, using=None, keep_parents=False):
         self.photo.delete(save=False)
@@ -486,4 +682,4 @@ class SparePartPhoto(SparePartAbs):
         return f"{self.spare_part} - {self.photo}"
 
     def __repr__(self):
-        return f'<SparePartPhoto {self.id=!r}, {self.spare_part=!r}>'
+        return f"<SparePartPhoto {self.id=!r}, {self.spare_part=!r}>"

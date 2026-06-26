@@ -26,9 +26,9 @@ def get_fifo_price(spare_part):
     Берётся цена самой ранней партии поставки.
     Если цена не найдена, возвращает 0.
     """
-    supply_items = SparePartSupplyItem.objects.filter(
-        spare_part=spare_part
-    ).order_by('supply__supply_dt', 'expiration_dt')
+    supply_items = SparePartSupplyItem.objects.filter(spare_part=spare_part).order_by(
+        "supply__supply_dt", "expiration_dt"
+    )
 
     first = supply_items.first()
     return first.price if first else 0
@@ -53,12 +53,14 @@ def service_post_save(sender, instance, created, **kwargs):
 
         for spare_part_id, entries in spare_part_counts.items():
             try:
-                spare_part = SparePart.objects.select_related('unit').get(pk=spare_part_id)
+                spare_part = SparePart.objects.select_related("unit").get(
+                    pk=spare_part_id
+                )
             except SparePart.DoesNotExist:
                 continue
 
             total_quantity = sum(
-                (entry.get('service_part_count') or 0) for entry in entries
+                (entry.get("service_part_count") or 0) for entry in entries
             )
             price = get_fifo_price(spare_part)
 
@@ -66,7 +68,7 @@ def service_post_save(sender, instance, created, **kwargs):
                 service=instance,
                 spare_part=spare_part,
                 quantity=total_quantity,
-                unit=spare_part.unit.short_name if spare_part.unit else 'шт.',
+                unit=spare_part.unit.short_name if spare_part.unit else "шт.",
                 price=price,
             )
 
@@ -75,9 +77,10 @@ def service_post_save(sender, instance, created, **kwargs):
         recalc_contract_by_service(instance)
 
     # Пересчитываем старый контракт, если он был изменён
-    old_contract_id = getattr(instance, '_old_contract_id', None)
+    old_contract_id = getattr(instance, "_old_contract_id", None)
     if old_contract_id and old_contract_id != instance.contract_id:
         from contracts.models import Contract
+
         try:
             old_contract = Contract.objects.get(pk=old_contract_id)
             recalc_contract(old_contract)

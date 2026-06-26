@@ -14,25 +14,27 @@ User = get_user_model()
 
 class ServiceContractTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='tester', password='pass')
-        self.city, _ = City.objects.get_or_create(name='Москва', region=None, defaults={'region': None})
-        self.service_type = ServiceType.objects.create(name='Ремонт')
+        self.user = User.objects.create_user(username="tester", password="pass")
+        self.city, _ = City.objects.get_or_create(
+            name="Москва", region=None, defaults={"region": None}
+        )
+        self.service_type = ServiceType.objects.create(name="Ремонт")
         self.client_obj = Client.objects.create(
-            name='Тестовый клиент', city=self.city, inn='123456789001'
+            name="Тестовый клиент", city=self.city, inn="123456789001"
         )
         self.department = Department.objects.create(
-            name='Главный офис', client=self.client_obj, city=self.city
+            name="Главный офис", client=self.client_obj, city=self.city
         )
         self.equipment = Equipment.objects.create(
-            full_name='Анализатор', short_name='Анализатор'
+            full_name="Анализатор", short_name="Анализатор"
         )
         self.eq_acc = EquipmentAccounting.objects.create(
-            equipment=self.equipment, serial_number='SN001', user=self.user
+            equipment=self.equipment, serial_number="SN001", user=self.user
         )
         self.contract = Contract.objects.create(
             client=self.department,
-            contract_number='CNT-SRV-001',
-            conclusion_date='2026-01-15',
+            contract_number="CNT-SRV-001",
+            conclusion_date="2026-01-15",
             contract_amount=50000,
         )
 
@@ -42,10 +44,10 @@ class ServiceContractTests(TestCase):
             service_type=self.service_type,
             equipment_accounting=self.eq_acc,
             user=self.user,
-            beg_dt='2026-02-01',
+            beg_dt="2026-02-01",
             contract=self.contract,
         )
-        self.assertEqual(service.contract.contract_number, 'CNT-SRV-001')
+        self.assertEqual(service.contract.contract_number, "CNT-SRV-001")
 
     def test_service_without_contract(self):
         """Проверяет что ремонт может существовать без контракта."""
@@ -53,7 +55,7 @@ class ServiceContractTests(TestCase):
             service_type=self.service_type,
             equipment_accounting=self.eq_acc,
             user=self.user,
-            beg_dt='2026-02-01',
+            beg_dt="2026-02-01",
         )
         self.assertIsNone(service.contract)
 
@@ -63,7 +65,7 @@ class ServiceContractTests(TestCase):
             service_type=self.service_type,
             equipment_accounting=self.eq_acc,
             user=self.user,
-            beg_dt='2026-02-01',
+            beg_dt="2026-02-01",
             contract=self.contract,
             spare_part_count={},
         )
@@ -78,7 +80,7 @@ class ServiceContractTests(TestCase):
             service_type=self.service_type,
             equipment_accounting=self.eq_acc,
             user=self.user,
-            beg_dt='2026-02-01',
+            beg_dt="2026-02-01",
             contract=self.contract,
         )
         # Creating a second service with the same contract should fail
@@ -87,6 +89,6 @@ class ServiceContractTests(TestCase):
                 service_type=self.service_type,
                 equipment_accounting=self.eq_acc,
                 user=self.user,
-                beg_dt='2026-02-02',
+                beg_dt="2026-02-02",
                 contract=self.contract,
             )
