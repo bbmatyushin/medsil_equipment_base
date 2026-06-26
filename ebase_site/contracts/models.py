@@ -28,7 +28,7 @@ class Contract(ContractModelBase):
     SERVICES_PROVIDED_CHOICES = [
         ('not_yet', 'ещё нет'),
         ('partially', 'частично'),
-        ('полностью', 'fully'),
+        ('fully', 'полностью'),
     ]
 
     PAYMENT_STATUS_CHOICES = [
