@@ -1,7 +1,7 @@
 """Signals for the contracts app.
 
-Recalculates contract totals on Payment and ContractExpense changes.
-Service-related expenses will be integrated here once ServiceExpense is introduced.
+Recalculates contract totals on Payment and ContractExpense changes,
+including materialized ServiceExpense rows from the linked repair.
 """
 from django.db.models import Sum
 from django.dispatch import receiver
@@ -15,10 +15,23 @@ def recalc_contract(contract):
     if contract is None:
         return
 
+    # Импорт внутри функции во избежание циклического импорта
+    # (ebase.signals импортирует recalc_contract отсюда).
+    from ebase.models import Service
+
     payment_amount = contract.payments.aggregate(s=Sum('amount'))['s'] or 0
-    # Service expenses are intentionally excluded here; they will be added
-    # once the ServiceExpense model and Service.contract FK are implemented.
-    expenses_amount = contract.expenses.aggregate(s=Sum('sum'))['s'] or 0
+
+    # Service.contract использует unique=True, поэтому обратный аксессор
+    # related_name='service' ведёт себя как OneToOne и возвращает объект Service
+    # (либо возбуждает Service.DoesNotExist).
+    service_expenses = 0
+    try:
+        service_expenses = contract.service.service_expenses.aggregate(s=Sum('sum'))['s'] or 0
+    except Service.DoesNotExist:
+        service_expenses = 0
+
+    manual_expenses = contract.expenses.aggregate(s=Sum('sum'))['s'] or 0
+    expenses_amount = service_expenses + manual_expenses
 
     contract.payment_amount = payment_amount
     contract.expenses_amount = expenses_amount
@@ -55,3 +68,10 @@ def contract_expense_post_delete(sender, instance, **kwargs):
     except Contract.DoesNotExist:
         return
     recalc_contract(contract)
+
+
+def recalc_contract_by_service(service):
+    """Вызывается из ebase signals при изменении ServiceExpense."""
+    if service is None:
+        return
+    recalc_contract(service.contract)
