@@ -375,7 +375,7 @@ class SparePartSupplyV2(SparePartAbs):
     )
     user = models.ForeignKey(
         'users.CompanyUser', on_delete=models.RESTRICT,
-        null=False, blank=True, related_name='spare_part_supply_v2_user',
+        null=True, blank=True, related_name='spare_part_supply_v2_user',
         verbose_name='Кто добавил',
         db_comment='ID сотрудника, который оформил поставку'
     )
@@ -423,7 +423,7 @@ class SparePartSupplyItem(models.Model):
         db_comment='Цена закупки за единицу'
     )
     sum = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0,
+        max_digits=15, decimal_places=2, default=0, editable=False,
         verbose_name='Сумма', db_comment='quantity * price (авто)'
     )
     expiration_dt = models.DateField(
@@ -448,6 +448,9 @@ class SparePartSupplyItem(models.Model):
 
     def save(self, *args, **kwargs):
         self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.price or 0))
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            kwargs['update_fields'] = set(update_fields) | {'sum'}
         super().save(*args, **kwargs)
 
 

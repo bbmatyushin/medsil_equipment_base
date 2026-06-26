@@ -198,7 +198,7 @@ class ContractExpense(ContractModelBase):
     # domain term "Сумма". Use the model instance attribute explicitly or
     # import builtins.sum when aggregation is needed.
     sum = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0,
+        max_digits=15, decimal_places=2, default=0, editable=False,
         verbose_name='Сумма', db_comment='quantity * cost (авто)'
     )
     date = models.DateField(
@@ -221,7 +221,10 @@ class ContractExpense(ContractModelBase):
         return f"{self.name} — {self.sum}"
 
     def save(self, *args, **kwargs):
-        self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.cost or 0))
+        self.sum = (self.quantity or Decimal('0')) * (self.cost or Decimal('0'))
         if not self.name:
             self.name = self.get_expense_type_display()
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            kwargs['update_fields'] = set(update_fields) | {'sum', 'name'}
         super().save(*args, **kwargs)
