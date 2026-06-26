@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.db import models
 from django.core.validators import MinValueValidator
@@ -220,7 +221,7 @@ class ContractExpense(ContractModelBase):
         return f"{self.name} — {self.sum}"
 
     def save(self, *args, **kwargs):
-        self.sum = (self.quantity or 0) * (self.cost or 0)
+        self.sum = Decimal(self.quantity or 0) * (self.cost or 0)
         if not self.name:
             self.name = self.get_expense_type_display()
         super().save(*args, **kwargs)

@@ -1,6 +1,7 @@
 from datetime import datetime
 import uuid
 import logging
+from decimal import Decimal
 
 from django.db import models
 from django.core.validators import MinValueValidator
@@ -446,7 +447,7 @@ class SparePartSupplyItem(models.Model):
         return f'{self.spare_part.name} — {self.quantity} шт.'
 
     def save(self, *args, **kwargs):
-        self.sum = (self.quantity or 0) * (self.price or 0)
+        self.sum = Decimal(self.quantity or 0) * (self.price or 0)
         super().save(*args, **kwargs)
 
 
