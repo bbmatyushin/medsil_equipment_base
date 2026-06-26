@@ -174,3 +174,82 @@ def spare_part_shipment_post_delete(sender, instance, **kwargs):
         part.amount = round(part.amount + instance.count_shipment, 2)
         part.save()
         logger.info('Deleted Shipment spare part. Updated amount for spare_part_id %s', part_name)
+
+
+# --- SparePartSupplyItem signals (V2 supply) ---
+
+@receiver(pre_save, sender=SparePartSupplyItem)
+def supply_item_pre_save(sender, instance, **kwargs):
+    """Сохраняем старые значения для вычисления дельты при обновлении."""
+    if instance.pk:
+        try:
+            old = SparePartSupplyItem.objects.get(pk=instance.pk)
+            instance._old_quantity = old.quantity
+            instance._old_expiration_dt = old.expiration_dt
+            instance._old_spare_part_id = old.spare_part_id
+        except SparePartSupplyItem.DoesNotExist:
+            instance._old_quantity = 0
+            instance._old_expiration_dt = None
+            instance._old_spare_part_id = None
+    else:
+        instance._old_quantity = 0
+        instance._old_expiration_dt = None
+        instance._old_spare_part_id = None
+
+
+@receiver(post_save, sender=SparePartSupplyItem)
+def supply_item_post_save(sender, instance, created, **kwargs):
+    """Увеличивает остатки при поставке."""
+    new_quantity = instance.quantity
+    new_exp_dt = instance.expiration_dt
+    new_spare_part = instance.spare_part
+
+    old_quantity = getattr(instance, '_old_quantity', 0)
+    old_exp_dt = getattr(instance, '_old_expiration_dt', None)
+    old_spare_part_id = getattr(instance, '_old_spare_part_id', None)
+
+    if created:
+        if new_quantity > 0:
+            _add_supply_stock(new_spare_part, new_exp_dt, new_quantity)
+    else:
+        # Возвращаем старый остаток
+        if old_quantity > 0 and old_spare_part_id:
+            try:
+                old_spare_part = SparePart.objects.get(pk=old_spare_part_id)
+                SparePartCount.objects.filter(
+                    spare_part=old_spare_part, expiration_dt=old_exp_dt
+                ).update(amount=Round(F('amount') - old_quantity, 2))
+            except SparePart.DoesNotExist:
+                pass
+        # Добавляем новый остаток
+        if new_quantity > 0:
+            _add_supply_stock(new_spare_part, new_exp_dt, new_quantity)
+
+
+@receiver(post_delete, sender=SparePartSupplyItem)
+def supply_item_post_delete(sender, instance, **kwargs):
+    """Уменьшает остатки при удалении строки поставки."""
+    quantity = instance.quantity
+    expiration_dt = instance.expiration_dt
+    spare_part = instance.spare_part
+
+    try:
+        SparePartCount.objects.filter(
+            spare_part=spare_part, expiration_dt=expiration_dt
+        ).update(amount=Round(F('amount') - quantity, 2))
+    except Exception as e:
+        logger.exception(f'Error updating SparePartCount after supply item deletion: {e}')
+
+
+def _add_supply_stock(spare_part, expiration_dt, quantity):
+    """Вспомогательная функция: увеличивает остаток запчасти."""
+    part = SparePartCount.objects.filter(
+        spare_part=spare_part, expiration_dt=expiration_dt
+    )
+    if part.exists():
+        part.update(amount=Round(F('amount') + quantity, 2))
+    else:
+        SparePartCount.objects.create(
+            spare_part=spare_part, amount=quantity,
+            expiration_dt=expiration_dt
+        )
