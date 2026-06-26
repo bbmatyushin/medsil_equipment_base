@@ -19,7 +19,12 @@ from directory.models import Position, Engineer
 from .forms import *
 from .admin_filters import *
 from .docx_create import CreateServiceAkt, create_service_atk
-from .models import Equipment, EquipmentAccounting, EquipmentAccDepartment, Service, ServicePhotos, ServiceAccessories, ReplacementEquipment
+from contracts.models import Contract
+from .models import (
+    Equipment, EquipmentAccounting, EquipmentAccDepartment,
+    Service, ServicePhotos, ServiceAccessories, ReplacementEquipment,
+    ServiceExpense,
+)
 from clients.models import Department, DeptContactPers
 
 from utils import MainModelAdmin
@@ -355,6 +360,19 @@ class ServicePhotosInline(admin.StackedInline):
         return f"Нет изображения"
 
 
+class ServiceExpenseInline(admin.TabularInline):
+    model = ServiceExpense
+    extra = 0
+    can_delete = False
+    verbose_name = 'Расход'
+    verbose_name_plural = 'Расходы на запчасти'
+    fields = ('spare_part', 'unit', 'quantity', 'price', 'sum')
+    readonly_fields = ('spare_part', 'unit', 'quantity', 'price', 'sum')
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Service)
 class ServiceAdmin(MainModelAdmin):
     actions = MainModelAdmin.actions + ['create_service_akt_by_action']
@@ -363,13 +381,14 @@ class ServiceAdmin(MainModelAdmin):
     form = ServiceForm
     date_hierarchy = 'beg_dt'
     filter_horizontal = ('spare_part',)
-    inlines = (ServiceAccessoriesInline, ServicePhotosInline, )
+    inlines = (ServiceAccessoriesInline, ServicePhotosInline, ServiceExpenseInline)
     list_display = ('equipment_accounting', 'dept_name', 'service_type',
                     'photos', 'description_short', 'spare_part_used',
                     'reason_short', 'job_content_short', 'akt',
-                    'beg_dt', 'end_dt',)
+                    'beg_dt', 'end_dt', 'contract_link')
     list_select_related = ('equipment_accounting', 'service_type',)
-    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url',)
+    list_filter = (ContractFilter,)
+    readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url', 'expenses_total')
     search_fields = ('equipment_accounting__equipment__full_name',
                      'equipment_accounting__equipment__short_name',
                      'equipment_accounting__serial_number',)
@@ -382,8 +401,7 @@ class ServiceAdmin(MainModelAdmin):
         ),
         (
             'Описание работ', {
-                'classes': ('collapse',),
-                'fields': ('reason', 'description', 'job_content',),
+                'fields': ('reason', 'description', 'job_content', 'contract'),
             }
         ),
         ('Дата работ', {'fields': (('beg_dt', 'end_dt'),)}),
@@ -391,7 +409,11 @@ class ServiceAdmin(MainModelAdmin):
             'fields': ('replacement_equipment', 'returned_to_office'),
             'description': 'Отметьте, если подменное оборудование фактически вернулось в офис'
         }),
-        ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),})
+        ('Документы по ремонту', {'fields': ('contact_person', 'accept_in_akt_url', 'service_akt_url', 'accept_from_akt_url',),}),
+        ('Расходы', {
+            'fields': ('expenses_total',),
+            'description': 'Расходы на запчасти рассчитываются автоматически на основе выбранных запчастей.'
+        }),
     )
 
     class Media:
@@ -493,6 +515,19 @@ class ServiceAdmin(MainModelAdmin):
     @admin.display(description='Акт', boolean=True)
     def akt(self, obj):
         return True if obj.service_akt else False
+
+    @admin.display(description='Контракт')
+    def contract_link(self, obj):
+        if obj.contract:
+            url = reverse('admin:contracts_contract_change', args=[obj.contract.id])
+            return mark_safe(f'<a href="{url}">{obj.contract.contract_number}</a>')
+        return '--'
+
+    @admin.display(description='Общая сумма расходов')
+    def expenses_total(self, obj):
+        from django.db.models import Sum
+        total = obj.service_expenses.aggregate(s=Sum('sum'))['s'] or 0
+        return f'{total:.2f}'
 
     @admin.display(description='Акт о проведении работ')
     def service_akt_url(self, obj):
@@ -753,6 +788,16 @@ class ServiceAdmin(MainModelAdmin):
             ).exclude(
                 id__in=used_replacement_equipment_ids
             )
+        elif db_field.name == 'contract':
+            queryset = Contract.objects.all()
+            object_id = request.resolver_match.kwargs.get('object_id') if request.resolver_match else None
+            if object_id:
+                queryset = queryset.filter(
+                    models.Q(service__isnull=True) | models.Q(service__id=object_id)
+                )
+            else:
+                queryset = queryset.filter(service__isnull=True)
+            kwargs["queryset"] = queryset.select_related('client')
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 

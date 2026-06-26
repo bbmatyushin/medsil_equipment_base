@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.utils.translation import gettext_lazy as _
+
+from contracts.models import Contract
 
 
 class InstallDtFilter(admin.SimpleListFilter):
@@ -30,4 +33,28 @@ class MedDirectionFilter(admin.SimpleListFilter):
     def queryset(self, request, queryset):
         if self.value():
             return queryset.filter(equipment__med_direction_id=self.value())
+        return queryset
+
+
+class ContractFilter(admin.SimpleListFilter):
+    title = _('По Контракту')
+    parameter_name = 'contract'
+
+    def lookups(self, request, model_admin):
+        choices = [
+            ('none', _('Без контракта')),
+            ('all', _('С контрактом')),
+        ]
+        for contract in Contract.objects.all().order_by('contract_number'):
+            choices.append((str(contract.pk), contract.contract_number))
+        return choices
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'none':
+            return queryset.filter(contract__isnull=True)
+        if value == 'all':
+            return queryset.filter(contract__isnull=False)
+        if value:
+            return queryset.filter(contract_id=value)
         return queryset
