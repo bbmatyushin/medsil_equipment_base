@@ -388,15 +388,22 @@ class SparePartSupplyV2Admin(MainModelAdmin):
     search_fields = ('doc_num', 'items__spare_part__name', 'items__spare_part__article')
     search_help_text = 'Поиск по номеру документа, названию или артикулу запчасти'
     date_hierarchy = 'supply_dt'
+    list_select_related = ('user',)
 
     fieldsets = (
         ('Информация о поставке', {
-            'fields': (('doc_num', 'supply_dt'), 'note'),
+            'fields': (('doc_num', 'supply_dt'), 'user', 'note'),
         }),
     )
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related('items__spare_part__unit')
+
+    def get_search_results(self, request, queryset, search_term):
+        qs, use_distinct = super().get_search_results(request, queryset, search_term)
+        if not use_distinct:
+            qs = qs.distinct()
+        return qs, True
 
     @admin.display(description='Сумма поставки')
     def total_sum(self, obj):
