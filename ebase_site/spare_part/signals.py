@@ -211,6 +211,8 @@ def supply_item_post_save(sender, instance, created, **kwargs):
     if created:
         if new_quantity > 0:
             _add_supply_stock(new_spare_part, new_exp_dt, new_quantity)
+            logger.info('Supply item created. Part: %s, Qty: %s, Exp: %s',
+                        new_spare_part.name, new_quantity, new_exp_dt)
     else:
         # Возвращаем старый остаток
         if old_quantity > 0 and old_spare_part_id:
@@ -224,6 +226,8 @@ def supply_item_post_save(sender, instance, created, **kwargs):
         # Добавляем новый остаток
         if new_quantity > 0:
             _add_supply_stock(new_spare_part, new_exp_dt, new_quantity)
+        logger.info('Supply item updated. Reversed old: Part=%s Qty=%s; Added new: Part=%s Qty=%s',
+                    old_spare_part_id, old_quantity, new_spare_part.name, new_quantity)
 
 
 @receiver(post_delete, sender=SparePartSupplyItem)
@@ -233,12 +237,16 @@ def supply_item_post_delete(sender, instance, **kwargs):
     expiration_dt = instance.expiration_dt
     spare_part = instance.spare_part
 
-    try:
-        SparePartCount.objects.filter(
-            spare_part=spare_part, expiration_dt=expiration_dt
-        ).update(amount=Round(F('amount') - quantity, 2))
-    except Exception as e:
-        logger.exception(f'Error updating SparePartCount after supply item deletion: {e}')
+    updated = SparePartCount.objects.filter(
+        spare_part=spare_part, expiration_dt=expiration_dt
+    ).update(amount=Round(F('amount') - quantity, 2))
+
+    if updated:
+        logger.info('Supply item deleted. Part: %s, Qty: %s, Exp: %s',
+                    spare_part.name, quantity, expiration_dt)
+    else:
+        logger.warning('SparePartCount not found for part %s with expiration %s during supply item deletion',
+                       spare_part.name, expiration_dt)
 
 
 def _add_supply_stock(spare_part, expiration_dt, quantity):
