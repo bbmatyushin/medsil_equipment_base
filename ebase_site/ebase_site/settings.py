@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "clients.apps.ClientsConfig",
     "directory.apps.DirectoryConfig",
     "spare_part.apps.SparePartConfig",
+    "contracts.apps.ContractsConfig",
     "debug_toolbar",
     "django.contrib.admin",
     "django.contrib.auth",
