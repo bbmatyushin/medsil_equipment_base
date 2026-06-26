@@ -360,6 +360,96 @@ class SparePartSupply(SparePartAbs):
         return f"<SparePartSupply: {self.spare_part=!r}, {self.count_supply=!r}>"
 
 
+class SparePartSupplyV2(SparePartAbs):
+    """Многострочная поставка запчастей.
+
+    Старая модель SparePartSupply оставлена без изменений для сохранения истории.
+    """
+    doc_num = models.CharField(
+        max_length=255, blank=True, verbose_name='Номер документа',
+        db_comment='Номер документа поставки'
+    )
+    supply_dt = models.DateField(
+        verbose_name='Дата поставки', db_comment='Дата поставки'
+    )
+    user = models.ForeignKey(
+        'users.CompanyUser', on_delete=models.RESTRICT,
+        null=False, blank=True, related_name='spare_part_supply_v2_user',
+        verbose_name='Кто добавил',
+        db_comment='ID сотрудника, который оформил поставку'
+    )
+    note = models.TextField(
+        blank=True, verbose_name='Примечание',
+        db_comment='Примечание к поставке'
+    )
+
+    class Meta:
+        db_table = f'{company}."spare_part_supply_v2"'
+        db_table_comment = ('Обновлённая таблица поставок запчастей. '
+                            'Одна поставка может содержать несколько строк запчастей.'
+                            '\r\n\r\n-- Generated')
+        verbose_name = 'Поставка запчастей (v2)'
+        verbose_name_plural = 'Поставки запчастей (v2)'
+        ordering = ('-supply_dt', '-create_dt')
+        indexes = [
+            models.Index(fields=['supply_dt']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f'Поставка #{self.doc_num or "б/н"} от {self.supply_dt}'
+
+
+class SparePartSupplyItem(models.Model):
+    """Строка поставки: запчасть + количество + цена + сумма."""
+    supply = models.ForeignKey(
+        SparePartSupplyV2, on_delete=models.CASCADE,
+        related_name='items', verbose_name='Поставка',
+        db_comment='ID поставки'
+    )
+    spare_part = models.ForeignKey(
+        SparePart, on_delete=models.RESTRICT,
+        related_name='spare_part_supply_item', verbose_name='Запчасть',
+        db_comment='ID запчасти'
+    )
+    quantity = models.FloatField(
+        validators=[MinValueValidator(0)], verbose_name='Кол-во',
+        db_comment='Количество поставленной запчасти'
+    )
+    price = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)], verbose_name='Цена',
+        db_comment='Цена закупки за единицу'
+    )
+    sum = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0,
+        verbose_name='Сумма', db_comment='quantity * price (авто)'
+    )
+    expiration_dt = models.DateField(
+        null=True, blank=True, verbose_name='Годен до',
+        db_comment='Срок годности запчасти'
+    )
+    create_dt = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = f'{company}."spare_part_supply_item"'
+        db_table_comment = ('Строки поставки запчастей с ценой и суммой.'
+                            '\r\n\r\n-- Generated')
+        verbose_name = 'Запчасть поставки'
+        verbose_name_plural = 'Запчасти поставки'
+        indexes = [
+            models.Index(fields=['supply']),
+            models.Index(fields=['spare_part']),
+        ]
+
+    def __str__(self):
+        return f'{self.spare_part.name} — {self.quantity} шт.'
+
+    def save(self, *args, **kwargs):
+        self.sum = (self.quantity or 0) * (self.price or 0)
+        super().save(*args, **kwargs)
+
+
 class SparePartPhoto(SparePartAbs):
     """Набор фото связанных с запчастями"""
     spare_part = models.ForeignKey(
