@@ -16,6 +16,8 @@ class ContractExpenseInline(admin.TabularInline):
     extra = 1
     verbose_name = 'Расход'
     verbose_name_plural = 'Расходы'
+    fields = ('expense_type', 'name', 'unit', 'quantity', 'cost', 'sum', 'date', 'comment')
+    readonly_fields = ('sum', 'create_dt')
 
 
 @admin.register(Contract)
@@ -52,6 +54,10 @@ class ContractAdmin(MainModelAdmin):
         }),
         ('Статусы и примечание', {
             'fields': ('services_provided', 'payment_status', 'note'),
+        }),
+        ('Служебная информация', {
+            'fields': ('create_dt',),
+            'classes': ('collapse',),
         }),
     )
 
