@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 import logging
 
 from django.contrib import admin
@@ -367,6 +368,8 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 class SparePartSupplyItemInline(admin.TabularInline):
     model = SparePartSupplyItem
     extra = 1
+    verbose_name = 'Запчасть поставки'
+    verbose_name_plural = 'Запчасти поставки'
     autocomplete_fields = ('spare_part',)
     fields = ('spare_part', 'unit_display', 'quantity', 'price', 'sum', 'expiration_dt')
     readonly_fields = ('unit_display', 'sum')
@@ -380,6 +383,7 @@ class SparePartSupplyItemInline(admin.TabularInline):
 class SparePartSupplyV2Admin(MainModelAdmin):
     inlines = [SparePartSupplyItemInline]
     list_display = ('doc_num', 'supply_dt', 'user', 'total_sum')
+    readonly_fields = ('user',)
     ordering = ('-supply_dt',)
     search_fields = ('doc_num', 'items__spare_part__name', 'items__spare_part__article')
     search_help_text = 'Поиск по номеру документа, названию или артикулу запчасти'
@@ -387,7 +391,7 @@ class SparePartSupplyV2Admin(MainModelAdmin):
 
     fieldsets = (
         ('Информация о поставке', {
-            'fields': (('doc_num', 'supply_dt'), 'user', 'note'),
+            'fields': (('doc_num', 'supply_dt'), 'note'),
         }),
     )
 
@@ -396,12 +400,10 @@ class SparePartSupplyV2Admin(MainModelAdmin):
 
     @admin.display(description='Сумма поставки')
     def total_sum(self, obj):
-        return sum((item.sum or 0) for item in obj.items.all())
+        return sum((item.sum or Decimal('0') for item in obj.items.all()), Decimal('0'))
 
     def save_model(self, request, obj, form, change):
         if not change:
-            obj.user = request.user
-        elif not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
