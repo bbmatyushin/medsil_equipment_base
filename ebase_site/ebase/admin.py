@@ -7,8 +7,9 @@ from typing import Optional
 from datetime import date
 
 from django.utils.safestring import mark_safe
+from django.utils.html import format_html
 from django.db import models, transaction
-from django.db.models import Prefetch, QuerySet, Max, Q
+from django.db.models import Prefetch, QuerySet, Max, Q, Sum
 from django.urls import path, reverse
 from django.http import JsonResponse
 from spare_part.models import (
@@ -386,7 +387,7 @@ class ServiceAdmin(MainModelAdmin):
                     'photos', 'description_short', 'spare_part_used',
                     'reason_short', 'job_content_short', 'akt',
                     'beg_dt', 'end_dt', 'contract_link')
-    list_select_related = ('equipment_accounting', 'service_type',)
+    list_select_related = ('equipment_accounting', 'service_type', 'contract')
     list_filter = (ContractFilter,)
     readonly_fields = ('service_akt_url', 'accept_in_akt_url', 'accept_from_akt_url', 'expenses_total')
     search_fields = ('equipment_accounting__equipment__full_name',
@@ -520,12 +521,11 @@ class ServiceAdmin(MainModelAdmin):
     def contract_link(self, obj):
         if obj.contract:
             url = reverse('admin:contracts_contract_change', args=[obj.contract.id])
-            return mark_safe(f'<a href="{url}">{obj.contract.contract_number}</a>')
+            return format_html('<a href="{}">{}</a>', url, obj.contract.contract_number)
         return '--'
 
     @admin.display(description='Общая сумма расходов')
     def expenses_total(self, obj):
-        from django.db.models import Sum
         total = obj.service_expenses.aggregate(s=Sum('sum'))['s'] or 0
         return f'{total:.2f}'
 
