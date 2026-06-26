@@ -11,14 +11,7 @@ def recalc_contract(contract):
         return
 
     payment_amount = contract.payments.aggregate(s=Sum('amount'))['s'] or 0
-
-    service_expenses = 0
-    # Contract.service reverse related name is 'service' because Service.contract has related_name='service'
-    if hasattr(contract, 'service') and contract.service:
-        service_expenses = contract.service.service_expenses.aggregate(s=Sum('sum'))['s'] or 0
-
-    manual_expenses = contract.expenses.aggregate(s=Sum('sum'))['s'] or 0
-    expenses_amount = service_expenses + manual_expenses
+    expenses_amount = contract.expenses.aggregate(s=Sum('sum'))['s'] or 0
 
     contract.payment_amount = payment_amount
     contract.expenses_amount = expenses_amount
@@ -54,15 +47,4 @@ def contract_expense_post_delete(sender, instance, **kwargs):
         contract = Contract.objects.get(pk=instance.contract_id)
     except Contract.DoesNotExist:
         return
-    recalc_contract(contract)
-
-
-def recalc_contract_by_service(service):
-    """Вызывается из ebase signals при изменении ServiceExpense."""
-    if service is None:
-        return
-    try:
-        contract = service.contract
-    except Contract.DoesNotExist:
-        contract = None
     recalc_contract(contract)
