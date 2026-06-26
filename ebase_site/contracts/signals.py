@@ -1,3 +1,8 @@
+"""Signals for the contracts app.
+
+Recalculates contract totals on Payment and ContractExpense changes.
+Service-related expenses will be integrated here once ServiceExpense is introduced.
+"""
 from django.db.models import Sum
 from django.dispatch import receiver
 from django.db.models.signals import post_save, post_delete
@@ -11,6 +16,8 @@ def recalc_contract(contract):
         return
 
     payment_amount = contract.payments.aggregate(s=Sum('amount'))['s'] or 0
+    # Service expenses are intentionally excluded here; they will be added
+    # once the ServiceExpense model and Service.contract FK are implemented.
     expenses_amount = contract.expenses.aggregate(s=Sum('sum'))['s'] or 0
 
     contract.payment_amount = payment_amount
