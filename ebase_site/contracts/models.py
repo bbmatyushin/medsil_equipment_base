@@ -221,7 +221,7 @@ class ContractExpense(ContractModelBase):
         return f"{self.name} — {self.sum}"
 
     def save(self, *args, **kwargs):
-        self.sum = Decimal(self.quantity or 0) * (self.cost or 0)
+        self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.cost or 0))
         if not self.name:
             self.name = self.get_expense_type_display()
         super().save(*args, **kwargs)

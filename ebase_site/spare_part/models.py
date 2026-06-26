@@ -447,7 +447,7 @@ class SparePartSupplyItem(models.Model):
         return f'{self.spare_part.name} — {self.quantity} шт.'
 
     def save(self, *args, **kwargs):
-        self.sum = Decimal(self.quantity or 0) * (self.price or 0)
+        self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.price or 0))
         super().save(*args, **kwargs)
 
 
