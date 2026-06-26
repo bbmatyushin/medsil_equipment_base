@@ -9,7 +9,11 @@ from utils import MainModelAdmin
 from ebase.models import Service, EquipmentAccDepartment
 # from ebase_site.ebase.models import Service, EquipmentAccDepartment
 
-from .models import *
+from .models import (
+    SparePartAccessories, SparePart, SparePartCount, SparePartSupply,
+    SparePartShipment, SparePartShipmentV2, SparePartPhoto,
+    SparePartSupplyV2, SparePartSupplyItem,
+)
 from .forms import *
 from .admin_filters import WhoShipment
 
@@ -357,6 +361,48 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
     
     def save_model(self, request, obj, form, change):
         # Сохраняем основную модель
+        super().save_model(request, obj, form, change)
+
+
+class SparePartSupplyItemInline(admin.TabularInline):
+    model = SparePartSupplyItem
+    extra = 1
+    autocomplete_fields = ('spare_part',)
+    fields = ('spare_part', 'unit_display', 'quantity', 'price', 'sum', 'expiration_dt')
+    readonly_fields = ('unit_display', 'sum')
+
+    def unit_display(self, obj):
+        return obj.spare_part.unit.short_name if obj.spare_part and obj.spare_part.unit else '-'
+    unit_display.short_description = 'Ед. изм.'
+
+
+@admin.register(SparePartSupplyV2)
+class SparePartSupplyV2Admin(MainModelAdmin):
+    inlines = [SparePartSupplyItemInline]
+    list_display = ('doc_num', 'supply_dt', 'user', 'total_sum')
+    ordering = ('-supply_dt',)
+    search_fields = ('doc_num', 'items__spare_part__name', 'items__spare_part__article')
+    search_help_text = 'Поиск по номеру документа, названию или артикулу запчасти'
+    date_hierarchy = 'supply_dt'
+
+    fieldsets = (
+        ('Информация о поставке', {
+            'fields': (('doc_num', 'supply_dt'), 'user', 'note'),
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('items__spare_part__unit')
+
+    @admin.display(description='Сумма поставки')
+    def total_sum(self, obj):
+        return sum((item.sum or 0) for item in obj.items.all())
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+        elif not obj.pk:
+            obj.user = request.user
         super().save_model(request, obj, form, change)
 
 
