@@ -193,6 +193,9 @@ class ContractExpense(ContractModelBase):
         validators=[MinValueValidator(0)], verbose_name='Стоимость',
         db_comment='Стоимость за единицу'
     )
+    # NB: Field name intentionally shadows the built-in sum() to match the
+    # domain term "Сумма". Use the model instance attribute explicitly or
+    # import builtins.sum when aggregation is needed.
     sum = models.DecimalField(
         max_digits=15, decimal_places=2, default=0,
         verbose_name='Сумма', db_comment='quantity * cost (авто)'
