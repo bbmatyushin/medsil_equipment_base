@@ -55,7 +55,11 @@
   <div id="content-main">
     {% block object-tools %}
         {% if show_archive_notice %}
+          {% if cl.opts.model_name == "sparepartshipment" %}
+        <div class="archive-notice">Архив отгрузок до 24.10.2025</div>
+          {% else %}
         <div class="archive-notice">Архив поставок до 27.06.2026</div>
+          {% endif %}
         {% endif %}
         <ul class="object-tools">
           {% block object-tools-items %}
