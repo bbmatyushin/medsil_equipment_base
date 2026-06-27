@@ -26,6 +26,20 @@
         }
 
         /**
+         * Управляет видимостью DateTimeShortcuts ("Сегодня|" и календарь).
+         */
+        function setExpirationShortcutsVisible($row, visible) {
+            var $cell = $row.find('td.field-expiration_dt');
+            if (!$cell.length) return;
+
+            // Django DateTimeShortcuts создаёт <span class="datetimeshortcuts">
+            var $shortcuts = $cell.find('.datetimeshortcuts');
+            if ($shortcuts.length) {
+                $shortcuts.css('visibility', visible ? 'visible' : 'hidden');
+            }
+        }
+
+        /**
          * Загружает информацию о запчасти и управляет видимостью срока годности.
          * $row — jQuery-объект строки <tr> табулярного инлайна.
          */
@@ -48,12 +62,14 @@
                         $expSelect.css('visibility', 'visible');
                         $expSelect.prop('disabled', false);
                         $expSelect.prop('required', false);
+                        setExpirationShortcutsVisible($row, true);
                     } else {
                         // Скрываем поле срока годности, очищаем значение
                         $expSelect.val('');
                         $expSelect.css('visibility', 'hidden');
                         $expSelect.prop('required', false);
                         $expSelect.prop('disabled', false);
+                        setExpirationShortcutsVisible($row, false);
                     }
                 },
                 error: function(xhr, status, error) {
@@ -83,6 +99,7 @@
                     var $expSelect = $row.find('[name$="-expiration_dt"]');
                     $expSelect.val('');
                     $expSelect.css('visibility', 'hidden');
+                    setExpirationShortcutsVisible($row, false);
                     updateUnitCell($row, null);
                 }
             }, 0);
@@ -104,6 +121,7 @@
 
                 // Для новой строки скрываем срок годности по умолчанию
                 $expSelect.css('visibility', 'hidden');
+                setExpirationShortcutsVisible($row, false);
 
                 if (sparePartId) {
                     setTimeout(function() {
@@ -128,8 +146,17 @@
                 loadSparePartInfo(sparePartId, $row);
             } else {
                 $expSelect.css('visibility', 'hidden');
+                setExpirationShortcutsVisible($row, false);
             }
         });
+
+        // Установка значения по умолчанию для поля "Номер документа" на странице добавления
+        if (window.location.pathname.indexOf('/admin/spare_part/sparepartsupplyv2/add/') !== -1) {
+            var $docNumInput = $('input[name="doc_num"]');
+            if ($docNumInput.length && !$docNumInput.val()) {
+                $docNumInput.val('б/н');
+            }
+        }
 
     });
 })(django.jQuery);
