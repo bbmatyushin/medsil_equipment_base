@@ -33,7 +33,6 @@ from .models import (
     ServicePhotos,
     ServiceAccessories,
     ReplacementEquipment,
-    ServiceExpense,
 )
 from clients.models import Department, DeptContactPers
 
@@ -464,19 +463,6 @@ class ServicePhotosInline(admin.StackedInline):
                 f"</a>"
             )
         return f"Нет изображения"
-
-
-class ServiceExpenseInline(admin.TabularInline):
-    model = ServiceExpense
-    extra = 0
-    can_delete = False
-    verbose_name = "Расход"
-    verbose_name_plural = "Расходы на запчасти"
-    fields = ("spare_part", "unit", "quantity", "price", "sum")
-    readonly_fields = ("spare_part", "unit", "quantity", "price", "sum")
-
-    def has_add_permission(self, request, obj=None):
-        return False
 
 
 @admin.register(Service)

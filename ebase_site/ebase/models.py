@@ -446,11 +446,10 @@ class Service(EbaseModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        unique=True,
         related_name="service",
         verbose_name="Связанный Контракт",
         db_comment="ID контракта из реестра контрактов",
-        help_text="Контракт, связанный с данным ремонтом. Один контракт может быть связан только с одним ремонтом.",
+        help_text="Контракт, связанный с данным ремонтом. На один контракт может быть несколько ремонтов.",
     )
     service_type = models.ForeignKey(
         "directory.ServiceType",
@@ -655,67 +654,4 @@ class ServicePhotos(EbaseModel):
         return f"<ServicePhotos {self.id=!r}, {self.service=!r}>"
 
 
-class ServiceExpense(EbaseModel):
-    """Материализованные расходы на запчасти в ремонте (для аналитики)."""
 
-    service = models.ForeignKey(
-        "Service",
-        on_delete=models.CASCADE,
-        related_name="service_expenses",
-        verbose_name="Ремонт",
-        db_comment="ID ремонта",
-    )
-    spare_part = models.ForeignKey(
-        "spare_part.SparePart",
-        on_delete=models.RESTRICT,
-        related_name="service_expense_spare_part",
-        verbose_name="Запчасть",
-        db_comment="ID запчасти",
-    )
-    quantity = models.FloatField(
-        validators=[MinValueValidator(0)],
-        verbose_name="Кол-во",
-        db_comment="Количество запчастей, использованных в ремонте",
-    )
-    unit = models.CharField(
-        max_length=50, verbose_name="Ед. изм.", db_comment="Единица измерения запчасти"
-    )
-    price = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-        verbose_name="Цена закупки",
-        db_comment="Закупочная цена по FIFO",
-    )
-    sum = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-        editable=False,
-        verbose_name="Сумма",
-        db_comment="quantity * price",
-    )
-
-    class Meta:
-        db_table = f'{company}."service_expense"'
-        db_table_comment = (
-            "Расходы на запчасти по ремонту (для аналитики).\n\n-- Generated"
-        )
-        verbose_name = "Расход ремонта"
-        verbose_name_plural = "Расходы ремонта"
-        indexes = [
-            models.Index(fields=["service"]),
-            models.Index(fields=["spare_part"]),
-        ]
-
-    def __str__(self):
-        return f"{self.spare_part.name} — {self.sum}"
-
-    def save(self, *args, **kwargs):
-        from decimal import Decimal
-
-        self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.price or 0))
-        update_fields = kwargs.get("update_fields")
-        if update_fields is not None:
-            kwargs["update_fields"] = set(update_fields) | {"sum"}
-        super().save(*args, **kwargs)
