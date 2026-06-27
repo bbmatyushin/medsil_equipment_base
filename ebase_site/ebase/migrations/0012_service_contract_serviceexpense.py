@@ -9,9 +9,9 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("spare_part", "0004_sparepartsupplyv2_and_items"),
+        ("spare_part", "0005_sync_models_with_db"),
         ("contracts", "0002_alter_contractexpense_sum"),
-        ("ebase", "0011_serviceaccessories_accessory_and_more"),
+        ("ebase", "0010_sync_models_with_db"),
     ]
 
     operations = [
