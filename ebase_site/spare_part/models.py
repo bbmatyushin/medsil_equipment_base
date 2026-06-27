@@ -430,8 +430,8 @@ class SparePartShipment(SparePartAbs):
     class Meta:
         db_table = f'{company}."spare_part_shipment"'
         db_table_comment = "Отслеживание отгрузок запчастей. \n\n-- BMatyushin"
-        verbose_name = "Отгрузка запчастей (до 24.10.2025)"
-        verbose_name_plural = "Отгрузки запчастей (до 24.10.2025)"
+        verbose_name = "Отгрузка запчастей (архив)"
+        verbose_name_plural = "Отгрузки запчастей (архив)"
 
     def __str__(self):
         if self.spare_part_count is None:

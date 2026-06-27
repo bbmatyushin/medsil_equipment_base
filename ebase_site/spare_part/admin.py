@@ -600,6 +600,14 @@ class SparePartShipmentAdmin(MainModelAdmin):
         ),
     )
 
+    def has_add_permission(self, request):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["show_archive_notice"] = True
+        return super().changelist_view(request, extra_context=extra_context)
+
     class Media:
         js = (
             "admin/js/jquery.init.js",
