@@ -106,10 +106,20 @@ class ContractAdmin(MainModelAdmin):
     @admin.display(description="Запчасти по контракту")
     def spare_part_shipments_display(self, obj):
         """Отображает все запчасти из отгрузок по контракту."""
+        from django.db.models import Prefetch
+        from spare_part.models import SparePartShipmentM2M
+
         lines = (
             obj.spare_part_shipments
-            .prefetch_related("shipment_m2m__spare_part__unit")
-            .order_by("shipment_dt", "shipment_m2m__create_dt")
+            .prefetch_related(
+                Prefetch(
+                    "shipment_m2m",
+                    queryset=SparePartShipmentM2M.objects.select_related(
+                        "spare_part__unit"
+                    ).order_by("create_dt"),
+                ),
+            )
+            .order_by("shipment_dt")
         )
 
         rows = []
