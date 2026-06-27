@@ -532,6 +532,14 @@ class SparePartSupplyV2Admin(MainModelAdmin):
         ),
     )
 
+    class Media:
+        css = {"all": ("spare_part/css/hide_datetime_shortcuts.css",)}
+        js = (
+            "admin/js/jquery.init.js",
+            "spare_part/js/remove_datetime_shortcuts.js",
+            "spare_part/js/supply_expiration_control.js",
+        )
+
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("items__spare_part__unit")
 
