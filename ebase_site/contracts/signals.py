@@ -25,9 +25,6 @@ def recalc_contract(contract):
     # аксессор related_name='service' возвращает RelatedManager, а не объект.
     # Берём единственную связанную запись через .first().
     service_expenses = 0
-    service = contract.service.first()
-    if service:
-        service_expenses = service.service_expenses.aggregate(s=Sum("sum"))["s"] or 0
 
     manual_expenses = contract.expenses.aggregate(s=Sum("sum"))["s"] or 0
     expenses_amount = service_expenses + manual_expenses

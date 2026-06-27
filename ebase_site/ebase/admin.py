@@ -670,11 +670,6 @@ class ServiceAdmin(MainModelAdmin):
             return format_html('<a href="{}">{}</a>', url, obj.contract.contract_number)
         return "--"
 
-    @admin.display(description="Общая сумма расходов")
-    def expenses_total(self, obj):
-        total = obj.service_expenses.aggregate(s=Sum("sum"))["s"] or 0
-        return f"{total:.2f}"
-
     @admin.display(description="Акт о проведении работ")
     def service_akt_url(self, obj):
         if obj.service_akt:
