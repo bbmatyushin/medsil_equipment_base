@@ -63,7 +63,7 @@ def contract_expense_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentV2)
 def shipment_post_save(sender, instance, **kwargs):
-    if instance.contract:
+    if instance.contract_id:
         recalc_contract(instance.contract)
 
 
@@ -79,15 +79,22 @@ def shipment_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentM2M)
 def shipment_m2m_post_save(sender, instance, **kwargs):
-    if instance.shipment.contract:
-        recalc_contract(instance.shipment.contract)
+    contract_id = instance.shipment_id and getattr(instance.shipment, 'contract_id', None)
+    if contract_id:
+        try:
+            contract = Contract.objects.get(pk=contract_id)
+            recalc_contract(contract)
+        except Contract.DoesNotExist:
+            pass
 
 
 @receiver(post_delete, sender=SparePartShipmentM2M)
 def shipment_m2m_post_delete(sender, instance, **kwargs):
-    if instance.shipment.contract_id:
+    contract_id = getattr(instance.shipment, 'contract_id', None) if instance.shipment_id else None
+    if contract_id:
         try:
-            contract = Contract.objects.get(pk=instance.shipment.contract_id)
-            recalc_contract(contract)
-        except Contract.DoesNotExist:
+            contract = Contract.objects.filter(pk=contract_id).first()
+            if contract:
+                recalc_contract(contract)
+        except Exception:
             pass
