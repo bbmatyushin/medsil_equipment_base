@@ -516,7 +516,7 @@ class SparePartSupplyItemInline(admin.TabularInline):
 class SparePartSupplyV2Admin(MainModelAdmin):
     form = SparePartSupplyV2Form
     inlines = [SparePartSupplyItemInline]
-    list_display = ("doc_num", "supply_dt", "user", "total_sum")
+    list_display = ("doc_num", "supply_dt", "total_sum", "user")
     readonly_fields = ("user",)
     ordering = ("-supply_dt",)
     search_fields = ("doc_num", "items__spare_part__name", "items__spare_part__article")
