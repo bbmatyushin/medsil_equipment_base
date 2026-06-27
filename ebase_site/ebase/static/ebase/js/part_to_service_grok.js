@@ -65,14 +65,26 @@ class SparePartsManager {
             return;
         }
 
-        // Создаем контейнер для кастомного блока
+        // Создаем контейнер для кастомного блока в виде таблицы Django admin
         this.customBlock = document.createElement('div');
         this.customBlock.className = 'form-row custom-choice-spare_part';
         this.customBlock.innerHTML = `
-            <div>
-                <label>Выбранные запчасти:</label>
-                <div id="selected-spare-parts" style="border: 1px solid #ccc; padding: 10px; margin-top: 5px; background: #f9f9f9;">
-                    <div class="spare-parts-list"></div>
+            <div class="selected-spare-parts-wrapper">
+                <h2 class="selected-spare-parts-heading">Выбранные запчасти:</h2>
+                <div id="selected-spare-parts" class="selected-spare-parts-table-wrapper">
+                    <table class="selected-spare-parts-table">
+                        <thead>
+                            <tr>
+                                <th class="column-name">Запчасть</th>
+                                <th class="column-unit">Ед. изм.</th>
+                                <th class="column-available">Доступно</th>
+                                <th class="column-qty">Кол-во</th>
+                                <th class="column-price">Цена</th>
+                                <th class="column-sum">Сумма</th>
+                            </tr>
+                        </thead>
+                        <tbody class="spare-parts-list"></tbody>
+                    </table>
                 </div>
             </div>
         `;
@@ -338,50 +350,28 @@ class SparePartsManager {
         const displayAvailable = this.formatQty(availableQty - currentQty + originalQty);
         const priceText = price > 0 ? `${this.formatMoney(price)}` : '<span class="no-price">цена не задана</span>';
 
-        const row = document.createElement('div');
+        const row = document.createElement('tr');
         row.className = 'spare-part-row';
         row.setAttribute('data-unique-key', uniqueKey);
-        row.style.cssText = `
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background: white;
-            flex-wrap: wrap;
-            gap: 10px;
-        `;
 
-        // Добавить max="${maxAllowed}" чтобы не дать выбрать больше чем на складе
-        // и расскомментировать qtyInput.max = originalAvailable + originalQty; ниже
         row.innerHTML = `
-            <div style="flex: 1; min-width: 200px;">
-                <strong>${sparePartData.name}</strong>
-            </div>
-            <div>
-                <span class="available-qty">Доступно: ${displayAvailable} шт.</span>
-            </div>
-            <div>
-                <label for="qty-${uniqueKey}">Кол-во:</label>
+            <td class="field-name"><strong>${sparePartData.name}</strong></td>
+            <td class="field-unit">${sparePartData.unit || 'шт.'}</td>
+            <td class="field-available"><span class="available-qty">${displayAvailable}</span></td>
+            <td class="field-qty">
                 <input
                     type="number"
                     id="qty-${uniqueKey}"
                     value="${currentQty}"
                     min="0"
                     max="100000"
-                    style="width: 70px; margin-left: 5px;"
+                    style="width: 70px;"
                     data-unique-key="${uniqueKey}"
                 >
-            </div>
-            <div style="min-width: 120px; text-align: right;">
-                <span class="price-label">Цена:</span>
-                <span class="price-value">${priceText}</span>
-            </div>
-            <div style="min-width: 120px; text-align: right;">
-                <span class="sum-label">Сумма:</span>
-                <span class="sum-value" data-sum="${sum}">${sum}</span>
-            </div>`;
+            </td>
+            <td class="field-price"><span class="price-value">${priceText}</span></td>
+            <td class="field-sum"><span class="sum-value" data-sum="${sum}">${sum}</span></td>
+        `;
 
         container.appendChild(row);
 
@@ -410,7 +400,7 @@ class SparePartsManager {
     }
 
     updateAvailableDisplay(uniqueKey) {
-        const row = this.customBlock.querySelector(`[data-unique-key="${uniqueKey}"]`);
+        const row = this.customBlock.querySelector(`tr[data-unique-key="${uniqueKey}"]`);
         if (!row) return;
 
         const availableSpan = row.querySelector('.available-qty');
@@ -422,7 +412,7 @@ class SparePartsManager {
         if (sparePartData) {
             const originalAvailable = sparePartData.quantity || 0;
             const displayAvailable = originalAvailable - currentQty + originalQty;
-            availableSpan.textContent = `Доступно: ${this.formatQty(displayAvailable)} шт.`;
+            availableSpan.textContent = this.formatQty(displayAvailable);
 
             const price = parseFloat(sparePartData.price) || 0;
             const sum = this.formatMoney(price * currentQty);

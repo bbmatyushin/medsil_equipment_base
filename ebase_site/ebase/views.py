@@ -77,6 +77,7 @@ def get_spare_part_quantity(request, service_id,  spare_part_id):
                 "expiration_dt": obj["expiration_dt"] if obj.get("expiration_dt") else None,
                 "service_part_count": get_service_part_count(spare_part_count_info, obj) if service_id != "null" else 0,
                 "price": float(get_fifo_price(part, obj.get("expiration_dt"))) if obj.get("expiration_dt") else float(get_fifo_price(part)),
+                "unit": part.unit.short_name if part.unit else "шт.",
             } for obj in part_count
         ]
 
