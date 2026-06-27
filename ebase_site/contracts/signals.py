@@ -1,7 +1,7 @@
 """Signals for the contracts app.
 
 Recalculates contract totals on Payment and ContractExpense changes,
-including materialized ServiceExpense rows from the linked repair.
+including spare part shipments.
 """
 
 from django.db.models import Sum
@@ -9,6 +9,7 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save, post_delete
 
 from .models import Contract, Payment, ContractExpense
+from spare_part.models import SparePartShipmentV2, SparePartShipmentM2M
 
 
 def recalc_contract(contract):
@@ -16,18 +17,14 @@ def recalc_contract(contract):
     if contract is None:
         return
 
-    # Импорт внутри функции во избежание циклического импорта
-    # (ebase.signals импортирует recalc_contract отсюда).
-
     payment_amount = contract.payments.aggregate(s=Sum("amount"))["s"] or 0
 
-    # Service.contract использует ForeignKey(unique=True), поэтому обратный
-    # аксессор related_name='service' возвращает RelatedManager, а не объект.
-    # Берём единственную связанную запись через .first().
-    service_expenses = 0
+    shipment_expenses = contract.spare_part_shipments.aggregate(
+        s=Sum("shipment_m2m__sum")
+    )["s"] or 0
 
     manual_expenses = contract.expenses.aggregate(s=Sum("sum"))["s"] or 0
-    expenses_amount = service_expenses + manual_expenses
+    expenses_amount = shipment_expenses + manual_expenses
 
     contract.payment_amount = payment_amount
     contract.expenses_amount = expenses_amount
@@ -64,8 +61,33 @@ def contract_expense_post_delete(sender, instance, **kwargs):
     recalc_contract(contract)
 
 
-def recalc_contract_by_service(service):
-    """Вызывается из ebase signals при изменении ServiceExpense."""
-    if service is None:
-        return
-    recalc_contract(service.contract)
+@receiver(post_save, sender=SparePartShipmentV2)
+def shipment_post_save(sender, instance, **kwargs):
+    if instance.contract:
+        recalc_contract(instance.contract)
+
+
+@receiver(post_delete, sender=SparePartShipmentV2)
+def shipment_post_delete(sender, instance, **kwargs):
+    if instance.contract_id:
+        try:
+            contract = Contract.objects.get(pk=instance.contract_id)
+            recalc_contract(contract)
+        except Contract.DoesNotExist:
+            pass
+
+
+@receiver(post_save, sender=SparePartShipmentM2M)
+def shipment_m2m_post_save(sender, instance, **kwargs):
+    if instance.shipment.contract:
+        recalc_contract(instance.shipment.contract)
+
+
+@receiver(post_delete, sender=SparePartShipmentM2M)
+def shipment_m2m_post_delete(sender, instance, **kwargs):
+    if instance.shipment.contract_id:
+        try:
+            contract = Contract.objects.get(pk=instance.shipment.contract_id)
+            recalc_contract(contract)
+        except Contract.DoesNotExist:
+            pass
