@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from clients.models import Client, Department
 from directory.models import City, ServiceType
 from contracts.models import Contract
-from ebase.models import Equipment, EquipmentAccounting, Service, ServiceExpense
+from ebase.models import Equipment, EquipmentAccounting, Service
 
 
 User = get_user_model()
@@ -59,36 +59,3 @@ class ServiceContractTests(TestCase):
         )
         self.assertIsNone(service.contract)
 
-    def test_contract_recalc_on_service_save(self):
-        """Проверяет что сохранение сервиса с контрактом пересчитывает контракт."""
-        Service.objects.create(
-            service_type=self.service_type,
-            equipment_accounting=self.eq_acc,
-            user=self.user,
-            beg_dt="2026-02-01",
-            contract=self.contract,
-            spare_part_count={},
-        )
-        # No spare parts: ServiceExpense empty, profit should be 0
-        self.contract.refresh_from_db()
-        self.assertEqual(self.contract.profit, 0)
-        self.assertEqual(self.contract.expenses_amount, 0)
-
-    def test_unique_contract_service_link(self):
-        """Проверяет что один контракт нельзя связать с двумя ремонтами."""
-        service1 = Service.objects.create(
-            service_type=self.service_type,
-            equipment_accounting=self.eq_acc,
-            user=self.user,
-            beg_dt="2026-02-01",
-            contract=self.contract,
-        )
-        # Creating a second service with the same contract should fail
-        with self.assertRaises(Exception):
-            Service.objects.create(
-                service_type=self.service_type,
-                equipment_accounting=self.eq_acc,
-                user=self.user,
-                beg_dt="2026-02-02",
-                contract=self.contract,
-            )

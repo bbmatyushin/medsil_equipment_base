@@ -974,19 +974,7 @@ class ServiceAdmin(MainModelAdmin):
                 .exclude(id__in=used_replacement_equipment_ids)
             )
         elif db_field.name == "contract":
-            queryset = Contract.objects.all()
-            object_id = (
-                request.resolver_match.kwargs.get("object_id")
-                if request.resolver_match
-                else None
-            )
-            if object_id:
-                queryset = queryset.filter(
-                    models.Q(service__isnull=True) | models.Q(service__id=object_id)
-                )
-            else:
-                queryset = queryset.filter(service__isnull=True)
-            kwargs["queryset"] = queryset.select_related("client")
+            kwargs["queryset"] = Contract.objects.all().select_related("client")
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
