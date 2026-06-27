@@ -1,10 +1,12 @@
 import logging
+from decimal import Decimal
 
 from django.db.models import F
 from django.db.models.functions.math import Round
 from django.dispatch import receiver
 from django.db.models.signals import post_save, post_delete, pre_save
 
+from ebase.signals import get_fifo_price
 from .models import *
 
 logger = logging.getLogger("SPARE_PART_SIGNALS")
@@ -311,3 +313,11 @@ def _add_supply_stock(spare_part, expiration_dt, quantity):
         SparePartCount.objects.create(
             spare_part=spare_part, amount=quantity, expiration_dt=expiration_dt
         )
+
+
+@receiver(pre_save, sender=SparePartShipmentM2M)
+def spare_part_shipment_m2m_pre_save(sender, instance, **kwargs):
+    """Заполняет price по FIFO и пересчитывает sum перед сохранением."""
+    if instance.price is None or instance.price == 0:
+        instance.price = get_fifo_price(instance.spare_part_id, instance.expiration_dt)
+    instance.sum = Decimal(str(instance.quantity or 0)) * Decimal(str(instance.price or 0))
