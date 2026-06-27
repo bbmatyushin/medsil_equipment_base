@@ -291,6 +291,15 @@ class SparePartShipmentV2(SparePartAbs):
         help_text="Связь с ремонтом оборудования",
         db_comment="Связь с ремонтом оборудования",
     )
+    contract = models.ForeignKey(
+        "contracts.Contract",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Контракт",
+        db_comment="Контракт, к которому относится отгрузка запчастей",
+        related_name="spare_part_shipments",
+    )
     doc_num = models.CharField(
         max_length=20,
         null=False,
