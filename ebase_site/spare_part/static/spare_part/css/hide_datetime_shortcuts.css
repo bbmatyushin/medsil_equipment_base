@@ -11,3 +11,15 @@ input[name^="shipment_m2m-"][name$="-expiration_dt"][disabled] + .datetimeshortc
     cursor: not-allowed;
     opacity: 0.7;
 }
+
+.dynamic-items td.field-expiration_dt input,
+.dynamic-items td.field-expiration_dt .datetimeshortcuts,
+.empty-form td.field-expiration_dt input,
+.empty-form td.field-expiration_dt .datetimeshortcuts {
+    visibility: hidden;
+}
+
+.dynamic-items.expiration-visible td.field-expiration_dt input,
+.dynamic-items.expiration-visible td.field-expiration_dt .datetimeshortcuts {
+    visibility: visible;
+}

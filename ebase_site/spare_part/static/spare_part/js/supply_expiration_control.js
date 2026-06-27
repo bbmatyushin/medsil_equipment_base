@@ -26,17 +26,12 @@
         }
 
         /**
-         * Управляет видимостью DateTimeShortcuts ("Сегодня|" и календарь).
+         * Устанавливает видимость поля срока годности и DateTimeShortcuts для строки.
+         * visible = true — показываем input и shortcuts.
+         * visible = false — скрываем input и shortcuts.
          */
-        function setExpirationShortcutsVisible($row, visible) {
-            var $cell = $row.find('td.field-expiration_dt');
-            if (!$cell.length) return;
-
-            // Django DateTimeShortcuts создаёт <span class="datetimeshortcuts">
-            var $shortcuts = $cell.find('.datetimeshortcuts');
-            if ($shortcuts.length) {
-                $shortcuts.css('visibility', visible ? 'visible' : 'hidden');
-            }
+        function setExpirationVisible($row, visible) {
+            $row.toggleClass('expiration-visible', visible);
         }
 
         /**
@@ -59,17 +54,15 @@
 
                     if (data.is_expiration) {
                         // Показываем поле срока годности
-                        $expSelect.css('visibility', 'visible');
                         $expSelect.prop('disabled', false);
                         $expSelect.prop('required', false);
-                        setExpirationShortcutsVisible($row, true);
+                        setExpirationVisible($row, true);
                     } else {
                         // Скрываем поле срока годности, очищаем значение
                         $expSelect.val('');
-                        $expSelect.css('visibility', 'hidden');
                         $expSelect.prop('required', false);
                         $expSelect.prop('disabled', false);
-                        setExpirationShortcutsVisible($row, false);
+                        setExpirationVisible($row, false);
                     }
                 },
                 error: function(xhr, status, error) {
@@ -98,8 +91,7 @@
                 } else {
                     var $expSelect = $row.find('[name$="-expiration_dt"]');
                     $expSelect.val('');
-                    $expSelect.css('visibility', 'hidden');
-                    setExpirationShortcutsVisible($row, false);
+                    setExpirationVisible($row, false);
                     updateUnitCell($row, null);
                 }
             }, 0);
@@ -117,11 +109,9 @@
             if (formsetName && formsetName.indexOf(INLINE_PREFIX) === 0) {
                 var $sparePartSelect = $row.find('[name$="-spare_part"]');
                 var sparePartId = $sparePartSelect.val();
-                var $expSelect = $row.find('[name$="-expiration_dt"]');
 
-                // Для новой строки скрываем срок годности по умолчанию
-                $expSelect.css('visibility', 'hidden');
-                setExpirationShortcutsVisible($row, false);
+                // Новая строка всегда скрывает срок годности по умолчанию
+                setExpirationVisible($row, false);
 
                 if (sparePartId) {
                     setTimeout(function() {
@@ -136,7 +126,6 @@
             var $row = $(this);
             var $sparePartSelect = $row.find('[name$="-spare_part"]');
             var sparePartId = $sparePartSelect.val();
-            var $expSelect = $row.find('[name$="-expiration_dt"]');
 
             if ($sparePartSelect.prop('disabled') || $sparePartSelect.prop('readonly')) {
                 return;
@@ -145,8 +134,7 @@
             if (sparePartId) {
                 loadSparePartInfo(sparePartId, $row);
             } else {
-                $expSelect.css('visibility', 'hidden');
-                setExpirationShortcutsVisible($row, false);
+                setExpirationVisible($row, false);
             }
         });
 
