@@ -528,7 +528,7 @@ class SparePartSupplyV2Admin(MainModelAdmin):
         (
             "Информация о поставке",
             {
-                "fields": (("doc_num", "supply_dt"), "user", "note"),
+                "fields": (("doc_num", "supply_dt"), "note"),
             },
         ),
     )
