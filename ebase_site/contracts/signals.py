@@ -18,20 +18,16 @@ def recalc_contract(contract):
 
     # Импорт внутри функции во избежание циклического импорта
     # (ebase.signals импортирует recalc_contract отсюда).
-    from ebase.models import Service
 
     payment_amount = contract.payments.aggregate(s=Sum("amount"))["s"] or 0
 
-    # Service.contract использует unique=True, поэтому обратный аксессор
-    # related_name='service' ведёт себя как OneToOne и возвращает объект Service
-    # (либо возбуждает Service.DoesNotExist).
+    # Service.contract использует ForeignKey(unique=True), поэтому обратный
+    # аксессор related_name='service' возвращает RelatedManager, а не объект.
+    # Берём единственную связанную запись через .first().
     service_expenses = 0
-    try:
-        service_expenses = (
-            contract.service.service_expenses.aggregate(s=Sum("sum"))["s"] or 0
-        )
-    except Service.DoesNotExist:
-        service_expenses = 0
+    service = contract.service.first()
+    if service:
+        service_expenses = service.service_expenses.aggregate(s=Sum("sum"))["s"] or 0
 
     manual_expenses = contract.expenses.aggregate(s=Sum("sum"))["s"] or 0
     expenses_amount = service_expenses + manual_expenses
