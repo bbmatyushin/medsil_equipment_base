@@ -23,6 +23,10 @@ CONVENTIONS.md
 ebase_site/static/images/
 ebase_site/ebase/templates/admin/base_site.html.backup
 ebase/logs/*.log*
+ebase_site/logs/*.log*
+*.xlsx*
+docs/
+
 
 
 # Byte-compiled / optimized / DLL files
