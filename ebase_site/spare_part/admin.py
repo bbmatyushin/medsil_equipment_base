@@ -514,6 +514,7 @@ class SparePartSupplyItemInline(admin.TabularInline):
 
 @admin.register(SparePartSupplyV2)
 class SparePartSupplyV2Admin(MainModelAdmin):
+    form = SparePartSupplyV2Form
     inlines = [SparePartSupplyItemInline]
     list_display = ("doc_num", "supply_dt", "user", "total_sum")
     readonly_fields = ("user",)

@@ -240,6 +240,23 @@ class SparePartShipmentForm(forms.ModelForm):
         return cleaned_data
 
 
+class SparePartSupplyV2Form(forms.ModelForm):
+    note = forms.CharField(
+        label='Примечание',
+        required=False,
+        widget=forms.widgets.Textarea(attrs={
+            'rows': 2,
+            'cols': 60,
+            'style': 'resize: vertical; max-width: 600px; max-height: 150px;',
+            'placeholder': "Введите примечание к поставке...",
+        })
+    )
+
+    class Meta:
+        model = SparePartSupplyV2
+        fields = '__all__'
+
+
 class SparePartSupplyForm(forms.ModelForm):
     class Meta:
         model = SparePartSupply

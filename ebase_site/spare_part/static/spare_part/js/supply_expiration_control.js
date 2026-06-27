@@ -151,10 +151,17 @@
         });
 
         // Установка значения по умолчанию для поля "Номер документа" на странице добавления
+        // и скрытие строки "Кто добавил"
         if (window.location.pathname.indexOf('/admin/spare_part/sparepartsupplyv2/add/') !== -1) {
             var $docNumInput = $('input[name="doc_num"]');
             if ($docNumInput.length && !$docNumInput.val()) {
                 $docNumInput.val('б/н');
+            }
+
+            // Скрываем строку с полем "Кто добавил" (user)
+            var $userRow = $('.form-row.field-user');
+            if ($userRow.length) {
+                $userRow.hide();
             }
         }
 
