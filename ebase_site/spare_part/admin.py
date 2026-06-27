@@ -374,6 +374,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         "shipment_dt",
         "client_shipment",
         "service_equipment",
+        "contract",
         "user_name",
     )
     readonly_fields = ("client_shipment",)
@@ -383,6 +384,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         "service__equipment_accounting__equipment_acc_department_equipment_accounting__department__name",
     )
     search_help_text = "Поиск по клиенту или названию оборудования"
+    list_filter = ("contract",)
 
     fieldsets = (
         (
@@ -394,6 +396,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
                         "shipment_dt",
                     ),
                     ("service", "client_shipment"),
+                    "contract",
                     "comment",
                     "user",
                 )
@@ -455,6 +458,9 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             # Авто-отгрузка со связью: убираем пустой выбор «---------»
             form.base_fields["service"].empty_label = None
             form.base_fields["service"].required = True
+        if obj and obj.is_auto_comment and obj.service:
+            form.base_fields["contract"].disabled = True
+            form.base_fields["contract"].widget.attrs["readonly"] = True
         return form
 
     def get_changeform_initial_data(self, request):
