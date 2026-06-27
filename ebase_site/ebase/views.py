@@ -28,6 +28,9 @@ class IndexRedirectView(RedirectView):
     url = 'admin/'
 
 
+from ebase.signals import get_fifo_price
+
+
 def get_service_part_count(spare_part_count_info: Optional[list], part: dict) -> int:
     """Получаем количество запчестей используемых в ремонте
     для определенного срока годности"""
@@ -73,6 +76,7 @@ def get_spare_part_quantity(request, service_id,  spare_part_id):
                 "id": spare_part_id,
                 "expiration_dt": obj["expiration_dt"] if obj.get("expiration_dt") else None,
                 "service_part_count": get_service_part_count(spare_part_count_info, obj) if service_id != "null" else 0,
+                "price": float(get_fifo_price(part, obj.get("expiration_dt"))) if obj.get("expiration_dt") else float(get_fifo_price(part)),
             } for obj in part_count
         ]
 

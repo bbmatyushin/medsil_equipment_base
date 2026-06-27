@@ -20,17 +20,19 @@ def service_pre_save(sender, instance, **kwargs):
         instance._old_contract_id = None
 
 
-def get_fifo_price(spare_part):
+def get_fifo_price(spare_part, expiration_dt=None):
     """Возвращает закупочную цену по FIFO для запчасти.
 
-    Берётся цена самой ранней партии поставки.
+    Если передан срок годности, ищет самую раннюю поставку именно этой партии.
+    Иначе берётся цена самой ранней поставки запчасти.
     Если цена не найдена, возвращает 0.
     """
-    supply_items = SparePartSupplyItem.objects.filter(spare_part=spare_part).order_by(
-        "supply__supply_dt", "expiration_dt"
-    )
+    qs = SparePartSupplyItem.objects.filter(spare_part=spare_part)
+    if expiration_dt is not None:
+        qs = qs.filter(expiration_dt=expiration_dt)
+    qs = qs.order_by("supply__supply_dt", "expiration_dt")
 
-    first = supply_items.first()
+    first = qs.first()
     return first.price if first else 0
 
 
@@ -59,18 +61,21 @@ def service_post_save(sender, instance, created, **kwargs):
             except SparePart.DoesNotExist:
                 continue
 
-            total_quantity = sum(
-                (entry.get("service_part_count") or 0) for entry in entries
-            )
-            price = get_fifo_price(spare_part)
+            for entry in entries:
+                quantity = entry.get("service_part_count") or 0
+                if quantity <= 0:
+                    continue
 
-            ServiceExpense.objects.create(
-                service=instance,
-                spare_part=spare_part,
-                quantity=total_quantity,
-                unit=spare_part.unit.short_name if spare_part.unit else "шт.",
-                price=price,
-            )
+                expiration_dt = entry.get("expiration_dt") or None
+                price = get_fifo_price(spare_part, expiration_dt)
+
+                ServiceExpense.objects.create(
+                    service=instance,
+                    spare_part=spare_part,
+                    quantity=quantity,
+                    unit=spare_part.unit.short_name if spare_part.unit else "шт.",
+                    price=price,
+                )
 
     # Пересчитываем связанный контракт (после транзакции)
     if instance.contract:

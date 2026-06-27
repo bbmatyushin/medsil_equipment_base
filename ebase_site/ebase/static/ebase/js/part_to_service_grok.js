@@ -330,10 +330,13 @@ class SparePartsManager {
         const currentQty = this.currentQuantities.get(uniqueKey) || 0;
         const originalQty = this.originalQuantities.get(uniqueKey) || 0;
         const availableQty = sparePartData.quantity || 0;
+        const price = parseFloat(sparePartData.price) || 0;
+        const sum = this.formatMoney(price * currentQty);
 
         // Рассчитываем максимально допустимое количество для ввода
         const maxAllowed = availableQty + originalQty;
         const displayAvailable = this.formatQty(availableQty - currentQty + originalQty);
+        const priceText = price > 0 ? `${this.formatMoney(price)}` : '<span class="no-price">цена не задана</span>';
 
         const row = document.createElement('div');
         row.className = 'spare-part-row';
@@ -346,28 +349,38 @@ class SparePartsManager {
             border: 1px solid #ddd;
             border-radius: 4px;
             background: white;
+            flex-wrap: wrap;
+            gap: 10px;
         `;
 
         // Добавить max="${maxAllowed}" чтобы не дать выбрать больше чем на складе
         // и расскомментировать qtyInput.max = originalAvailable + originalQty; ниже
         row.innerHTML = `
-            <div style="flex: 1; margin-right: 10px;">
+            <div style="flex: 1; min-width: 200px;">
                 <strong>${sparePartData.name}</strong>
             </div>
-            <div style="margin-right: 10px;">
+            <div>
                 <span class="available-qty">Доступно: ${displayAvailable} шт.</span>
             </div>
-            <div style="margin-right: 10px;">
-                <label for="qty-${uniqueKey}">Количество:</label>
+            <div>
+                <label for="qty-${uniqueKey}">Кол-во:</label>
                 <input
                     type="number"
                     id="qty-${uniqueKey}"
                     value="${currentQty}"
                     min="0"
                     max="100000"
-                    style="width: 80px; margin-left: 5px;"
+                    style="width: 70px; margin-left: 5px;"
                     data-unique-key="${uniqueKey}"
                 >
+            </div>
+            <div style="min-width: 120px; text-align: right;">
+                <span class="price-label">Цена:</span>
+                <span class="price-value">${priceText}</span>
+            </div>
+            <div style="min-width: 120px; text-align: right;">
+                <span class="sum-label">Сумма:</span>
+                <span class="sum-value" data-sum="${sum}">${sum}</span>
             </div>`;
 
         container.appendChild(row);
@@ -401,6 +414,7 @@ class SparePartsManager {
         if (!row) return;
 
         const availableSpan = row.querySelector('.available-qty');
+        const sumValue = row.querySelector('.sum-value');
         const sparePartData = this.sparePartsData.get(uniqueKey);
         const currentQty = this.currentQuantities.get(uniqueKey) || 0;
         const originalQty = this.originalQuantities.get(uniqueKey) || 0;
@@ -409,6 +423,11 @@ class SparePartsManager {
             const originalAvailable = sparePartData.quantity || 0;
             const displayAvailable = originalAvailable - currentQty + originalQty;
             availableSpan.textContent = `Доступно: ${this.formatQty(displayAvailable)} шт.`;
+
+            const price = parseFloat(sparePartData.price) || 0;
+            const sum = this.formatMoney(price * currentQty);
+            sumValue.textContent = sum;
+            sumValue.setAttribute('data-sum', sum);
 
             // Если ушли в минус — сразу подсвечиваем красным
             if (displayAvailable < 0) {
@@ -421,6 +440,13 @@ class SparePartsManager {
             const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
             // qtyInput.max = originalAvailable + originalQty;  // расскомментировать если выше добавляем max="${maxAllowed}"
         }
+    }
+
+    /**
+     * Форматирует денежное значение: два знака после запятой.
+     */
+    formatMoney(value) {
+        return (Math.round((parseFloat(value) || 0) * 100) / 100).toFixed(2);
     }
 
     /**

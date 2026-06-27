@@ -187,3 +187,22 @@ label[for$="search_button"] {
     color: #ba2121;
     font-weight: bold;
 }
+
+/* Подсветка отсутствующей цены запчасти */
+.spare-part-row .no-price {
+    color: #ba2121;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+.spare-part-row .price-value,
+.spare-part-row .sum-value {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.spare-part-row .sum-value {
+    min-width: 60px;
+    display: inline-block;
+    text-align: right;
+}
