@@ -1135,6 +1135,10 @@ class ServiceAdmin(MainModelAdmin):
                     expiration_dt=spare_part_info["expiration_dt"],
                 )
 
+            # Переносим связь с контрактом из ремонта в отгрузку
+            shipment.contract = obj.contract
+            shipment.save(update_fields=["contract"])
+
         # TODO: включить, если нужно учитывать количество запчастей из SparePartCount
         # def delete_model(self, request, obj):
         #     """
