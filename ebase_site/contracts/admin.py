@@ -47,12 +47,7 @@ class ContractAdmin(MainModelAdmin):
         "services_provided",
         "payment_status",
     )
-    list_filter = (
-        "services_provided",
-        "payment_status",
-        "conclusion_date",
-        "client",
-    )
+    list_filter = ()
     search_fields = ("contract_number", "order_number_1c")
     search_help_text = "Поиск по номеру контракта или номеру заказа 1С"
     readonly_fields = (
