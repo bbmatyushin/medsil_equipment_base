@@ -273,6 +273,44 @@ label[for$="search_button"] {
     text-align: right;
 }
 
+/* Итоговая строка в таблице выбранных запчастей */
+.selected-spare-parts-table tfoot.spare-parts-total tr {
+    background: var(--darkened-bg, #f8f8f8);
+    font-weight: 600;
+}
+
+.selected-spare-parts-table tfoot.spare-parts-total td {
+    border-top: 2px solid var(--border-color, #ccc);
+    padding: 10px;
+}
+
+.selected-spare-parts-table .field-total-label {
+    text-align: right;
+}
+
+.selected-spare-parts-table .field-total-value {
+    text-align: right;
+    white-space: nowrap;
+    font-family: monospace;
+}
+
+@media (max-width: 767px) {
+    .selected-spare-parts-table tfoot.spare-parts-total td {
+        padding-left: 10px;
+        text-align: left;
+        border-bottom: none;
+    }
+
+    .selected-spare-parts-table tfoot.spare-parts-total td::before {
+        content: none;
+    }
+
+    .selected-spare-parts-table .field-total-label,
+    .selected-spare-parts-table .field-total-value {
+        text-align: left;
+    }
+}
+
 /* Адаптивность таблицы выбранных запчастей для мобильных */
 @media (max-width: 767px) {
     .selected-spare-parts-table-wrapper {

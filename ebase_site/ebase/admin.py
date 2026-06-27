@@ -507,7 +507,6 @@ class ServiceAdmin(MainModelAdmin):
         "service_akt_url",
         "accept_in_akt_url",
         "accept_from_akt_url",
-        "expenses_total",
     )
     search_fields = (
         "equipment_accounting__equipment__full_name",
@@ -550,14 +549,7 @@ class ServiceAdmin(MainModelAdmin):
                 ),
             },
         ),
-        (
-            "Расходы",
-            {
-                "fields": ("expenses_total",),
-                "description": "Расходы на запчасти рассчитываются автоматически на основе выбранных запчастей.",
-            },
-        ),
-    )
+)
 
     class Media:
         css = {"all": ("ebase/admin/css/custom_form.css",)}

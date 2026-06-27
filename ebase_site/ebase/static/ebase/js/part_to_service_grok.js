@@ -84,6 +84,12 @@ class SparePartsManager {
                             </tr>
                         </thead>
                         <tbody class="spare-parts-list"></tbody>
+                        <tfoot class="spare-parts-total">
+                            <tr>
+                                <td colspan="5" class="field-total-label">Общая сумма расходов:</td>
+                                <td class="field-total-value"><span class="total-sum-value">0,00</span></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -335,6 +341,9 @@ class SparePartsManager {
             await this.createSparePartRow(container, uniqueKey, sparePartData);
         }
 
+        // Пересчитываем итоговую сумму
+        this.updateTotalSum();
+
         console.log('Custom block updated');
     }
 
@@ -430,6 +439,26 @@ class SparePartsManager {
             const qtyInput = row.querySelector(`#qty-${uniqueKey}`);
             // qtyInput.max = originalAvailable + originalQty;  // расскомментировать если выше добавляем max="${maxAllowed}"
         }
+
+        this.updateTotalSum();
+    }
+
+    updateTotalSum() {
+        const totalValue = this.customBlock.querySelector('.total-sum-value');
+        if (!totalValue) return;
+
+        let total = 0;
+        this.currentQuantities.forEach((quantity, uniqueKey) => {
+            if (quantity > 0) {
+                const sparePartData = this.sparePartsData.get(uniqueKey);
+                if (sparePartData) {
+                    const price = parseFloat(sparePartData.price) || 0;
+                    total += price * quantity;
+                }
+            }
+        });
+
+        totalValue.textContent = this.formatMoney(total);
     }
 
     /**
