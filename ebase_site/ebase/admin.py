@@ -493,14 +493,13 @@ class ServiceAdmin(MainModelAdmin):
         "dept_name",
         "service_type",
         "photos",
-        "description_short",
         "spare_part_used",
+        "contract_link",
         "reason_short",
         "job_content_short",
         "akt",
         "beg_dt",
         "end_dt",
-        "contract_link",
     )
     list_select_related = ("equipment_accounting", "service_type", "contract")
     list_filter = ()
@@ -654,7 +653,11 @@ class ServiceAdmin(MainModelAdmin):
     def spare_part_used(self, obj):
         # Используем предзагруженные данные
         spare_parts_list = [sp.name for sp in obj.spare_part.all()]
-        return "; ".join(spare_parts_list) if spare_parts_list else "-"
+        full_text = "; ".join(spare_parts_list) if spare_parts_list else "-"
+        if len(full_text) <= 50:
+            return full_text
+        short_text = f"{full_text[:50]}..."
+        return mark_safe(f'<span title="{full_text}">{short_text}</span>')
 
     # @admin.display(description='Комплектующие')
     # def accessories_used(self, obj):
