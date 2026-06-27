@@ -236,6 +236,21 @@ class SparePartShipmentM2M(models.Model):
         verbose_name="Кол-во",
         validators=[MinValueValidator(0)],
     )
+    price = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name="Цена закупки",
+        db_comment="Закупочная цена по FIFO",
+    )
+    sum = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        editable=False,
+        verbose_name="Сумма",
+        db_comment="quantity * price",
+    )
     expiration_dt = models.DateField(
         null=True,
         blank=True,
@@ -269,6 +284,13 @@ class SparePartShipmentM2M(models.Model):
 
     def __repr__(self):
         return f"<SparePartShipmentM2M(id={self.pk}, spare_part={self.spare_part.name}, quantity={self.quantity}, expiration_dt={self.expiration_dt})>"
+
+    def save(self, *args, **kwargs):
+        self.sum = Decimal(str(self.quantity or 0)) * Decimal(str(self.price or 0))
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"sum"}
+        super().save(*args, **kwargs)
 
 
 class SparePartShipmentV2(SparePartAbs):
