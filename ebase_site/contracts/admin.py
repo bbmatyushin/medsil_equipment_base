@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from utils import MainModelAdmin
 from .models import Contract, Payment, ContractExpense
@@ -172,4 +173,4 @@ class ContractAdmin(MainModelAdmin):
             f"</tr></tfoot>"
             f"</table>"
         )
-        return format_html(html)
+        return mark_safe(html)

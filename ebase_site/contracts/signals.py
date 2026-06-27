@@ -6,7 +6,7 @@ including spare part shipments.
 
 from django.db.models import Sum
 from django.dispatch import receiver
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 
 from .models import Contract, Payment, ContractExpense
 from spare_part.models import SparePartShipmentV2, SparePartShipmentM2M
@@ -61,10 +61,31 @@ def contract_expense_post_delete(sender, instance, **kwargs):
     recalc_contract(contract)
 
 
+@receiver(pre_save, sender=SparePartShipmentV2)
+def shipment_pre_save(sender, instance, **kwargs):
+    """Запоминаем старый contract_id для пересчёта старого контракта."""
+    if instance.pk:
+        try:
+            old = SparePartShipmentV2.objects.get(pk=instance.pk)
+            instance._old_contract_id = old.contract_id
+        except SparePartShipmentV2.DoesNotExist:
+            instance._old_contract_id = None
+    else:
+        instance._old_contract_id = None
+
+
 @receiver(post_save, sender=SparePartShipmentV2)
 def shipment_post_save(sender, instance, **kwargs):
     if instance.contract_id:
         recalc_contract(instance.contract)
+
+    old_contract_id = getattr(instance, "_old_contract_id", None)
+    if old_contract_id and old_contract_id != instance.contract_id:
+        try:
+            old_contract = Contract.objects.get(pk=old_contract_id)
+            recalc_contract(old_contract)
+        except Contract.DoesNotExist:
+            pass
 
 
 @receiver(post_delete, sender=SparePartShipmentV2)
