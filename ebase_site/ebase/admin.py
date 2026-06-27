@@ -503,7 +503,7 @@ class ServiceAdmin(MainModelAdmin):
         "contract_link",
     )
     list_select_related = ("equipment_accounting", "service_type", "contract")
-    list_filter = (ContractFilter,)
+    list_filter = ()
     readonly_fields = (
         "service_akt_url",
         "accept_in_akt_url",
@@ -514,9 +514,10 @@ class ServiceAdmin(MainModelAdmin):
         "equipment_accounting__equipment__full_name",
         "equipment_accounting__equipment__short_name",
         "equipment_accounting__serial_number",
+        "contract__contract_number",
     )
     search_help_text = (
-        "Поиск по полному/краткому наименованию оборудования или по серийному номеру"
+        "Поиск по полному/краткому наименованию оборудования, по серийному номеру или номеру Контракта"
     )
     ordering = (
         "-beg_dt",
