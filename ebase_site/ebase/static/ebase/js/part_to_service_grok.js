@@ -355,10 +355,10 @@ class SparePartsManager {
         row.setAttribute('data-unique-key', uniqueKey);
 
         row.innerHTML = `
-            <td class="field-name"><strong>${sparePartData.name}</strong></td>
-            <td class="field-unit">${sparePartData.unit || 'шт.'}</td>
-            <td class="field-available"><span class="available-qty">${displayAvailable}</span></td>
-            <td class="field-qty">
+            <td class="field-name" data-label="Запчасть"><strong>${sparePartData.name}</strong></td>
+            <td class="field-unit" data-label="Ед. изм.">${sparePartData.unit || 'шт.'}</td>
+            <td class="field-available" data-label="Доступно"><span class="available-qty">${displayAvailable}</span></td>
+            <td class="field-qty" data-label="Кол-во">
                 <input
                     type="number"
                     id="qty-${uniqueKey}"
@@ -369,8 +369,8 @@ class SparePartsManager {
                     data-unique-key="${uniqueKey}"
                 >
             </td>
-            <td class="field-price"><span class="price-value">${priceText}</span></td>
-            <td class="field-sum"><span class="sum-value" data-sum="${sum}">${sum}</span></td>
+            <td class="field-price" data-label="Цена"><span class="price-value">${priceText}</span></td>
+            <td class="field-sum" data-label="Сумма"><span class="sum-value" data-sum="${sum}">${sum}</span></td>
         `;
 
         container.appendChild(row);
@@ -433,10 +433,15 @@ class SparePartsManager {
     }
 
     /**
-     * Форматирует денежное значение: два знака после запятой.
+     * Форматирует денежное значение в русском формате:
+     * тысячи разделяются пробелом, копейки — запятой.
+     * Пример: 20000.00 → "20 000,00"
      */
     formatMoney(value) {
-        return (Math.round((parseFloat(value) || 0) * 100) / 100).toFixed(2);
+        const num = Math.round((parseFloat(value) || 0) * 100) / 100;
+        const [intPart, decPart] = num.toFixed(2).split('.');
+        const formattedInt = parseInt(intPart, 10).toLocaleString('ru-RU');
+        return `${formattedInt},${decPart}`;
     }
 
     /**

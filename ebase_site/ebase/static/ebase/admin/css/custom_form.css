@@ -272,3 +272,74 @@ label[for$="search_button"] {
     display: inline-block;
     text-align: right;
 }
+
+/* Адаптивность таблицы выбранных запчастей для мобильных */
+@media (max-width: 767px) {
+    .selected-spare-parts-table-wrapper {
+        border: none;
+        background: transparent;
+    }
+
+    .selected-spare-parts-table,
+    .selected-spare-parts-table thead,
+    .selected-spare-parts-table tbody,
+    .selected-spare-parts-table th,
+    .selected-spare-parts-table td,
+    .selected-spare-parts-table tr {
+        display: block;
+    }
+
+    .selected-spare-parts-table thead {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+
+    .selected-spare-parts-table tbody tr {
+        margin-bottom: 12px;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 4px;
+        background: var(--body-bg, #fff);
+        padding: 8px;
+    }
+
+    .selected-spare-parts-table tbody td {
+        border: none;
+        border-bottom: 1px solid var(--hairline-color, #e8e8e8);
+        position: relative;
+        padding-left: 45%;
+        text-align: right;
+        min-height: 36px;
+    }
+
+    .selected-spare-parts-table tbody td:last-child {
+        border-bottom: none;
+    }
+
+    .selected-spare-parts-table tbody td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 10px;
+        top: 8px;
+        width: 40%;
+        text-align: left;
+        font-weight: 600;
+        color: var(--body-fg, #333);
+    }
+
+    .selected-spare-parts-table .field-name {
+        padding-left: 10px;
+        text-align: left;
+        background: var(--darkened-bg, #f8f8f8);
+    }
+
+    .selected-spare-parts-table .field-name::before {
+        content: none;
+    }
+
+    .selected-spare-parts-table .field-available,
+    .selected-spare-parts-table .field-price,
+    .selected-spare-parts-table .field-sum {
+        text-align: right;
+    }
+}
