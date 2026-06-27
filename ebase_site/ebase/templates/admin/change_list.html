@@ -54,6 +54,9 @@
 {% block content %}
   <div id="content-main">
     {% block object-tools %}
+        {% if show_archive_notice %}
+        <div class="archive-notice">Архив поставок до 27.06.2026</div>
+        {% endif %}
         <ul class="object-tools">
           {% block object-tools-items %}
             {% change_list_object_tools %}

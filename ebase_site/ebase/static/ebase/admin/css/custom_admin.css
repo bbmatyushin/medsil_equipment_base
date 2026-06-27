@@ -8,3 +8,24 @@ table td {
 .nowrap {
     white-space: normal!important;
 }
+
+/* Уведомление об архиве поставок */
+.archive-notice {
+    color: #8b0000;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: #fff3f3;
+    border: 1px solid #d4a5a5;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+@media (prefers-color-scheme: dark) {
+    .archive-notice {
+        color: #ff9999;
+        background: #3a1f1f;
+        border-color: #6b4040;
+    }
+}

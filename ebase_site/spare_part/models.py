@@ -505,8 +505,8 @@ class SparePartSupply(SparePartAbs):
     class Meta:
         db_table = f'{company}."spare_part_supply"'
         db_table_comment = "Отслеживание поставок запчастей. \n\n-- BMatyushin"
-        verbose_name = "Поставка запчастей"
-        verbose_name_plural = "Поставки запчастей"
+        verbose_name = "Поставка запчастей (архив)"
+        verbose_name_plural = "Поставки запчастей (архив)"
         indexes = [
             models.Index(fields=["spare_part"]),
             models.Index(fields=["user"]),
@@ -554,8 +554,8 @@ class SparePartSupplyV2(SparePartAbs):
             "Одна поставка может содержать несколько строк запчастей."
             "\r\n\r\n-- Generated"
         )
-        verbose_name = "Поставка запчастей (v2)"
-        verbose_name_plural = "Поставки запчастей (v2)"
+        verbose_name = "Поставка запчастей"
+        verbose_name_plural = "Поставки запчастей"
         ordering = ("-supply_dt", "-create_dt")
         indexes = [
             models.Index(fields=["supply_dt"]),

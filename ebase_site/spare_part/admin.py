@@ -300,6 +300,14 @@ class SparePartSupplyAdmin(MainModelAdmin):
         ),
     )
 
+    def has_add_permission(self, request):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["show_archive_notice"] = True
+        return super().changelist_view(request, extra_context=extra_context)
+
     @admin.display(description="КОЛ-ВО")
     def count_part(self, obj):
         return obj.count_supply if obj.count_supply % 1 else int(obj.count_supply)
