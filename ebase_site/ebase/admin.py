@@ -487,7 +487,7 @@ class ServiceAdmin(MainModelAdmin):
     form = ServiceForm
     date_hierarchy = "beg_dt"
     filter_horizontal = ("spare_part",)
-    inlines = (ServiceAccessoriesInline, ServicePhotosInline, ServiceExpenseInline)
+    inlines = (ServiceAccessoriesInline, ServicePhotosInline)
     list_display = (
         "equipment_accounting",
         "dept_name",

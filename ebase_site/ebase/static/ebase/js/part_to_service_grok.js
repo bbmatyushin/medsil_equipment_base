@@ -70,7 +70,7 @@ class SparePartsManager {
         this.customBlock.className = 'form-row custom-choice-spare_part';
         this.customBlock.innerHTML = `
             <div class="selected-spare-parts-wrapper">
-                <h2 class="selected-spare-parts-heading">Выбранные запчасти:</h2>
+                <h2 class="selected-spare-parts-heading">Выбранные запчасти</h2>
                 <div id="selected-spare-parts" class="selected-spare-parts-table-wrapper">
                     <table class="selected-spare-parts-table">
                         <thead>
