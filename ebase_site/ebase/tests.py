@@ -59,3 +59,40 @@ class ServiceContractTests(TestCase):
         )
         self.assertIsNone(service.contract)
 
+    def test_service_contract_copies_to_shipment(self):
+        """Связь отгрузки с контрактом корректно учитывается в расходах."""
+        from directory.models import Unit
+        from spare_part.models import (
+            SparePart,
+            SparePartShipmentV2,
+            SparePartShipmentM2M,
+        )
+
+        self.service = Service.objects.create(
+            service_type=self.service_type,
+            equipment_accounting=self.eq_acc,
+            user=self.user,
+            beg_dt="2026-02-01",
+            contract=self.contract,
+        )
+        self.unit = Unit.objects.create(short_name="шт.", full_name="штука")
+        self.spare_part = SparePart.objects.create(
+            name="Запчасть для отгрузки", unit=self.unit
+        )
+        shipment = SparePartShipmentV2.objects.create(
+            doc_num="АВ-001",
+            shipment_dt=self.service.beg_dt,
+            user=self.service.user,
+            service=self.service,
+            contract=self.contract,
+        )
+        SparePartShipmentM2M.objects.create(
+            shipment=shipment,
+            spare_part=self.spare_part,
+            quantity=1,
+            price=Decimal("50.00"),
+        )
+
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.expenses_amount, Decimal("50.00"))
+
