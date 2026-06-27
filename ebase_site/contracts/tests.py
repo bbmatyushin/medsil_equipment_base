@@ -1,3 +1,6 @@
+from datetime import date
+from decimal import Decimal
+
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
@@ -77,3 +80,33 @@ class ContractModelTests(TestCase):
         self.contract.refresh_from_db()
         self.assertEqual(self.contract.expenses_amount, 0)
         self.assertEqual(self.contract.profit, 0)
+
+    def test_contract_recalc_on_spare_part_shipment(self):
+        """Создание отгрузки с запчастями увеличивает expenses_amount контракта."""
+        from spare_part.models import (
+            SparePart,
+            SparePartShipmentV2,
+            SparePartShipmentM2M,
+        )
+        from directory.models import Unit
+        from users.models import CompanyUser
+
+        unit = Unit.objects.create(short_name="шт.", full_name="штука")
+        spare_part = SparePart.objects.create(name="Тестовая запчасть", unit=unit)
+        user = CompanyUser.objects.create_user(username="testshipper", password="pass")
+
+        shipment = SparePartShipmentV2.objects.create(
+            doc_num="ТО-001",
+            shipment_dt=date.today(),
+            user=user,
+            contract=self.contract,
+        )
+        SparePartShipmentM2M.objects.create(
+            shipment=shipment,
+            spare_part=spare_part,
+            quantity=2,
+            price=Decimal("100.00"),
+        )
+
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.expenses_amount, Decimal("200.00"))
