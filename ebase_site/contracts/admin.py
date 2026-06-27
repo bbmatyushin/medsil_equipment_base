@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
@@ -55,7 +57,7 @@ class ContractAdmin(MainModelAdmin):
         "expenses_amount",
         "debt",
         "profit",
-        "service_expenses_display",
+        "spare_part_shipments_display",
     )
     fieldsets = (
         (
@@ -80,8 +82,8 @@ class ContractAdmin(MainModelAdmin):
         (
             "Запчасти по контракту",
             {
-                "fields": ("service_expenses_display",),
-                "description": "Запчасти, списанные на ремонт, связанный с этим контрактом.",
+                "fields": ("spare_part_shipments_display",),
+                "description": "Запчасти, отгруженные по данному контракту.",
             },
         ),
         (
@@ -101,7 +103,63 @@ class ContractAdmin(MainModelAdmin):
             .select_related("client", "client__city")
         )
 
-    @admin.display(description="Расходы по запчастям")
-    def service_expenses_display(self, obj):
-        """Временная заглушка до реализации отображения запчастей из отгрузок."""
-        return "Запчасти по контракту будут отображены из отгрузок (в разработке)."
+    @admin.display(description="Запчасти по контракту")
+    def spare_part_shipments_display(self, obj):
+        """Отображает все запчасти из отгрузок по контракту."""
+        lines = (
+            obj.spare_part_shipments
+            .prefetch_related("shipment_m2m__spare_part__unit")
+            .order_by("shipment_dt", "shipment_m2m__create_dt")
+        )
+
+        rows = []
+        total = Decimal("0.00")
+        for shipment in lines:
+            for line in shipment.shipment_m2m.all():
+                part_name = line.spare_part.name if line.spare_part else "—"
+                unit = line.spare_part.unit.short_name if line.spare_part and line.spare_part.unit else "—"
+                rows.append(
+                    format_html(
+                        "<tr>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "<td>{}</td>"
+                        "</tr>",
+                        part_name,
+                        unit,
+                        line.quantity,
+                        f"{line.price:.2f}",
+                        f"{line.sum:.2f}",
+                        shipment.doc_num,
+                        shipment.shipment_dt.strftime("%d.%m.%Y"),
+                    )
+                )
+                total += line.sum or Decimal("0.00")
+
+        if not rows:
+            return "Нет отгрузок запчастей по контракту."
+
+        html = (
+            f"<table style='border-collapse: collapse; width: 100%;'>"
+            f"<thead><tr>"
+            f"<th style='text-align: left; padding: 4px 8px;'>Наименование</th>"
+            f"<th style='text-align: left; padding: 4px 8px;'>Ед. изм.</th>"
+            f"<th style='text-align: right; padding: 4px 8px;'>Кол-во</th>"
+            f"<th style='text-align: right; padding: 4px 8px;'>Цена</th>"
+            f"<th style='text-align: right; padding: 4px 8px;'>Сумма</th>"
+            f"<th style='text-align: left; padding: 4px 8px;'>Отгрузка</th>"
+            f"<th style='text-align: left; padding: 4px 8px;'>Дата</th>"
+            f"</tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody>"
+            f"<tfoot><tr>"
+            f"<td colspan='4' style='text-align: right; padding: 4px 8px;'><b>Итого:</b></td>"
+            f"<td style='text-align: right; padding: 4px 8px;'><b>{total:.2f}</b></td>"
+            f"<td colspan='2'></td>"
+            f"</tr></tfoot>"
+            f"</table>"
+        )
+        return format_html(html)
