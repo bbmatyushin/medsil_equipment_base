@@ -384,7 +384,6 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         "service__equipment_accounting__equipment_acc_department_equipment_accounting__department__name",
     )
     search_help_text = "Поиск по клиенту или названию оборудования"
-    list_filter = ("contract",)
 
     fieldsets = (
         (
