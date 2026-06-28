@@ -1,0 +1,73 @@
+/* Контейнер поля — растягиваем на всю ширину fieldset */
+.field-spare_part_shipments_display {
+    width: 100%;
+    max-width: none;
+}
+
+.field-spare_part_shipments_display > div {
+    width: 100%;
+    max-width: none;
+    display: block;
+}
+
+/* Прячем label, чтобы таблица занимала всю ширину */
+.field-spare_part_shipments_display label {
+    display: none;
+}
+
+.field-spare_part_shipments_display .readonly {
+    width: 100%;
+    padding: 0;
+}
+
+/* Обёртка таблицы — горизонтальная прокрутка на узких экранах */
+.spare-parts-contract-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Сама таблица */
+.spare-parts-contract-table {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.spare-parts-contract-table thead th {
+    background: var(--darkened-bg, #f8f8f8);
+    color: var(--body-fg, #333);
+    font-weight: 600;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color, #ccc);
+    white-space: nowrap;
+}
+
+.spare-parts-contract-table thead th.num,
+.spare-parts-contract-table tbody td.num {
+    text-align: right;
+}
+
+.spare-parts-contract-table tbody td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--hairline-color, #e8e8e8);
+    vertical-align: middle;
+}
+
+.spare-parts-contract-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Строка "Итого" */
+.spare-parts-contract-table tfoot td {
+    padding: 8px;
+    border-top: 2px solid var(--border-color, #ccc);
+    background: var(--darkened-bg, #f8f8f8);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.spare-parts-contract-table tfoot td.num {
+    text-align: right;
+}

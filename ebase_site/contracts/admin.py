@@ -53,6 +53,10 @@ class ContractAdmin(MainModelAdmin):
     list_filter = ()
     search_fields = ("contract_number", "order_number_1c")
     search_help_text = "Поиск по номеру контракта или номеру заказа 1С"
+
+    class Media:
+        css = {"all": ("contracts/css/contract_spare_parts.css",)}
+
     readonly_fields = (
         "payment_amount",
         "expenses_amount",
@@ -134,9 +138,9 @@ class ContractAdmin(MainModelAdmin):
                         "<tr>"
                         "<td>{}</td>"
                         "<td>{}</td>"
-                        "<td>{}</td>"
-                        "<td>{}</td>"
-                        "<td>{}</td>"
+                        "<td class='num'>{}</td>"
+                        "<td class='num'>{}</td>"
+                        "<td class='num'>{}</td>"
                         "<td>{}</td>"
                         "<td>{}</td>"
                         "</tr>",
@@ -155,24 +159,24 @@ class ContractAdmin(MainModelAdmin):
             return "Нет отгрузок запчастей по контракту."
 
         html = (
-            f"<div style='width: 100%; overflow-x: auto;'>"
-            f"<table style='border-collapse: collapse; width: 100%; font-size: 0.75rem;'>"
-            f"<thead><tr>"
-            f"<th style='text-align: left; padding: 4px 8px;'>Наименование</th>"
-            f"<th style='text-align: left; padding: 4px 8px;'>Ед. изм.</th>"
-            f"<th style='text-align: right; padding: 4px 8px;'>Кол-во</th>"
-            f"<th style='text-align: right; padding: 4px 8px;'>Цена</th>"
-            f"<th style='text-align: right; padding: 4px 8px;'>Сумма</th>"
-            f"<th style='text-align: left; padding: 4px 8px;'>Отгрузка</th>"
-            f"<th style='text-align: left; padding: 4px 8px;'>Дата</th>"
-            f"</tr></thead>"
+            "<div class='spare-parts-contract-wrapper'>"
+            "<table class='spare-parts-contract-table'>"
+            "<thead><tr>"
+            "<th>Наименование</th>"
+            "<th>Ед. изм.</th>"
+            "<th class='num'>Кол-во</th>"
+            "<th class='num'>Цена</th>"
+            "<th class='num'>Сумма</th>"
+            "<th>Отгрузка</th>"
+            "<th>Дата</th>"
+            "</tr></thead>"
             f"<tbody>{''.join(rows)}</tbody>"
-            f"<tfoot><tr>"
-            f"<td colspan='4' style='text-align: right; padding: 4px 8px; font-size: 0.85rem;'><b>Итого:</b></td>"
-            f"<td style='text-align: right; padding: 4px 8px; font-size: 0.85rem;'><b>{total:.2f}</b></td>"
-            f"<td colspan='2'></td>"
-            f"</tr></tfoot>"
-            f"</table>"
-            f"</div>"
+            "<tfoot><tr>"
+            "<td colspan='4' class='num'>Итого:</td>"
+            f"<td class='num'>{total:.2f}</td>"
+            "<td colspan='2'></td>"
+            "</tr></tfoot>"
+            "</table>"
+            "</div>"
         )
         return mark_safe(html)
