@@ -155,7 +155,8 @@ class ContractAdmin(MainModelAdmin):
             return "Нет отгрузок запчастей по контракту."
 
         html = (
-            f"<table style='border-collapse: collapse; width: 100%;'>"
+            f"<div style='width: 100%; overflow-x: auto;'>"
+            f"<table style='border-collapse: collapse; width: 100%; font-size: 0.75rem;'>"
             f"<thead><tr>"
             f"<th style='text-align: left; padding: 4px 8px;'>Наименование</th>"
             f"<th style='text-align: left; padding: 4px 8px;'>Ед. изм.</th>"
@@ -167,10 +168,11 @@ class ContractAdmin(MainModelAdmin):
             f"</tr></thead>"
             f"<tbody>{''.join(rows)}</tbody>"
             f"<tfoot><tr>"
-            f"<td colspan='4' style='text-align: right; padding: 4px 8px;'><b>Итого:</b></td>"
-            f"<td style='text-align: right; padding: 4px 8px;'><b>{total:.2f}</b></td>"
+            f"<td colspan='4' style='text-align: right; padding: 4px 8px; font-size: 0.85rem;'><b>Итого:</b></td>"
+            f"<td style='text-align: right; padding: 4px 8px; font-size: 0.85rem;'><b>{total:.2f}</b></td>"
             f"<td colspan='2'></td>"
             f"</tr></tfoot>"
             f"</table>"
+            f"</div>"
         )
         return mark_safe(html)
