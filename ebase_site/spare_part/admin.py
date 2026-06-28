@@ -3,7 +3,9 @@ from decimal import Decimal
 import logging
 
 from django.contrib import admin
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.db.models import Sum
 from utils import MainModelAdmin
@@ -374,7 +376,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         "shipment_dt",
         "client_shipment",
         "service_equipment",
-        "contract",
+        "contract_link",
         "user_name",
     )
     readonly_fields = ("client_shipment",)
@@ -435,12 +437,20 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
         return equipment
 
+    @admin.display(description="Контракт")
+    def contract_link(self, obj):
+        if obj.contract:
+            url = reverse("admin:contracts_contract_change", args=[obj.contract.id])
+            return format_html('<a href="{}">{}</a>', url, obj.contract.contract_number)
+        return "--"
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # оптимизация: подгружаем связанные объекты и инлайн-запчасти
         return qs.select_related(
             "user",
             "service__equipment_accounting__equipment",  # Добавляем связи для департаментов
+            "contract",
         ).prefetch_related("spare_part", "service")
 
     def get_form(self, request, obj=None, **kwargs):
