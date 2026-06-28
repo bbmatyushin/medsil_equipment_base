@@ -1,23 +1,29 @@
-/* Контейнер поля — растягиваем на всю ширину fieldset */
-.field-spare_part_shipments_display {
+/* Контейнер поля "Запчасти по контракту" — растягиваем на всю ширину fieldset */
+fieldset.module.aligned .form-row.field-spare_part_shipments_display {
     width: 100%;
     max-width: none;
+    box-sizing: border-box;
+    padding-left: 0;
+    padding-right: 0;
 }
 
-.field-spare_part_shipments_display > div {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display > div {
     width: 100%;
     max-width: none;
     display: block;
+    box-sizing: border-box;
 }
 
 /* Прячем label, чтобы таблица занимала всю ширину */
-.field-spare_part_shipments_display label {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display label {
     display: none;
 }
 
-.field-spare_part_shipments_display .readonly {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly {
     width: 100%;
     padding: 0;
+    display: block;
+    box-sizing: border-box;
 }
 
 /* Обёртка таблицы — горизонтальная прокрутка на узких экранах */
@@ -116,23 +122,28 @@
     padding: 0;
 }
 
-/* Finance row and container full width */
-.form-row.field-payment_amount_display {
+/* Finance row and container full width of fieldset */
+fieldset.module.aligned .form-row.field-payment_amount_display {
     width: 100%;
     max-width: none;
+    box-sizing: border-box;
+    padding-left: 0;
+    padding-right: 0;
 }
 
-.form-row.field-payment_amount_display > div {
+fieldset.module.aligned .form-row.field-payment_amount_display > div {
     width: 100%;
     max-width: none;
+    display: block;
+    box-sizing: border-box;
 }
 
-.form-row.field-payment_amount_display .flex-container.form-multiline {
+fieldset.module.aligned .form-row.field-payment_amount_display .flex-container.form-multiline {
     width: 100%;
     max-width: none;
     display: flex;
     gap: 8px;
-    justify-content: space-between;
+    box-sizing: border-box;
 }
 
 @media (max-width: 767px) {
