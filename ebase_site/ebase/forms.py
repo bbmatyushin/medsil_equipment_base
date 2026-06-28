@@ -67,4 +67,6 @@ class ServiceForm(forms.ModelForm):
                 'title': 'Отметьте, если подменное оборудование фактически вернулось в офис. '
                          'Влияет на отображение в столбце «Передано» на странице «Подменное оборудование».'
             }),
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "job_content": forms.Textarea(attrs={"rows": 3}),
         }
