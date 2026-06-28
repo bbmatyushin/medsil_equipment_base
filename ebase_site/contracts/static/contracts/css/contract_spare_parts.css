@@ -116,12 +116,23 @@
     padding: 0;
 }
 
-/* Ensure parent flex container stretches children equally */
-.form-row.field-payment_amount_display .flex-container.form-multiline,
-.form-row:has(.field-payment_amount_display) .flex-container.form-multiline {
+/* Finance row and container full width */
+.form-row.field-payment_amount_display {
     width: 100%;
+    max-width: none;
+}
+
+.form-row.field-payment_amount_display > div {
+    width: 100%;
+    max-width: none;
+}
+
+.form-row.field-payment_amount_display .flex-container.form-multiline {
+    width: 100%;
+    max-width: none;
     display: flex;
     gap: 8px;
+    justify-content: space-between;
 }
 
 @media (max-width: 767px) {
