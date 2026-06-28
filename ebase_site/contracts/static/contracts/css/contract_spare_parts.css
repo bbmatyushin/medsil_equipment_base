@@ -95,14 +95,21 @@ fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly {
     border: 1px solid var(--border-color, #ccc);
     border-radius: 4px;
     padding: 8px 12px;
-    margin-left: 4px;
     flex: 1 1 0;
     min-width: 0;
     text-align: center;
 }
 
-.field-payment_amount_display {
-    margin-left: 8px;
+/* Отступ слева внутри fieldBox-контейнеров */
+.flex-container.form-multiline .fieldBox.field-payment_amount_display,
+.flex-container.form-multiline .fieldBox.field-expenses_amount_display,
+.flex-container.form-multiline .fieldBox.field-debt_display,
+.flex-container.form-multiline .fieldBox.field-profit_display {
+    padding-left: 4px;
+}
+
+.flex-container.form-multiline .fieldBox.field-payment_amount_display {
+    padding-left: 8px;
 }
 
 .field-payment_amount_display .readonly,
