@@ -95,9 +95,14 @@ fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly {
     border: 1px solid var(--border-color, #ccc);
     border-radius: 4px;
     padding: 8px 12px;
+    margin-left: 4px;
     flex: 1 1 0;
     min-width: 0;
     text-align: center;
+}
+
+.field-payment_amount_display {
+    margin-left: 8px;
 }
 
 .field-payment_amount_display .readonly,
