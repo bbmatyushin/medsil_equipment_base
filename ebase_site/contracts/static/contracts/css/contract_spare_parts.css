@@ -100,15 +100,8 @@ fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly {
     text-align: center;
 }
 
-/* Отступ слева внутри fieldBox-контейнеров */
-.flex-container.form-multiline .fieldBox.field-payment_amount_display,
-.flex-container.form-multiline .fieldBox.field-expenses_amount_display,
-.flex-container.form-multiline .fieldBox.field-debt_display,
-.flex-container.form-multiline .fieldBox.field-profit_display {
-    padding-left: 4px;
-}
-
-.flex-container.form-multiline .fieldBox.field-payment_amount_display {
+/* Отступ слева внутри form-multiline */
+.flex-container.form-multiline {
     padding-left: 8px;
 }
 
