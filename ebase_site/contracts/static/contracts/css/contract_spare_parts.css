@@ -78,6 +78,7 @@
     font-weight: 600;
     font-family: monospace;
     white-space: nowrap;
+    color: #666;
 }
 
 .field-payment_amount_display,
@@ -88,9 +89,8 @@
     border: 1px solid var(--border-color, #ccc);
     border-radius: 4px;
     padding: 8px 12px;
-    margin: 0 4px;
-    flex: 1 1 auto;
-    min-width: 120px;
+    flex: 1 1 0;
+    min-width: 0;
     text-align: center;
 }
 
@@ -107,13 +107,21 @@
 .field-debt_display label,
 .field-profit_display label {
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.95rem;
     color: var(--body-quiet-color, #666);
     margin-bottom: 4px;
     text-align: center;
     float: none;
     width: auto;
     padding: 0;
+}
+
+/* Ensure parent flex container stretches children equally */
+.form-row.field-payment_amount_display .flex-container.form-multiline,
+.form-row:has(.field-payment_amount_display) .flex-container.form-multiline {
+    width: 100%;
+    display: flex;
+    gap: 8px;
 }
 
 @media (max-width: 767px) {
@@ -123,6 +131,7 @@
     .field-profit_display {
         margin: 4px 0;
         text-align: left;
+        flex: 1 1 100%;
     }
 
     .field-payment_amount_display label,
