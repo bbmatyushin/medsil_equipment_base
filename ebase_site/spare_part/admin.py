@@ -380,6 +380,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
         "user_name",
     )
     readonly_fields = ("client_shipment",)
+    autocomplete_fields = ("contract",)
     ordering = ("-shipment_dt",)
     search_fields = (
         "service__equipment_accounting__equipment__short_name",
