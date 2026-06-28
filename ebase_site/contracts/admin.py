@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from django.contrib import admin
+from django.db import models
+from django.forms import Textarea
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -33,6 +35,16 @@ class ContractExpenseInline(admin.TabularInline):
     readonly_fields = ("sum", "create_dt")
 
 
+def format_money(value):
+    """Форматирует сумму: 20000.00 -> 20 000,00"""
+    if value is None:
+        return "—"
+    # Python format with comma thousands separator and dot decimal
+    formatted = f"{value:,.2f}"
+    # Convert to Russian style: space thousands, comma decimal
+    return formatted.replace(",", " ").replace(".", ",")
+
+
 @admin.register(Contract)
 class ContractAdmin(MainModelAdmin):
     inlines = (PaymentInline, ContractExpenseInline)
@@ -57,11 +69,15 @@ class ContractAdmin(MainModelAdmin):
     class Media:
         css = {"all": ("contracts/css/contract_spare_parts.css",)}
 
+    formfield_overrides = {
+        models.TextField: {"widget": Textarea(attrs={"rows": 3})},
+    }
+
     readonly_fields = (
-        "payment_amount",
-        "expenses_amount",
-        "debt",
-        "profit",
+        "payment_amount_display",
+        "expenses_amount_display",
+        "debt_display",
+        "profit_display",
         "spare_part_shipments_display",
     )
     fieldsets = (
@@ -95,7 +111,7 @@ class ContractAdmin(MainModelAdmin):
             "Финансы",
             {
                 "fields": (
-                    ("payment_amount", "expenses_amount", "debt", "profit"),
+                    ("payment_amount_display", "expenses_amount_display", "debt_display", "profit_display"),
                 ),
             },
         ),
@@ -180,3 +196,19 @@ class ContractAdmin(MainModelAdmin):
             "</div>"
         )
         return mark_safe(html)
+
+    @admin.display(description="Сумма оплат")
+    def payment_amount_display(self, obj):
+        return mark_safe(f"<span class='finance-value'>{format_money(obj.payment_amount)}</span>")
+
+    @admin.display(description="Затраты")
+    def expenses_amount_display(self, obj):
+        return mark_safe(f"<span class='finance-value'>{format_money(obj.expenses_amount)}</span>")
+
+    @admin.display(description="Долг")
+    def debt_display(self, obj):
+        return mark_safe(f"<span class='finance-value'>{format_money(obj.debt)}</span>")
+
+    @admin.display(description="Прибыль")
+    def profit_display(self, obj):
+        return mark_safe(f"<span class='finance-value'>{format_money(obj.profit)}</span>")

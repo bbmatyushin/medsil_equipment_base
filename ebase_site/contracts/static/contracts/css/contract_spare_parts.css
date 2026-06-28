@@ -71,3 +71,64 @@
 .spare-parts-contract-table tfoot td.num {
     text-align: right;
 }
+
+/* Финансовые показатели */
+.finance-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.field-payment_amount_display,
+.field-expenses_amount_display,
+.field-debt_display,
+.field-profit_display {
+    background: var(--darkened-bg, #f8f8f8);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 0 4px;
+    flex: 1 1 auto;
+    min-width: 120px;
+    text-align: center;
+}
+
+.field-payment_amount_display .readonly,
+.field-expenses_amount_display .readonly,
+.field-debt_display .readonly,
+.field-profit_display .readonly {
+    padding: 0;
+    text-align: center;
+}
+
+.field-payment_amount_display label,
+.field-expenses_amount_display label,
+.field-debt_display label,
+.field-profit_display label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--body-quiet-color, #666);
+    margin-bottom: 4px;
+    text-align: center;
+    float: none;
+    width: auto;
+    padding: 0;
+}
+
+@media (max-width: 767px) {
+    .field-payment_amount_display,
+    .field-expenses_amount_display,
+    .field-debt_display,
+    .field-profit_display {
+        margin: 4px 0;
+        text-align: left;
+    }
+
+    .field-payment_amount_display label,
+    .field-expenses_amount_display label,
+    .field-debt_display label,
+    .field-profit_display label {
+        text-align: left;
+    }
+}
