@@ -282,6 +282,7 @@ label[for$="search_button"] {
 .selected-spare-parts-table tfoot.spare-parts-total td {
     border-top: 2px solid var(--border-color, #ccc);
     padding: 10px;
+    font-size: 0.85rem;
 }
 
 .selected-spare-parts-table .field-total-label {
