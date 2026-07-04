@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib import admin
+from django.contrib.admin.widgets import AutocompleteSelect
 from django.db import models
 from django.forms import Textarea
 from django.urls import reverse
@@ -9,6 +10,16 @@ from django.utils.safestring import mark_safe
 
 from utils import MainModelAdmin
 from .models import Contract, Payment, ContractExpense
+
+
+class ClientNameOnlyAutocompleteSelect(AutocompleteSelect):
+    """Autocomplete-виджет клиента, отображающий только наименование без ИНН."""
+
+    def get_result_label(self, result):
+        return result.name
+
+    def label_from_instance(self, obj):
+        return obj.name
 
 
 class PaymentInline(admin.TabularInline):
@@ -52,7 +63,7 @@ class ContractAdmin(MainModelAdmin):
     date_hierarchy = "conclusion_date"
     list_display = (
         "contract_number",
-        "client",
+        "client_display",
         "conclusion_date",
         "contract_amount",
         "payment_amount",
@@ -63,8 +74,13 @@ class ContractAdmin(MainModelAdmin):
         "payment_status",
     )
     list_filter = ()
-    search_fields = ("contract_number", "order_number_1c")
-    search_help_text = "Поиск по номеру контракта или номеру заказа 1С"
+    search_fields = (
+        "contract_number",
+        "order_number_1c",
+        "client__name",
+        "client__inn",
+    )
+    search_help_text = "Поиск по номеру контракта, номеру заказа 1С, наименованию клиента или ИНН"
 
     class Media:
         css = {"all": ("contracts/css/contract_spare_parts.css",)}
@@ -123,6 +139,18 @@ class ContractAdmin(MainModelAdmin):
             .get_queryset(request)
             .select_related("client", "client__city")
         )
+
+    @admin.display(description="Клиент")
+    def client_display(self, obj):
+        return obj.client.name if obj.client else "—"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "client":
+            kwargs["widget"] = ClientNameOnlyAutocompleteSelect(
+                db_field.remote_field,
+                self.admin_site,
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="Запчасти по контракту")
     def spare_part_shipments_display(self, obj):
