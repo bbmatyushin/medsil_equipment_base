@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
-from clients.models import Client, Department
+from clients.models import Client
 from directory.models import City
 from contracts.models import Contract, Payment, ContractExpense
 
@@ -21,11 +21,8 @@ class ContractModelTests(TestCase):
         self.client_obj = Client.objects.create(
             name="Тестовый клиент", city=self.city, inn="123456789001"
         )
-        self.department = Department.objects.create(
-            name="Главный офис", client=self.client_obj, city=self.city
-        )
         self.contract = Contract.objects.create(
-            client=self.department,
+            client=self.client_obj,
             contract_number="CNT-001",
             conclusion_date="2026-01-15",
             contract_amount=100000,
@@ -33,7 +30,7 @@ class ContractModelTests(TestCase):
 
     def test_contract_creation(self):
         self.assertEqual(self.contract.contract_number, "CNT-001")
-        self.assertEqual(str(self.contract), "CNT-001 — Главный офис")
+        self.assertEqual(str(self.contract), "CNT-001 — Тестовый клиент")
 
     def test_payment_recalc(self):
         Payment.objects.create(contract=self.contract, date="2026-01-20", amount=30000)

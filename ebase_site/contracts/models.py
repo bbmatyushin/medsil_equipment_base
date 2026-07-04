@@ -45,12 +45,12 @@ class Contract(ContractModelBase):
     ]
 
     client = models.ForeignKey(
-        "clients.Department",
+        "clients.Client",
         on_delete=models.RESTRICT,
         related_name="contract_client",
         verbose_name="Клиент",
-        db_comment="ID подразделения клиента",
-        help_text="Подразделение клиента, для которого заключён контракт",
+        db_comment="ID клиента",
+        help_text="Клиент, для которого заключён контракт",
     )
     contract_number = models.CharField(
         max_length=255,
