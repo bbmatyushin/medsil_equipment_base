@@ -22,7 +22,9 @@ class CreateServiceAkt:
                  template_path: Path,
                  accessories: QuerySet,
                  replacement_equipment: str,
-                 accessories_with_quantity: list):
+                 accessories_with_quantity: list,
+                 service_type_name: str = "",
+                 contract_number: str = ""):
         self.akt = Document(str(template_path))
         self.file_name = template_path.name
         self.client = client
@@ -32,6 +34,8 @@ class CreateServiceAkt:
         self.accessories = accessories
         self.replacement_equipment = replacement_equipment
         self.accessories_with_quantity = accessories_with_quantity
+        self.service_type_name = service_type_name
+        self.contract_number = contract_number
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
@@ -67,7 +71,11 @@ class CreateServiceAkt:
 
             if i == 2: self.main_table(table)  # таблица №2
 
-            if i == 3: self.description_update(table)
+            if i == 3:
+                if self.file_name == "service_akt_MEDSIL.docx":
+                    self.medsil_description_table_update(table)
+                else:
+                    self.description_update(table)
 
             if i == 4:
                 if self.file_name == "service_akt_MEDSIL.docx":
@@ -126,16 +134,77 @@ class CreateServiceAkt:
                         paragraph.runs[0].font.size = Pt(12)  # задаем разме шрифта
 
     def description_update(self, table: Table):
-        """Обновление описания работ"""
+        """Обновление описания работ (для шаблонов Akt_in_service/Akt_from_service)"""
         for n, paragraph in self.cell_paragraph_gen(table):
             if n == 4:
                 paragraph.text = self.description
 
+    def medsil_description_table_update(self, table: Table):
+        """Обновление таблицы с наименованием работ, договором и описанием
+        неисправности для шаблона service_akt_MEDSIL.docx"""
+        for _, paragraph in self.cell_paragraph_gen(table):
+            text = paragraph.text
+            if "{{ SERVICE_TYPE }}" in text:
+                self._replace_placeholder_in_paragraph(
+                    paragraph, "{{ SERVICE_TYPE }}", self.service_type_name
+                )
+            elif "{{ CONTRACT_NUMBER }}" in text:
+                self._replace_placeholder_in_paragraph(
+                    paragraph, "{{ CONTRACT_NUMBER }}", self.contract_number
+                )
+            elif "{{ SERVICE_DESCRIPTION }}" in text:
+                self._replace_placeholder_in_paragraph(
+                    paragraph, "{{ SERVICE_DESCRIPTION }}", self.description
+                )
+
     def job_content_update(self, table):
         """Описание проведенных работ"""
-        for n, paragraph in self.cell_paragraph_gen(table):
-            if n == 1:
-                paragraph.text = self.job_content
+        for _, paragraph in self.cell_paragraph_gen(table):
+            if "{{ SERVICE_JOB_CONTENT }}" in paragraph.text:
+                self._replace_placeholder_in_paragraph(
+                    paragraph, "{{ SERVICE_JOB_CONTENT }}", self.job_content
+                )
+
+    @staticmethod
+    def _replace_placeholder_in_paragraph(paragraph, placeholder: str, value: str):
+        """Заменяет placeholder в параграфе на значение, сохраняя окружающий текст.
+
+        Если значение пустое — placeholder удаляется. Переносы строк в значении
+        преобразуются в разрывы строк Word. Подставляемое значение выводится
+        обычным шрифтом (не жирным), чтобы отличаться от заголовка поля.
+        """
+        full_text = paragraph.text
+        if placeholder not in full_text:
+            return
+
+        # Сохраняем форматирование первого run для окружающего текста (заголовка)
+        font_size = None
+        bold = None
+        if paragraph.runs:
+            source_run = paragraph.runs[0]
+            font_size = source_run.font.size
+            bold = source_run.font.bold
+
+        parts = full_text.split(placeholder)
+        paragraph.clear()
+
+        for idx, part in enumerate(parts):
+            if idx > 0 and value:
+                lines = value.split("\n")
+                for line_idx, line in enumerate(lines):
+                    run = paragraph.add_run(line)
+                    if font_size is not None:
+                        run.font.size = font_size
+                    # Значение поля не должно быть жирным
+                    run.font.bold = False
+                    if line_idx < len(lines) - 1:
+                        run.add_break()
+
+            run = paragraph.add_run(part)
+            if font_size is not None:
+                run.font.size = font_size
+            if bold is not None:
+                run.font.bold = bold
 
     def spare_part_table(self, table: Table, rows_data: list):
         """Обновляем данные в таблице Замененные детали.
@@ -388,6 +457,8 @@ def create_service_atk(obj: Service, akt_name: str):
     }
     description = obj.description.replace("\r\n", "\n") if obj.description else ''
     job_content = obj.job_content.replace("\r\n", "\n") if obj.job_content else ''
+    service_type_name = obj.service_type.name if obj.service_type else ''
+    contract_number = obj.contract.contract_number if obj.contract else ''
     accessories = \
         obj.replacement_equipment.accessories.values_list("name", flat=True) if obj.replacement_equipment else []
     replacement_equipment = \
@@ -420,7 +491,9 @@ def create_service_atk(obj: Service, akt_name: str):
 
     create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
                                   template_path, accessories, replacement_equipment,
-                                  accessories_with_quantity,)
+                                  accessories_with_quantity,
+                                  service_type_name=service_type_name,
+                                  contract_number=contract_number,)
     create_akt.update_tables()
 
     if akt_name == 'serviceAkt':
@@ -436,4 +509,13 @@ def create_service_atk(obj: Service, akt_name: str):
 
 
 if __name__ == '__main__':
-    CreateServiceAkt(client={}).update_tables()
+    CreateServiceAkt(
+        client={},
+        job_content='',
+        description='',
+        spare_parts=[],
+        template_path=Path('.'),
+        accessories=[],
+        replacement_equipment='',
+        accessories_with_quantity=[],
+    ).update_tables()

@@ -513,7 +513,7 @@ class ServiceAdmin(MainModelAdmin):
         (
             "Описание работ",
             {
-                "fields": ("reason", "description", "job_content", "contract"),
+                "fields": ("reason", "description", "job_content"),
             },
         ),
         ("Дата работ", {"fields": (("beg_dt", "end_dt"),)}),
@@ -775,6 +775,7 @@ class ServiceAdmin(MainModelAdmin):
             fieldsets[0][1]["fields"] = (
                 "equipment_accounting",
                 "service_type",
+                "contract",
                 "spare_part",
             )
         else:
@@ -785,6 +786,7 @@ class ServiceAdmin(MainModelAdmin):
                 ),
                 "equipment_accounting",
                 "service_type",
+                "contract",
                 "spare_part",
             )
 

@@ -457,8 +457,8 @@ class Service(EbaseModel):
         null=True,
         blank=False,
         related_name="service_service_type",
-        verbose_name="Типа ремонта",
-        db_comment="ID Типа ремонта",
+        verbose_name="Наименование работ",
+        db_comment="ID Наименования работ",
     )
     equipment_accounting = models.ForeignKey(
         "EquipmentAccounting",
