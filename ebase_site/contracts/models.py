@@ -73,10 +73,11 @@ class Contract(ContractModelBase):
         verbose_name="Дата окончания выполнения услуг",
         db_comment="Дата окончания выполнения услуг по контракту",
     )
-    documentation_link = models.URLField(
+    documentation_link = models.CharField(
+        max_length=500,
         blank=True,
         verbose_name="Ссылка на документацию",
-        db_comment="Внешняя ссылка на документы (OneDrive/SharePoint и т.п.)",
+        db_comment="Ссылка на папку с документацией на локальном диске",
     )
     period = models.CharField(
         max_length=255,

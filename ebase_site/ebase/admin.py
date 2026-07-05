@@ -521,7 +521,6 @@ class ServiceAdmin(MainModelAdmin):
             "Подменное оборудование",
             {
                 "fields": ("replacement_equipment", "returned_to_office"),
-                "description": "Отметьте, если подменное оборудование фактически вернулось в офис",
             },
         ),
         (
