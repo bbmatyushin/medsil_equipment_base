@@ -548,6 +548,16 @@ class Service(EbaseModel):
         db_comment="Для хранения данных выбранного контактного лица. "
         'Формат - {contact_person_id: id, fio: "ФИО"}',
     )
+    engineer = models.ForeignKey(
+        "directory.Engineer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_engineer",
+        verbose_name="Инженер",
+        db_comment="ID инженера",
+        help_text="Инженер, выполняющий ремонт",
+    )
     accessories = models.ManyToManyField(
         "spare_part.SparePartAccessories",
         through="ServiceAccessories",

@@ -528,7 +528,7 @@ class ServiceAdmin(MainModelAdmin):
             "Документы по ремонту",
             {
                 "fields": (
-                    "contact_person",
+                    ("contact_person", "engineer"),
                     "accept_in_akt_url",
                     "service_akt_url",
                     "accept_from_akt_url",
@@ -555,6 +555,7 @@ class ServiceAdmin(MainModelAdmin):
                 "equipment_accounting__equipment",
                 "service_type",
                 "user",
+                "engineer",
                 "replacement_equipment",
                 "replacement_equipment__equipment",
             )
@@ -853,6 +854,12 @@ class ServiceAdmin(MainModelAdmin):
         else:
             form.base_fields["contact_person"].queryset = DeptContactPers.objects.none()
 
+        # При создании новой записи подставляем инженера, связанного с текущим пользователем
+        if obj is None:
+            engineer = getattr(request.user, "engineer_company_user", None)
+            if engineer:
+                form.base_fields["engineer"].initial = engineer
+
         return form
 
     def get_changeform_initial_data(self, request):
@@ -951,6 +958,9 @@ class ServiceAdmin(MainModelAdmin):
             kwargs["queryset"] = DeptContactPers.objects.select_related(
                 "department", "position"
             ).all()
+        elif db_field.name == "engineer":
+            # Оптимизируем queryset для инженеров
+            kwargs["queryset"] = Engineer.objects.all()
         elif db_field.name == "replacement_equipment":
             # Ограничиваем queryset для подменного оборудования - только те, которые не связаны с активными сервисами
             # Исключаем подменное оборудование, которое уже связано с сервисами, где ремонт еще не завершен
