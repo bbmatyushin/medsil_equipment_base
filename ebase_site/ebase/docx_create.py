@@ -24,7 +24,8 @@ class CreateServiceAkt:
                  replacement_equipment: str,
                  accessories_with_quantity: list,
                  service_type_name: str = "",
-                 contract_number: str = ""):
+                 contract_number: str = "",
+                 engineer_name: str = ""):
         self.akt = Document(str(template_path))
         self.file_name = template_path.name
         self.client = client
@@ -36,6 +37,7 @@ class CreateServiceAkt:
         self.accessories_with_quantity = accessories_with_quantity
         self.service_type_name = service_type_name
         self.contract_number = contract_number
+        self.engineer_name = engineer_name
         self.save_file_path = self.create_save_path()
 
     def create_save_path(self) -> str:
@@ -95,6 +97,8 @@ class CreateServiceAkt:
             if i == 6 and self.file_name == "Akt_in_service.docx" \
                     and self.accessories:  # Табличка с перечнем коплектующих для подменного оборудования
                 self.fill_accessories_table(table)
+
+        self.update_engineer_paragraphs()
 
         self.akt.save(self.save_file_path)
 
@@ -163,6 +167,16 @@ class CreateServiceAkt:
             if "{{ SERVICE_JOB_CONTENT }}" in paragraph.text:
                 self._replace_placeholder_in_paragraph(
                     paragraph, "{{ SERVICE_JOB_CONTENT }}", self.job_content
+                )
+
+    def update_engineer_paragraphs(self):
+        """Заменяет placeholder {{ ENGINEER }} в абзацах документа."""
+        if self.file_name != "service_akt_MEDSIL.docx":
+            return
+        for paragraph in self.akt.paragraphs:
+            if "{{ ENGINEER }}" in paragraph.text:
+                self._replace_placeholder_in_paragraph(
+                    paragraph, "{{ ENGINEER }}", self.engineer_name
                 )
 
     @staticmethod
@@ -489,11 +503,14 @@ def create_service_atk(obj: Service, akt_name: str):
     #TODO: accessories можно создать таким же списком как и accessories_with_quantity,
     # чтобы использовать один метод для заполнения таблицы
 
+    engineer_name = obj.engineer.name if obj.engineer else "_________________"
+
     create_akt = CreateServiceAkt(client, job_content, description, spare_parts,
                                   template_path, accessories, replacement_equipment,
                                   accessories_with_quantity,
                                   service_type_name=service_type_name,
-                                  contract_number=contract_number,)
+                                  contract_number=contract_number,
+                                  engineer_name=engineer_name,)
     create_akt.update_tables()
 
     if akt_name == 'serviceAkt':
