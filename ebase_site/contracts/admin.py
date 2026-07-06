@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect
 from django.db import models
+from django.db.models import Sum
 from django.forms import Textarea
 from django.urls import reverse
 from django.utils.html import format_html
@@ -139,6 +140,29 @@ class ContractAdmin(MainModelAdmin):
             .get_queryset(request)
             .select_related("client", "client__city")
         )
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        try:
+            cl = response.context_data["cl"]
+        except (AttributeError, KeyError):
+            return response
+
+        totals = cl.queryset.aggregate(
+            contract_amount=Sum("contract_amount"),
+            payment_amount=Sum("payment_amount"),
+            expenses_amount=Sum("expenses_amount"),
+            debt=Sum("debt"),
+            profit=Sum("profit"),
+        )
+        response.context_data["totals"] = {
+            "contract_amount": format_money(totals.get("contract_amount")),
+            "payment_amount": format_money(totals.get("payment_amount")),
+            "expenses_amount": format_money(totals.get("expenses_amount")),
+            "debt": format_money(totals.get("debt")),
+            "profit": format_money(totals.get("profit")),
+        }
+        return response
 
     @admin.display(description="Клиент")
     def client_display(self, obj):

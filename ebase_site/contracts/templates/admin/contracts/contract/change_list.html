@@ -1,0 +1,36 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_list static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'contracts/css/contract_changelist.css' %}">
+{% endblock %}
+
+{% block result_list %}
+{{ block.super }}
+{% if totals %}
+<div class="contract-totals-wrapper">
+  <h3>Итого по отображаемым контрактам</h3>
+  <table class="contract-totals-table">
+    <thead>
+      <tr>
+        <th>Сумма контракта</th>
+        <th>Сумма оплат</th>
+        <th>Затраты</th>
+        <th>Долг</th>
+        <th>Прибыль</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num" data-label="Сумма контракта">{{ totals.contract_amount }}</td>
+        <td class="num" data-label="Сумма оплат">{{ totals.payment_amount }}</td>
+        <td class="num" data-label="Затраты">{{ totals.expenses_amount }}</td>
+        <td class="num" data-label="Долг">{{ totals.debt }}</td>
+        <td class="num" data-label="Прибыль">{{ totals.profit }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

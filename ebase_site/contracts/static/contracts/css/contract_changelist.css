@@ -1,0 +1,63 @@
+.contract-totals-wrapper {
+    margin-top: 20px;
+    padding: 12px 15px;
+    background: var(--darkened-bg, #f8f8f8);
+    border: 1px solid var(--hairline-color, #e8e8e8);
+    border-radius: 4px;
+}
+
+.contract-totals-wrapper h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.contract-totals-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.contract-totals-table th,
+.contract-totals-table td {
+    padding: 5px 10px;
+    text-align: right;
+    border: 1px solid var(--border-color, #e0e0e0);
+}
+
+.contract-totals-table thead th {
+    background: var(--header-bg, #f0f0f0);
+    font-weight: 600;
+    color: var(--header-link-color, var(--body-fg, #333));
+    font-size: 0.6875rem;
+    line-height: normal;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: middle;
+    height: 32px;
+    padding: 8px 12px !important;
+    box-sizing: border-box;
+}
+
+.contract-totals-table td {
+    font-family: "Courier New", Courier, monospace;
+    white-space: nowrap;
+}
+
+.contract-totals-table th:first-child,
+.contract-totals-table td:first-child {
+    text-align: right;
+}
+
+/* Mobile: horizontal scroll inside the wrapper instead of overflowing the page. */
+@media (max-width: 600px) {
+    .contract-totals-wrapper {
+        padding: 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .contract-totals-table {
+        min-width: 500px;
+    }
+}
