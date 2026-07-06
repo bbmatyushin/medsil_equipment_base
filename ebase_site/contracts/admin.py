@@ -147,7 +147,7 @@ class ContractAdmin(MainModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "client":
             kwargs["widget"] = ClientNameOnlyAutocompleteSelect(
-                db_field.remote_field,
+                db_field,
                 self.admin_site,
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
