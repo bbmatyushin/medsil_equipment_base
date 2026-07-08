@@ -72,9 +72,9 @@ class ContractAdmin(MainModelAdmin):
         "debt",
         "profit",
         "services_provided",
-        "payment_status",
+        "payment_status_colored",
     )
-    list_filter = ()
+    list_filter = ("payment_status",)
     search_fields = (
         "contract_number",
         "order_number_1c",
@@ -84,7 +84,7 @@ class ContractAdmin(MainModelAdmin):
     search_help_text = "Поиск по номеру контракта, номеру заказа 1С, наименованию клиента или ИНН"
 
     class Media:
-        css = {"all": ("contracts/css/contract_spare_parts.css",)}
+        css = {"all": ("contracts/css/contract_changelist.css", "contracts/css/contract_spare_parts.css",)}
 
     formfield_overrides = {
         models.TextField: {"widget": Textarea(attrs={"rows": 3})},
@@ -114,7 +114,7 @@ class ContractAdmin(MainModelAdmin):
         (
             "Статусы и примечание",
             {
-                "fields": ("services_provided", "payment_status", "note"),
+                "fields": ("services_provided", "note"),
             },
         ),
         (
@@ -163,6 +163,16 @@ class ContractAdmin(MainModelAdmin):
             "profit": format_money(totals.get("profit")),
         }
         return response
+
+    @admin.display(description="Оплата?", ordering="payment_status")
+    def payment_status_colored(self, obj):
+        status = obj.payment_status
+        label = obj.get_payment_status_display()
+        return format_html(
+            '<span class="payment-status-{}">{}</span>',
+            status,
+            label,
+        )
 
     @admin.display(description="Клиент")
     def client_display(self, obj):

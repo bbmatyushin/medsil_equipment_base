@@ -13,7 +13,7 @@ from spare_part.models import SparePartShipmentV2, SparePartShipmentM2M
 
 
 def recalc_contract(contract):
-    """Пересчитывает payment_amount, expenses_amount, debt, profit."""
+    """Пересчитывает payment_amount, expenses_amount, debt, profit и статус оплаты."""
     if contract is None:
         return
 
@@ -30,7 +30,16 @@ def recalc_contract(contract):
     contract.expenses_amount = expenses_amount
     contract.debt = contract.contract_amount - payment_amount
     contract.profit = payment_amount - expenses_amount
-    contract.save(update_fields=["payment_amount", "expenses_amount", "debt", "profit"])
+    contract.update_payment_status()
+    contract.save(
+        update_fields=[
+            "payment_amount",
+            "expenses_amount",
+            "debt",
+            "profit",
+            "payment_status",
+        ]
+    )
 
 
 @receiver(post_save, sender=Payment)

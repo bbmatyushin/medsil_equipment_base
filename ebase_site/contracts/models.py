@@ -103,7 +103,8 @@ class Contract(ContractModelBase):
         choices=PAYMENT_STATUS_CHOICES,
         default="no_receipts",
         verbose_name="Оплата?",
-        db_comment="Статус оплаты. Заполняется вручную, не выводится автоматически из суммы оплат.",
+        db_comment="Статус оплаты. Заполняется автоматически на основе суммы оплат и суммы контракта.",
+        help_text="Заполняется автоматически на основе суммы оплат и суммы контракта.",
     )
     note = models.TextField(
         blank=True, verbose_name="Примечание", db_comment="Примечание к контракту"
@@ -157,6 +158,25 @@ class Contract(ContractModelBase):
 
     def __repr__(self):
         return f"<Contract {self.contract_number=!r}>"
+
+    def update_payment_status(self):
+        """Устанавливает payment_status на основе суммы оплат и суммы контракта."""
+        payment_amount = self.payment_amount or Decimal("0")
+        contract_amount = self.contract_amount or Decimal("0")
+
+        if payment_amount == 0:
+            self.payment_status = "no_receipts"
+        elif payment_amount < contract_amount:
+            self.payment_status = "partial"
+        else:
+            self.payment_status = "paid"
+
+    def save(self, *args, **kwargs):
+        self.update_payment_status()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"payment_status"}
+        super().save(*args, **kwargs)
 
 
 class Payment(ContractModelBase):

@@ -42,8 +42,46 @@ class ContractModelTests(TestCase):
         self.assertEqual(self.contract.payment_amount, 30000)
         self.assertEqual(self.contract.debt, 70000)
         self.assertEqual(self.contract.profit, 30000)
+        self.assertEqual(self.contract.payment_status, "partial")
 
-    def test_contract_expense_recalc(self):
+    def test_payment_status_no_receipts_on_creation(self):
+        self.assertEqual(self.contract.payment_status, "no_receipts")
+
+    def test_payment_status_partial(self):
+        Payment.objects.create(contract=self.contract, date="2026-01-20", amount=30000)
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_status, "partial")
+
+    def test_payment_status_paid(self):
+        Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("100000.00")
+        )
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_status, "paid")
+
+    def test_payment_status_paid_when_overpaid(self):
+        Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("150000.00")
+        )
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_status, "paid")
+
+    def test_payment_status_resets_after_payment_delete(self):
+        payment = Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("100000.00")
+        )
+        payment.delete()
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_status, "no_receipts")
+
+    def test_payment_status_updates_when_contract_amount_changes(self):
+        Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("100000.00")
+        )
+        self.contract.contract_amount = Decimal("200000.00")
+        self.contract.save()
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_status, "partial")
         expense = ContractExpense.objects.create(
             contract=self.contract, expense_type="business_trip", quantity=2, cost=5000
         )
@@ -142,6 +180,45 @@ class ContractAdminWidgetTests(SimpleTestCase):
         self.assertEqual(attrs["data-app-label"], "contracts")
         self.assertEqual(attrs["data-model-name"], "contract")
         self.assertEqual(attrs["data-field-name"], "client")
+
+
+class ContractAdminFormTests(TestCase):
+    """Проверки отображения и фильтрации поля payment_status в админке."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="admin_form_tester", password="pass"
+        )
+
+    def test_payment_status_excluded_on_add_form(self):
+        request = RequestFactory().get("/admin/contracts/contract/add/")
+        request.user = self.user
+        model_admin = ContractAdmin(Contract, admin.site)
+        form = model_admin.get_form(request)()
+        self.assertNotIn("payment_status", form.fields)
+
+    def test_payment_status_included_on_change_form(self):
+        city, _ = City.objects.get_or_create(
+            name="Москва", region=None, defaults={"region": None}
+        )
+        client_obj = Client.objects.create(
+            name="Тестовый клиент", city=city, inn="123456789001"
+        )
+        contract = Contract.objects.create(
+            client=client_obj,
+            contract_number="CNT-FORM-001",
+            conclusion_date="2026-01-15",
+            contract_amount=Decimal("100000.00"),
+        )
+
+        request = RequestFactory().get(f"/admin/contracts/contract/{contract.pk}/change/")
+        request.user = self.user
+        model_admin = ContractAdmin(Contract, admin.site)
+        form = model_admin.get_form(request, obj=contract)()
+        self.assertIn("payment_status", form.fields)
+
+    def test_payment_status_list_filter_enabled(self):
+        self.assertIn("payment_status", ContractAdmin.list_filter)
 
 
 class ContractAdminChangelistTotalsTests(TestCase):

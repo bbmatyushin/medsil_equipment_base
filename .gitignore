@@ -27,8 +27,7 @@ ebase_site/logs/*.log*
 *.xlsx*
 docs/*
 !docs/superpowers/
-!docs/superpowers/specs/
-!docs/superpowers/specs/**
+docs/superpowers/specs/
 
 
 

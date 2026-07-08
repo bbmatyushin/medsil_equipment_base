@@ -1,3 +1,14 @@
+td:has(> .payment-status-no_receipts) {
+    background-color: var(--message-error-bg, #ffefef) !important;
+}
+
+td:has(> .payment-status-partial) {
+    background-color: var(--message-warning-bg, #ffc) !important;
+}
+
+td:has(> .payment-status-paid) {
+    background-color: var(--message-success-bg, #dfd) !important;
+}
 .contract-totals-wrapper {
     margin-top: 20px;
     padding: 12px 15px;
