@@ -151,7 +151,10 @@ class BusinessTrip(EbaseModel):
         self.allowance_amount = self._calc_allowance()
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs["update_fields"] = set(update_fields) | {"allowance_amount"}
+            kwargs["update_fields"] = set(update_fields) | {
+                "doc_number",
+                "allowance_amount",
+            }
         super().save(*args, **kwargs)
 
 
