@@ -1,6 +1,14 @@
+from datetime import date
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 
-from business_trip.models import ExpenseType
+from business_trip.models import BusinessTrip, ExpenseType
+
+User = get_user_model()
 
 
 class ExpenseTypeTests(TestCase):
@@ -11,20 +19,8 @@ class ExpenseTypeTests(TestCase):
 
     def test_name_unique(self):
         ExpenseType.objects.create(name="Гостиница")
-        from django.db import IntegrityError
-
         with self.assertRaises(IntegrityError):
             ExpenseType.objects.create(name="Гостиница")
-
-
-from datetime import date
-from decimal import Decimal
-
-from django.contrib.auth import get_user_model
-
-from business_trip.models import BusinessTrip
-
-User = get_user_model()
 
 
 class BusinessTripAllowanceTests(TestCase):
@@ -56,8 +52,10 @@ class BusinessTripAllowanceTests(TestCase):
         trip.refresh_from_db()
         self.assertEqual(trip.allowance_amount, Decimal("3500.00"))
 
-
-from django.core.exceptions import ValidationError
+    def test_allowance_zero_for_inverted_dates(self):
+        # save() обходит clean() — проверяем защитную ветку _calc_allowance
+        trip = self._make(date(2026, 3, 19), date(2026, 3, 16))
+        self.assertEqual(trip.allowance_amount, Decimal("0"))
 
 
 class BusinessTripDocNumberTests(TestCase):

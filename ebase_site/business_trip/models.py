@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
 from django.db import models
 
 from ebase.models import EbaseModel
@@ -129,6 +128,8 @@ class BusinessTrip(EbaseModel):
         return Decimal(days) * Decimal(DAILY_ALLOWANCE_RATE)
 
     def _assign_doc_number(self):
+        # max+1 без блокировки: допустимо для внутренней админки с единичными
+        # одновременными пользователями; уникальность гарантирует constraint.
         if self.doc_number is None:
             max_num = (
                 BusinessTrip.objects.aggregate(max_num=models.Max("doc_number"))[
