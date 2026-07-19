@@ -52,3 +52,48 @@ class BusinessTripAllowanceTests(TestCase):
         trip.save(update_fields=["end_dt"])
         trip.refresh_from_db()
         self.assertEqual(trip.allowance_amount, Decimal("3500.00"))
+
+
+from django.core.exceptions import ValidationError
+
+
+class BusinessTripDocNumberTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+
+    def test_doc_number_auto_first(self):
+        trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+        self.assertEqual(trip.doc_number, 1)
+
+    def test_doc_number_auto_increment(self):
+        first = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+        second = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 4, 1), end_dt=date(2026, 4, 3)
+        )
+        self.assertEqual(first.doc_number, 1)
+        self.assertEqual(second.doc_number, 2)
+
+    def test_doc_number_manual_not_overwritten(self):
+        trip = BusinessTrip.objects.create(
+            employee=self.employee,
+            beg_dt=date(2026, 3, 16),
+            end_dt=date(2026, 3, 19),
+            doc_number=100,
+        )
+        self.assertEqual(trip.doc_number, 100)
+
+
+class BusinessTripValidationTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+
+    def test_end_before_beg_raises(self):
+        trip = BusinessTrip(
+            employee=self.employee, beg_dt=date(2026, 3, 19), end_dt=date(2026, 3, 16)
+        )
+        with self.assertRaises(ValidationError):
+            trip.clean()
