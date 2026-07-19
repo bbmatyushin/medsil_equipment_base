@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "directory.apps.DirectoryConfig",
     "spare_part.apps.SparePartConfig",
     "contracts.apps.ContractsConfig",
+    "business_trip.apps.BusinessTripConfig",
     "debug_toolbar",
     "django.contrib.admin",
     "django.contrib.auth",
