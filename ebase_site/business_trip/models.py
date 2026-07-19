@@ -64,7 +64,9 @@ class BusinessTrip(EbaseModel):
         db_comment="Номер документа (для приказа о командировке)",
         help_text="Заполняется автоматически (max+1). Можно изменить вручную.",
     )
-    beg_dt = models.DateField(verbose_name="Дата выезда", db_comment="Дата выезда в командировку")
+    beg_dt = models.DateField(
+        verbose_name="Дата выезда", db_comment="Дата выезда в командировку"
+    )
     end_dt = models.DateField(
         verbose_name="Дата возвращения", db_comment="Дата возвращения из командировки"
     )
@@ -129,7 +131,10 @@ class BusinessTrip(EbaseModel):
     def _assign_doc_number(self):
         if self.doc_number is None:
             max_num = (
-                BusinessTrip.objects.aggregate(max_num=models.Max("doc_number"))["max_num"] or 0
+                BusinessTrip.objects.aggregate(max_num=models.Max("doc_number"))[
+                    "max_num"
+                ]
+                or 0
             )
             self.doc_number = max_num + 1
 

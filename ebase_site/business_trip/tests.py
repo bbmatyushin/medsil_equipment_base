@@ -12,6 +12,7 @@ class ExpenseTypeTests(TestCase):
     def test_name_unique(self):
         ExpenseType.objects.create(name="Гостиница")
         from django.db import IntegrityError
+
         with self.assertRaises(IntegrityError):
             ExpenseType.objects.create(name="Гостиница")
 
@@ -31,7 +32,9 @@ class BusinessTripAllowanceTests(TestCase):
         self.employee = User.objects.create_user(username="ivanov", password="pass")
 
     def _make(self, beg, end, **kwargs):
-        return BusinessTrip.objects.create(employee=self.employee, beg_dt=beg, end_dt=end, **kwargs)
+        return BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=beg, end_dt=end, **kwargs
+        )
 
     def test_allowance_four_days(self):
         # 16.03–19.03 — 4 дня включительно
