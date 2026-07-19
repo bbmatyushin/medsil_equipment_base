@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from business_trip.models import (
     BusinessTrip,
     BusinessTripDestination,
+    BusinessTripExpense,
     ExpenseType,
 )
 from clients.models import Client, Department
@@ -153,3 +154,33 @@ class BusinessTripDestinationTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             dest.clean()
+
+
+class BusinessTripExpenseTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+        self.expense_type = ExpenseType.objects.create(name="Такси")
+
+    def test_create_expense(self):
+        expense = BusinessTripExpense.objects.create(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 16),
+            amount=Decimal("500.00"),
+            comment="Такси до гостиницы",
+        )
+        self.assertEqual(expense.amount, Decimal("500.00"))
+        self.assertEqual(str(self.trip.expenses.first()), str(expense))
+
+    def test_negative_amount_raises(self):
+        expense = BusinessTripExpense(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 16),
+            amount=Decimal("-100.00"),
+        )
+        with self.assertRaises(ValidationError):
+            expense.full_clean()

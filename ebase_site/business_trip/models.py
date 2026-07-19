@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from ebase.models import EbaseModel
@@ -218,3 +219,47 @@ class BusinessTripDestination(EbaseModel):
                 )
         if errors:
             raise ValidationError(errors)
+
+
+class BusinessTripExpense(EbaseModel):
+    """Затрата по командировке (чек).
+
+    Привязка к городу НЕ хранится — определяется по дате затраты через пункты
+    командировки (см. спеку, раздел «Атрибуция затрат к городам»).
+    """
+
+    business_trip = models.ForeignKey(
+        BusinessTrip,
+        on_delete=models.CASCADE,
+        related_name="expenses",
+        verbose_name="Командировка",
+        db_comment="ID командировки",
+    )
+    expense_type = models.ForeignKey(
+        ExpenseType,
+        on_delete=models.RESTRICT,
+        related_name="business_trip_expense",
+        verbose_name="Вид затрат",
+        db_comment="ID вида затрат",
+    )
+    date = models.DateField(verbose_name="Дата", db_comment="Дата затраты")
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        verbose_name="Сумма",
+        db_comment="Сумма затрат",
+    )
+    comment = models.CharField(
+        max_length=255, blank=True, verbose_name="Комментарий", db_comment="На что потрачено"
+    )
+
+    class Meta:
+        db_table = f'{company}."business_trip_expense"'
+        db_table_comment = "Затраты по командировкам. \n\n-- Generated"
+        verbose_name = "Затрата"
+        verbose_name_plural = "Затраты на поездку"
+        ordering = ("date",)
+
+    def __str__(self):
+        return f"{self.date} {self.expense_type} — {self.amount} руб."
