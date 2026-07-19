@@ -206,6 +206,7 @@ class BusinessTripPhotoTests(TestCase):
             business_trip=self.trip, photo=photo_file
         )
         self.assertIn(photo, self.trip.photos.all())
-        self.assertTrue(photo.photo.storage.exists(photo.photo.name))
+        file_name = photo.photo.name
+        self.assertTrue(photo.photo.storage.exists(file_name))
         photo.delete()
-        self.assertFalse(photo.photo.storage.exists(photo.photo.name))
+        self.assertFalse(photo.photo.storage.exists(file_name))

@@ -305,14 +305,8 @@ class BusinessTripPhoto(EbaseModel):
         verbose_name_plural = "Фото чеков"
 
     def delete(self, using=None, keep_parents=False):
-        # Удаляем файл с диска перед удалением записи. Используем прямой вызов
-        # storage.delete(), а не FieldFile.delete(save=False), чтобы не обнулять
-        # photo.name (иначе после delete() невозможно проверить факт удаления).
-        if self.photo and self.photo.name:
-            try:
-                self.photo.storage.delete(self.photo.name)
-            except Exception:
-                pass
+        # Удаляем файл с диска перед удалением записи
+        self.photo.delete(save=False)
         super().delete(using=None, keep_parents=False)
 
     def __str__(self):
