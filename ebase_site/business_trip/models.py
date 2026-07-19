@@ -185,7 +185,9 @@ class BusinessTripDestination(EbaseModel):
 
     class Meta:
         db_table = f'{company}."business_trip_destination"'
-        db_table_comment = "Пункты командировки (подразделения и даты). \n\n-- Generated"
+        db_table_comment = (
+            "Пункты командировки (подразделения и даты). \n\n-- Generated"
+        )
         verbose_name = "Пункт командировки"
         verbose_name_plural = "Пункты командировки"
         ordering = ("beg_dt",)
@@ -251,7 +253,10 @@ class BusinessTripExpense(EbaseModel):
         db_comment="Сумма затрат",
     )
     comment = models.CharField(
-        max_length=255, blank=True, verbose_name="Комментарий", db_comment="На что потрачено"
+        max_length=255,
+        blank=True,
+        verbose_name="Комментарий",
+        db_comment="На что потрачено",
     )
 
     class Meta:
@@ -263,3 +268,52 @@ class BusinessTripExpense(EbaseModel):
 
     def __str__(self):
         return f"{self.date} {self.expense_type} — {self.amount} руб."
+
+
+class BusinessTripPhoto(EbaseModel):
+    """Фото чека по командировке."""
+
+    business_trip = models.ForeignKey(
+        BusinessTrip,
+        on_delete=models.CASCADE,
+        related_name="photos",
+        verbose_name="Командировка",
+        db_comment="ID командировки",
+    )
+    photo = models.ImageField(
+        upload_to="business_trip/%Y/",
+        verbose_name="Фото чека",
+        db_comment="Ссылка на фото чека",
+    )
+    user = models.ForeignKey(
+        "users.CompanyUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="business_trip_photo_user",
+        verbose_name="Кто добавил",
+        db_comment="ID пользователя, добавившего фото",
+    )
+    create_dt = models.DateTimeField(
+        auto_now_add=True, verbose_name="Когда было добавлено фото"
+    )
+
+    class Meta:
+        db_table = f'{company}."business_trip_photo"'
+        db_table_comment = "Фото чеков по командировкам. \n\n-- Generated"
+        verbose_name = "Фото чека"
+        verbose_name_plural = "Фото чеков"
+
+    def delete(self, using=None, keep_parents=False):
+        # Удаляем файл с диска перед удалением записи. Используем прямой вызов
+        # storage.delete(), а не FieldFile.delete(save=False), чтобы не обнулять
+        # photo.name (иначе после delete() невозможно проверить факт удаления).
+        if self.photo and self.photo.name:
+            try:
+                self.photo.storage.delete(self.photo.name)
+            except Exception:
+                pass
+        super().delete(using=None, keep_parents=False)
+
+    def __str__(self):
+        return f"{self.business_trip} — {self.photo}"

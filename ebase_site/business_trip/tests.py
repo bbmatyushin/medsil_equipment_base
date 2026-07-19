@@ -12,6 +12,7 @@ from business_trip.models import (
     BusinessTrip,
     BusinessTripDestination,
     BusinessTripExpense,
+    BusinessTripPhoto,
     ExpenseType,
 )
 from clients.models import Client, Department
@@ -119,7 +120,10 @@ class BusinessTripDestinationTests(TestCase):
             name="СОДКБ", city=self.city, inn="111111111111"
         )
         self.department = Department.objects.create(
-            name="СОДКБ", client=self.client_obj, city=self.city, address="ул. Ленина, 1"
+            name="СОДКБ",
+            client=self.client_obj,
+            city=self.city,
+            address="ул. Ленина, 1",
         )
         self.trip = BusinessTrip.objects.create(
             employee=self.employee, beg_dt=date(2026, 4, 1), end_dt=date(2026, 4, 3)
@@ -184,3 +188,24 @@ class BusinessTripExpenseTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             expense.full_clean()
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class BusinessTripPhotoTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+
+    def test_photo_linked_and_deleted_with_record(self):
+        photo_file = SimpleUploadedFile(
+            "check.jpg", b"\x47\x49\x46\x38\x39\x61", content_type="image/jpeg"
+        )
+        photo = BusinessTripPhoto.objects.create(
+            business_trip=self.trip, photo=photo_file
+        )
+        self.assertIn(photo, self.trip.photos.all())
+        self.assertTrue(photo.photo.storage.exists(photo.photo.name))
+        photo.delete()
+        self.assertFalse(photo.photo.storage.exists(photo.photo.name))
