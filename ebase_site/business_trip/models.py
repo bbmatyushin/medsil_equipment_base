@@ -152,3 +152,69 @@ class BusinessTrip(EbaseModel):
         if update_fields is not None:
             kwargs["update_fields"] = set(update_fields) | {"allowance_amount"}
         super().save(*args, **kwargs)
+
+
+class BusinessTripDestination(EbaseModel):
+    """Пункт командировки: подразделение клиента и даты пребывания.
+
+    Город НЕ хранится — подтягивается из department.city. В одной командировке
+    может быть несколько пунктов (например, несколько больниц в одном городе).
+    """
+
+    business_trip = models.ForeignKey(
+        BusinessTrip,
+        on_delete=models.CASCADE,
+        related_name="destinations",
+        verbose_name="Командировка",
+        db_comment="ID командировки",
+    )
+    department = models.ForeignKey(
+        "clients.Department",
+        on_delete=models.RESTRICT,
+        related_name="business_trip_destination",
+        verbose_name="Подразделение",
+        db_comment="ID подразделения клиента",
+    )
+    beg_dt = models.DateField(
+        verbose_name="Дата прибытия (с)", db_comment="Дата прибытия в пункт"
+    )
+    end_dt = models.DateField(
+        verbose_name="Дата выбытия (по)", db_comment="Дата выбытия из пункта"
+    )
+
+    class Meta:
+        db_table = f'{company}."business_trip_destination"'
+        db_table_comment = "Пункты командировки (подразделения и даты). \n\n-- Generated"
+        verbose_name = "Пункт командировки"
+        verbose_name_plural = "Пункты командировки"
+        ordering = ("beg_dt",)
+
+    def __str__(self):
+        return f"{self.department} ({self.beg_dt} — {self.end_dt})"
+
+    @property
+    def city(self):
+        """Город подразделения (не хранится, подтягивается из department.city)."""
+        return self.department.city if self.department_id else None
+
+    @property
+    def client(self):
+        """Клиент подразделения (подтягивается из department.client)."""
+        return self.department.client if self.department_id else None
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        errors = {}
+        if self.beg_dt and self.end_dt and self.end_dt < self.beg_dt:
+            errors["end_dt"] = "Дата выбытия раньше даты прибытия."
+        # Даты пункта должны быть в пределах дат командировки (если она задана)
+        if self.business_trip_id and self.beg_dt and self.end_dt:
+            trip = self.business_trip
+            if self.beg_dt < trip.beg_dt or self.end_dt > trip.end_dt:
+                errors.setdefault("__all__", []).append(
+                    "Даты пункта должны быть в пределах дат командировки "
+                    f"({trip.beg_dt} — {trip.end_dt})."
+                )
+        if errors:
+            raise ValidationError(errors)

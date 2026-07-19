@@ -1,12 +1,20 @@
+import tempfile
 from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from business_trip.models import BusinessTrip, ExpenseType
+from business_trip.models import (
+    BusinessTrip,
+    BusinessTripDestination,
+    ExpenseType,
+)
+from clients.models import Client, Department
+from directory.models import City
 
 User = get_user_model()
 
@@ -98,3 +106,50 @@ class BusinessTripValidationTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             trip.clean()
+
+
+class BusinessTripDestinationTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.city, _ = City.objects.get_or_create(
+            name="Смоленск", region=None, defaults={"region": None}
+        )
+        self.client_obj = Client.objects.create(
+            name="СОДКБ", city=self.city, inn="111111111111"
+        )
+        self.department = Department.objects.create(
+            name="СОДКБ", client=self.client_obj, city=self.city, address="ул. Ленина, 1"
+        )
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 4, 1), end_dt=date(2026, 4, 3)
+        )
+
+    def test_city_pulled_from_department(self):
+        dest = BusinessTripDestination.objects.create(
+            business_trip=self.trip,
+            department=self.department,
+            beg_dt=date(2026, 4, 1),
+            end_dt=date(2026, 4, 2),
+        )
+        self.assertEqual(dest.city, self.city)
+        self.assertEqual(dest.client, self.client_obj)
+
+    def test_dest_dates_outside_trip_raises(self):
+        dest = BusinessTripDestination(
+            business_trip=self.trip,
+            department=self.department,
+            beg_dt=date(2026, 3, 30),  # до выезда
+            end_dt=date(2026, 4, 2),
+        )
+        with self.assertRaises(ValidationError):
+            dest.clean()
+
+    def test_dest_end_before_beg_raises(self):
+        dest = BusinessTripDestination(
+            business_trip=self.trip,
+            department=self.department,
+            beg_dt=date(2026, 4, 2),
+            end_dt=date(2026, 4, 1),
+        )
+        with self.assertRaises(ValidationError):
+            dest.clean()
