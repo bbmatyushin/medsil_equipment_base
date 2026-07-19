@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from business_trip.models import (
     BusinessTrip,
@@ -210,3 +211,35 @@ class BusinessTripPhotoTests(TestCase):
         self.assertTrue(photo.photo.storage.exists(file_name))
         photo.delete()
         self.assertFalse(photo.photo.storage.exists(file_name))
+
+
+class BusinessTripAdminSmokeTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="admin", password="pass")
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.client.force_login(self.admin)
+
+    def test_changelist_200(self):
+        response = self.client.get(
+            reverse("admin:business_trip_businesstrip_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_add_page_200(self):
+        response = self.client.get(reverse("admin:business_trip_businesstrip_add"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_change_page_200(self):
+        trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+        response = self.client.get(
+            reverse("admin:business_trip_businesstrip_change", args=[trip.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_expense_type_changelist_200(self):
+        response = self.client.get(
+            reverse("admin:business_trip_expensetype_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
