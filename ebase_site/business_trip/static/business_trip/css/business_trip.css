@@ -1,0 +1,24 @@
+/* Фиксированная ширина колонки «Город» в инлайне «Подразделения».
+   Без этого колонка меняет ширину при подгрузке города после выбора
+   подразделения. */
+td.field-city_display,
+th.column-city_display {
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+}
+
+/* Единый размер шрифта для подсказки «Дни × 700 руб.» под полем
+   «Командировочные» — приведение к стандартному Django admin размеру. */
+#id_allowance_amount + .help {
+    font-size: 0.6875rem;
+}
+
+/* Поле «Командировочные» — disabled-input, затемнённое, чтобы было видно,
+   что оно недоступно для ручного редактирования (считается автоматически). */
+#id_allowance_amount:disabled {
+    background-color: #f1f1f1;
+    color: #888;
+    border-color: #ddd;
+    cursor: not-allowed;
+}

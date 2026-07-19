@@ -40,6 +40,28 @@ class DepartmentAdmin(MainModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('client', 'city')
 
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/get_city/",
+                self.admin_site.admin_view(self.get_city),
+                name="department_get_city",
+            ),
+        ]
+        return custom_urls + urls
+
+    def get_city(self, request, object_id):
+        from django.http import JsonResponse
+        from django.shortcuts import get_object_or_404
+
+        department = get_object_or_404(Department, pk=object_id)
+        return JsonResponse(
+            {"city": department.city.name if department.city else None}
+        )
+
     @admin.display(description='Клиент')
     def client_name(self, obj):
         return obj.client.name if obj.client else '-'

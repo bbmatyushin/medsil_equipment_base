@@ -1,9 +1,8 @@
-from django import forms
 from django.contrib import admin
-from django.db import models
-from django.db.models import Max, Sum
+from django.db.models import Max
 from django.utils.html import mark_safe
 
+from business_trip.forms import BusinessTripForm
 from business_trip.models import (
     BusinessTrip,
     BusinessTripDestination,
@@ -11,6 +10,7 @@ from business_trip.models import (
     BusinessTripPhoto,
     ExpenseType,
 )
+from users.models import CompanyUser
 from utils import MainModelAdmin
 
 
@@ -47,7 +47,7 @@ class BusinessTripExpenseInline(admin.TabularInline):
     verbose_name = "Затрата"
     verbose_name_plural = "Затраты на поездку"
 
-    fields = ("expense_type", "amount", "comment", "date")
+    fields = ("expense_type", "amount", "date", "comment")
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("expense_type")
@@ -76,10 +76,30 @@ class BusinessTripPhotoInline(admin.StackedInline):
         return "Нет изображения"
 
 
+class EmployeeUsedInTripsFilter(admin.SimpleListFilter):
+    """Фильтр по сотруднику: только те, кто фигурирует в карточках командировок."""
+
+    title = "Сотрудник"
+    parameter_name = "employee"
+
+    def lookups(self, request, model_admin):
+        employees = (
+            CompanyUser.objects.filter(business_trip_employee__isnull=False)
+            .distinct()
+            .order_by("last_name", "first_name", "patron")
+        )
+        return [(e.pk, str(e)) for e in employees]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(employee_id=self.value())
+        return queryset
+
+
 @admin.register(BusinessTrip)
 class BusinessTripAdmin(MainModelAdmin):
     date_hierarchy = "beg_dt"
-    list_filter = ("employee", "service_type")
+    list_filter = (EmployeeUsedInTripsFilter, "service_type")
     search_fields = (
         "employee__last_name",
         "employee__first_name",
@@ -92,20 +112,20 @@ class BusinessTripAdmin(MainModelAdmin):
         "Поиск по ФИО сотрудника, подразделению, городу, номеру документа"
     )
     autocomplete_fields = ("service_type",)
-    readonly_fields = ("allowance_amount",)
-    formfield_overrides = {
-        models.TextField: {"widget": forms.Textarea(attrs={"rows": 10, "cols": 40})},
-    }
+    readonly_fields = ("allowance_amount_display",)
+    form = BusinessTripForm
 
     fieldsets = (
         (
             "Командировка",
             {
                 "fields": (
-                    ("employee", "doc_number"),
+                    ("doc_number", "creation_date"),
+                    ("employee",),
                     ("beg_dt", "end_dt"),
-                    ("allowance_amount",),
-                    ("service_type", "contract"),
+                    ("allowance_amount_display",),
+                    ("service_type",),
+                    ("contract",),
                 )
             },
         ),
@@ -115,15 +135,41 @@ class BusinessTripAdmin(MainModelAdmin):
         ),
     )
 
+    class Media:
+        css = {"all": ("business_trip/css/business_trip.css",)}
+        js = (
+            "admin/js/jquery.init.js",
+            "business_trip/js/business_trip.js",
+        )
+
+    @admin.display(description="Командировочные")
+    def allowance_amount_display(self, obj):
+        """Командировочные (суточные).
+
+        Рендерится как readonly-поле с <input disabled>, чтобы значение нельзя
+        было изменить вручную, но JavaScript мог обновлять сумму на лету при
+        изменении дат выезда/возвращения.
+        """
+        from django.utils.html import format_html
+
+        value = obj.allowance_amount if obj and obj.pk else 0
+        return format_html(
+            '<input type="text" id="id_allowance_amount" value="{}" disabled>'
+            '<span class="help" '
+            'style="display:block; font-size:0.6875rem; color:var(--body-quiet-color, #666);">'
+            "Дни × 700 руб.</span>",
+            value,
+        )
+
     list_display = (
         "doc_number",
         "employee",
+        "departments_display",
+        "cities_display",
         "beg_dt",
         "end_dt",
         "days_count",
-        "allowance_amount",
-        "cities_display",
-        "expenses_sum",
+        "allowance_amount_column",
         "has_photos",
     )
 
@@ -142,7 +188,6 @@ class BusinessTripAdmin(MainModelAdmin):
                 "destinations__department__city",
                 "photos",
             )
-            .annotate(_expenses_sum=Sum("expenses__amount"))
         )
 
     def get_form(self, request, obj=None, **kwargs):
@@ -163,6 +208,16 @@ class BusinessTripAdmin(MainModelAdmin):
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
+    @admin.display(description="Подразделение")
+    def departments_display(self, obj):
+        # obj из prefetch_related destinations — без N+1
+        departments = []
+        for dest in obj.destinations.all():
+            name = dest.department.name if dest.department else "—"
+            if name not in departments:
+                departments.append(name)
+        return ", ".join(departments) if departments else "—"
+
     @admin.display(description="Города")
     def cities_display(self, obj):
         # obj из prefetch_related destinations — без N+1
@@ -173,9 +228,13 @@ class BusinessTripAdmin(MainModelAdmin):
                 cities.append(city_name)
         return ", ".join(cities) if cities else "—"
 
-    @admin.display(description="Затраты", ordering="_expenses_sum")
-    def expenses_sum(self, obj):
-        return obj._expenses_sum or 0
+    @admin.display(description="Кол-во дней")
+    def days_count(self, obj):
+        return obj.days_count
+
+    @admin.display(description="Сумма", ordering="allowance_amount")
+    def allowance_amount_column(self, obj):
+        return obj.allowance_amount
 
     @admin.display(boolean=True, description="Фото")
     def has_photos(self, obj):

@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from ebase.models import EbaseModel
 
@@ -62,7 +63,11 @@ class BusinessTrip(EbaseModel):
         unique=True,
         verbose_name="Номер документа",
         db_comment="Номер документа (для приказа о командировке)",
-        help_text="Заполняется автоматически (max+1). Можно изменить вручную.",
+    )
+    creation_date = models.DateField(
+        default=timezone.localdate,
+        verbose_name="Дата составления",
+        db_comment="Дата составления документа о командировке",
     )
     beg_dt = models.DateField(
         verbose_name="Дата выезда", db_comment="Дата выезда в командировку"
@@ -77,7 +82,7 @@ class BusinessTrip(EbaseModel):
         editable=False,
         verbose_name="Сумма командировочных",
         db_comment="Сумма командировочных (суточные = дни × ставка)",
-        help_text="Считается автоматически: дни × 700 руб.",
+        help_text="Дни × 700 руб.",
     )
     service_type = models.ManyToManyField(
         "directory.ServiceType",
