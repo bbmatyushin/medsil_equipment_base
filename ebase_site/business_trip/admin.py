@@ -1,5 +1,7 @@
+from django import forms
 from django.contrib import admin
-from django.db.models import Sum
+from django.db import models
+from django.db.models import Max, Sum
 from django.utils.html import mark_safe
 
 from business_trip.models import (
@@ -24,11 +26,11 @@ class ExpenseTypeAdmin(MainModelAdmin):
 class BusinessTripDestinationInline(admin.TabularInline):
     model = BusinessTripDestination
     extra = 1
-    verbose_name = "Пункт командировки"
-    verbose_name_plural = "Пункты командировки (подразделения)"
+    verbose_name = "Подразделение"
+    verbose_name_plural = "Подразделения"
     autocomplete_fields = ("department",)
 
-    fields = ("department", "beg_dt", "end_dt", "city_display")
+    fields = ("department", "city_display", "beg_dt", "end_dt")
     readonly_fields = ("city_display",)
 
     @admin.display(description="Город")
@@ -45,7 +47,7 @@ class BusinessTripExpenseInline(admin.TabularInline):
     verbose_name = "Затрата"
     verbose_name_plural = "Затраты на поездку"
 
-    fields = ("date", "expense_type", "amount", "comment")
+    fields = ("expense_type", "amount", "comment", "date")
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("expense_type")
@@ -89,8 +91,11 @@ class BusinessTripAdmin(MainModelAdmin):
     search_help_text = (
         "Поиск по ФИО сотрудника, подразделению, городу, номеру документа"
     )
-    filter_horizontal = ("service_type",)
+    autocomplete_fields = ("service_type",)
     readonly_fields = ("allowance_amount",)
+    formfield_overrides = {
+        models.TextField: {"widget": forms.Textarea(attrs={"rows": 10, "cols": 40})},
+    }
 
     fieldsets = (
         (
@@ -98,7 +103,8 @@ class BusinessTripAdmin(MainModelAdmin):
             {
                 "fields": (
                     ("employee", "doc_number"),
-                    ("beg_dt", "end_dt", "allowance_amount"),
+                    ("beg_dt", "end_dt"),
+                    ("allowance_amount",),
                     ("service_type", "contract"),
                 )
             },
@@ -141,9 +147,15 @@ class BusinessTripAdmin(MainModelAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        # При создании новой записи подставляем текущего пользователя как сотрудника
-        if obj is None and "employee" in form.base_fields:
-            form.base_fields["employee"].initial = request.user.id
+        if obj is None:
+            if "employee" in form.base_fields:
+                form.base_fields["employee"].initial = request.user.id
+            if "doc_number" in form.base_fields:
+                max_num = (
+                    BusinessTrip.objects.aggregate(max_num=Max("doc_number"))["max_num"]
+                    or 0
+                )
+                form.base_fields["doc_number"].initial = max_num + 1
         return form
 
     def save_model(self, request, obj, form, change):

@@ -180,10 +180,10 @@ class BusinessTripDestination(EbaseModel):
         db_comment="ID подразделения клиента",
     )
     beg_dt = models.DateField(
-        verbose_name="Дата прибытия (с)", db_comment="Дата прибытия в пункт"
+        verbose_name="Дата прибытия", db_comment="Дата прибытия в пункт"
     )
     end_dt = models.DateField(
-        verbose_name="Дата выбытия (по)", db_comment="Дата выбытия из пункта"
+        verbose_name="Дата выбытия", db_comment="Дата выбытия из пункта"
     )
 
     class Meta:
