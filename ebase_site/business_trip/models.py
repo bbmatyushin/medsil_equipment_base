@@ -91,14 +91,12 @@ class BusinessTrip(EbaseModel):
         verbose_name="Виды работ",
         help_text="Можно выбрать несколько (например, ТО и ремонт)",
     )
-    contract = models.ForeignKey(
+    contract = models.ManyToManyField(
         "contracts.Contract",
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name="business_trip",
-        verbose_name="Договор",
-        db_comment="ID связанного договора",
+        verbose_name="Контракты",
+        help_text="Можно выбрать несколько контрактов",
     )
     task = models.TextField(blank=True, verbose_name="Задание на командировку")
     take_with = models.TextField(blank=True, verbose_name="Взять с собой")

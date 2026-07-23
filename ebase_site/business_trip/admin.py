@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from django.contrib import admin
-from django.db.models import Max
+from django.db.models import DecimalField, Max, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils.html import mark_safe
 
 from business_trip.forms import BusinessTripForm
@@ -111,7 +114,7 @@ class BusinessTripAdmin(MainModelAdmin):
     search_help_text = (
         "Поиск по ФИО сотрудника, подразделению, городу, номеру документа"
     )
-    autocomplete_fields = ("service_type",)
+    autocomplete_fields = ("service_type", "contract")
     readonly_fields = ("allowance_amount_display",)
     form = BusinessTripForm
 
@@ -170,6 +173,7 @@ class BusinessTripAdmin(MainModelAdmin):
         "end_dt",
         "days_count",
         "allowance_amount_column",
+        "expenses_total_display",
         "has_photos",
     )
 
@@ -183,10 +187,17 @@ class BusinessTripAdmin(MainModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .select_related("employee", "contract")
+            .select_related("employee")
             .prefetch_related(
                 "destinations__department__city",
                 "photos",
+            )
+            .annotate(
+                expenses_sum=Coalesce(
+                    Sum("expenses__amount"),
+                    Value(Decimal("0")),
+                    output_field=DecimalField(max_digits=15, decimal_places=2),
+                ),
             )
         )
 
@@ -235,6 +246,13 @@ class BusinessTripAdmin(MainModelAdmin):
     @admin.display(description="Сумма", ordering="allowance_amount")
     def allowance_amount_column(self, obj):
         return obj.allowance_amount
+
+    @admin.display(description="Затраты")
+    def expenses_total_display(self, obj):
+        """Итого затрат: командировочные + сумма всех затрат на поездку."""
+        return (obj.allowance_amount or Decimal("0")) + (
+            obj.expenses_sum or Decimal("0")
+        )
 
     @admin.display(boolean=True, description="Фото")
     def has_photos(self, obj):

@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
+from django.db.models import Sum
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -17,6 +18,7 @@ from business_trip.models import (
     ExpenseType,
 )
 from clients.models import Client, Department
+from contracts.models import Contract
 from directory.models import City
 
 User = get_user_model()
@@ -189,6 +191,89 @@ class BusinessTripExpenseTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             expense.full_clean()
+
+
+class BusinessTripContractTests(TestCase):
+    """Тесты M2M-связи командировки с контрактами."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.city, _ = City.objects.get_or_create(
+            name="Москва", defaults={"region": None}
+        )
+        self.client_obj = Client.objects.create(
+            name="Клиент 1", city=self.city, inn="111111111111"
+        )
+        self.contract1 = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-001",
+            conclusion_date=date(2026, 1, 10),
+            contract_amount=Decimal("100000"),
+        )
+        self.contract2 = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-002",
+            conclusion_date=date(2026, 1, 15),
+            contract_amount=Decimal("200000"),
+        )
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+
+    def test_multiple_contracts_linked(self):
+        """К одной командировке можно привязать несколько контрактов."""
+        self.trip.contract.add(self.contract1, self.contract2)
+        self.assertEqual(self.trip.contract.count(), 2)
+        self.assertIn(self.contract1, self.trip.contract.all())
+        self.assertIn(self.contract2, self.trip.contract.all())
+
+    def test_reverse_relation(self):
+        """Из контракта видны связанные командировки."""
+        self.trip.contract.add(self.contract1)
+        self.assertIn(self.trip, self.contract1.business_trip.all())
+
+    def test_no_contracts_by_default(self):
+        """Новая командировка не имеет контрактов."""
+        self.assertEqual(self.trip.contract.count(), 0)
+
+
+class BusinessTripExpensesTotalTests(TestCase):
+    """Тесты расчёта итоговых затрат (командировочные + затраты на поездку)."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 16), end_dt=date(2026, 3, 19)
+        )
+        self.expense_type = ExpenseType.objects.create(name="Такси")
+
+    def test_allowance_only_no_expenses(self):
+        """Без затрат на поездку итог = командировочные (4 дня × 700 = 2800)."""
+        total = self.trip.allowance_amount + Decimal(
+            str(self.trip.expenses.aggregate(total=Sum("amount"))["total"] or 0)
+        )
+        self.assertEqual(total, Decimal("2800.00"))
+
+    def test_allowance_plus_expenses(self):
+        """Итог = командировочные + сумма всех затрат."""
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 16),
+            amount=Decimal("500.00"),
+        )
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 17),
+            amount=Decimal("1200.00"),
+        )
+        expenses_sum = self.trip.expenses.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+        total = self.trip.allowance_amount + expenses_sum
+        # 2800 (суточные) + 500 + 1200 = 4500
+        self.assertEqual(total, Decimal("4500.00"))
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
