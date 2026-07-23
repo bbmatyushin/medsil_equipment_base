@@ -81,10 +81,17 @@ class ContractAdmin(MainModelAdmin):
         "client__name",
         "client__inn",
     )
-    search_help_text = "Поиск по номеру контракта, номеру заказа 1С, наименованию клиента или ИНН"
+    search_help_text = (
+        "Поиск по номеру контракта, номеру заказа 1С, наименованию клиента или ИНН"
+    )
 
     class Media:
-        css = {"all": ("contracts/css/contract_changelist.css", "contracts/css/contract_spare_parts.css",)}
+        css = {
+            "all": (
+                "contracts/css/contract_changelist.css",
+                "contracts/css/contract_spare_parts.css",
+            )
+        }
 
     formfield_overrides = {
         models.TextField: {"widget": Textarea(attrs={"rows": 3})},
@@ -96,6 +103,7 @@ class ContractAdmin(MainModelAdmin):
         "debt_display",
         "profit_display",
         "spare_part_shipments_display",
+        "business_trip_expenses_display",
     )
     fieldsets = (
         (
@@ -125,21 +133,29 @@ class ContractAdmin(MainModelAdmin):
             },
         ),
         (
+            "Командировочные расходы",
+            {
+                "fields": ("business_trip_expenses_display",),
+                "description": "Командировочные расходы, связанные с контрактом.",
+            },
+        ),
+        (
             "Финансы",
             {
                 "fields": (
-                    ("payment_amount_display", "expenses_amount_display", "debt_display", "profit_display"),
+                    (
+                        "payment_amount_display",
+                        "expenses_amount_display",
+                        "debt_display",
+                        "profit_display",
+                    ),
                 ),
             },
         ),
     )
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .select_related("client", "client__city")
-        )
+        return super().get_queryset(request).select_related("client", "client__city")
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
@@ -192,25 +208,25 @@ class ContractAdmin(MainModelAdmin):
         from django.db.models import Prefetch
         from spare_part.models import SparePartShipmentM2M
 
-        lines = (
-            obj.spare_part_shipments
-            .prefetch_related(
-                Prefetch(
-                    "shipment_m2m",
-                    queryset=SparePartShipmentM2M.objects.select_related(
-                        "spare_part__unit"
-                    ).order_by("create_dt"),
-                ),
-            )
-            .order_by("shipment_dt")
-        )
+        lines = obj.spare_part_shipments.prefetch_related(
+            Prefetch(
+                "shipment_m2m",
+                queryset=SparePartShipmentM2M.objects.select_related(
+                    "spare_part__unit"
+                ).order_by("create_dt"),
+            ),
+        ).order_by("shipment_dt")
 
         rows = []
         total = Decimal("0.00")
         for shipment in lines:
             for line in shipment.shipment_m2m.all():
                 part_name = line.spare_part.name if line.spare_part else "—"
-                unit = line.spare_part.unit.short_name if line.spare_part and line.spare_part.unit else "—"
+                unit = (
+                    line.spare_part.unit.short_name
+                    if line.spare_part and line.spare_part.unit
+                    else "—"
+                )
                 rows.append(
                     format_html(
                         "<tr>"
@@ -259,13 +275,82 @@ class ContractAdmin(MainModelAdmin):
         )
         return mark_safe(html)
 
+    @admin.display(description="Командировочные расходы")
+    def business_trip_expenses_display(self, obj):
+        """Отображает доли расходов командировок, отнесённые на контракт."""
+        if not obj.pk:
+            return "Нет командировок по контракту."
+
+        lines = (
+            obj.business_trip_expenses.select_related("business_trip__employee")
+            .annotate(trip_expenses_sum=Sum("business_trip__expenses__amount"))
+            .order_by("business_trip__beg_dt")
+        )
+
+        rows = []
+        total = Decimal("0.00")
+        for line in lines:
+            trip = line.business_trip
+            trip_url = reverse(
+                "admin:business_trip_businesstrip_change", args=[trip.pk]
+            )
+            trip_total = (trip.allowance_amount or Decimal("0")) + (
+                line.trip_expenses_sum or Decimal("0")
+            )
+            rows.append(
+                format_html(
+                    "<tr>"
+                    "<td><a href='{}'>№{}</a></td>"
+                    "<td>{}</td>"
+                    "<td>{} — {}</td>"
+                    "<td class='num'>{}</td>"
+                    "<td class='num'>{}</td>"
+                    "</tr>",
+                    trip_url,
+                    trip.doc_number or "—",
+                    trip.employee,
+                    trip.beg_dt.strftime("%d.%m.%Y"),
+                    trip.end_dt.strftime("%d.%m.%Y"),
+                    f"{trip_total:.2f}",
+                    f"{line.amount:.2f}",
+                )
+            )
+            total += line.amount or Decimal("0.00")
+
+        if not rows:
+            return "Нет командировок по контракту."
+
+        html = (
+            "<div class='spare-parts-contract-wrapper'>"
+            "<table class='spare-parts-contract-table'>"
+            "<thead><tr>"
+            "<th>Командировка</th>"
+            "<th>Сотрудник</th>"
+            "<th>Период</th>"
+            "<th class='num'>Сумма командировки</th>"
+            "<th class='num'>Отнесено на контракт</th>"
+            "</tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody>"
+            "<tfoot><tr>"
+            "<td colspan='4' class='num'>Итого:</td>"
+            f"<td class='num'>{total:.2f}</td>"
+            "</tr></tfoot>"
+            "</table>"
+            "</div>"
+        )
+        return mark_safe(html)
+
     @admin.display(description="Сумма оплат")
     def payment_amount_display(self, obj):
-        return mark_safe(f"<span class='finance-value'>{format_money(obj.payment_amount)}</span>")
+        return mark_safe(
+            f"<span class='finance-value'>{format_money(obj.payment_amount)}</span>"
+        )
 
     @admin.display(description="Затраты")
     def expenses_amount_display(self, obj):
-        return mark_safe(f"<span class='finance-value'>{format_money(obj.expenses_amount)}</span>")
+        return mark_safe(
+            f"<span class='finance-value'>{format_money(obj.expenses_amount)}</span>"
+        )
 
     @admin.display(description="Долг")
     def debt_display(self, obj):
@@ -273,4 +358,6 @@ class ContractAdmin(MainModelAdmin):
 
     @admin.display(description="Прибыль")
     def profit_display(self, obj):
-        return mark_safe(f"<span class='finance-value'>{format_money(obj.profit)}</span>")
+        return mark_safe(
+            f"<span class='finance-value'>{format_money(obj.profit)}</span>"
+        )

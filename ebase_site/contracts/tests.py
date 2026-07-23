@@ -211,7 +211,9 @@ class ContractAdminFormTests(TestCase):
             contract_amount=Decimal("100000.00"),
         )
 
-        request = RequestFactory().get(f"/admin/contracts/contract/{contract.pk}/change/")
+        request = RequestFactory().get(
+            f"/admin/contracts/contract/{contract.pk}/change/"
+        )
         request.user = self.user
         model_admin = ContractAdmin(Contract, admin.site)
         form = model_admin.get_form(request, obj=contract)()
@@ -340,4 +342,66 @@ class ContractAdminAutocompleteTests(TestCase):
         self.assertTrue(
             any(self.client_obj.name in result["text"] for result in data["results"]),
             f"Клиент не найден в результатах autocomplete: {data}",
+        )
+
+
+class ContractAdminBusinessTripSectionTests(TestCase):
+    """Smoke-тест раздела «Командировки по контракту» на карточке контракта."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="trip_section_tester", password="pass"
+        )
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.city, _ = City.objects.get_or_create(
+            name="Москва", region=None, defaults={"region": None}
+        )
+        self.client_obj = Client.objects.create(
+            name="Тестовый клиент", city=self.city, inn="123456789001"
+        )
+        self.contract = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-BT-001",
+            conclusion_date=date(2026, 1, 10),
+            contract_amount=Decimal("100000.00"),
+        )
+
+    def test_change_page_renders_trip_section(self):
+        from business_trip.models import (
+            BusinessTrip,
+            BusinessTripDestination,
+        )
+        from clients.models import Department
+
+        department = Department.objects.create(
+            name="Отделение 1",
+            client=self.client_obj,
+            city=self.city,
+            address="ул. Ленина, 1",
+        )
+        trip = BusinessTrip.objects.create(
+            employee=self.employee,
+            beg_dt=date(2026, 3, 26),
+            end_dt=date(2026, 3, 26),
+        )
+        BusinessTripDestination.objects.create(
+            business_trip=trip,
+            department=department,
+            beg_dt=date(2026, 3, 26),
+            end_dt=date(2026, 3, 26),
+        )
+        trip.contract.add(self.contract)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("admin:contracts_contract_change", args=[self.contract.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("Командировочные расходы", content)
+        # Доля = 700 (суточные за 1 день), ссылка на командировку
+        self.assertIn("700.00", content)
+        self.assertIn(
+            reverse("admin:business_trip_businesstrip_change", args=[trip.pk]),
+            content,
         )

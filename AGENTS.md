@@ -60,7 +60,7 @@
 | `ebase`      | Модели оборудования (`Equipment`), учёт по серийным номерам (`EquipmentAccounting`), установки у клиентов (`EquipmentAccDepartment`), ремонты (`Service`), фото ремонтов (`ServicePhotos`), подменное оборудование (`ReplacementEquipment`). |
 | `spare_part` | Запчасти (`SparePart`), остатки (`SparePartCount`), поставки v1/v2 (`SparePartSupply`, `SparePartSupplyV2`, `SparePartSupplyItem`), отгрузки v1/v2 (`SparePartShipment`, `SparePartShipmentV2`, `SparePartShipmentM2M`), комплектующие (`SparePartAccessories`). |
 | `contracts`  | Реестр контрактов (`Contract`), оплаты (`Payment`), расходы (`ContractExpense`). Автоматический пересчёт сумм через сигналы. |
-| `business_trip` | Командировки сотрудников (`BusinessTrip`), пункты (`BusinessTripDestination`), затраты (`BusinessTripExpense`, справочник `ExpenseType`), фото чеков (`BusinessTripPhoto`). Авто-расчёт суточных: дни × 700 руб. |
+| `business_trip` | Командировки сотрудников (`BusinessTrip`), пункты (`BusinessTripDestination`), затраты (`BusinessTripExpense`, справочник `ExpenseType`), фото чеков (`BusinessTripPhoto`). Авто-расчёт суточных: дни × 700 руб. Доли расходов по контрактам (`BusinessTripContractExpense`) — сумма командировки (затраты + суточные), разнесённая на контракты (авто). |
 
 Все модели используют явное указание `db_table` со схемой `"medsil"`. Базовые классы `EbaseModel`/`ContractModelBase`/`SparePartAbs` задают UUID-PK и `create_dt`.
 
@@ -155,7 +155,7 @@ python manage.py test --settings=ebase_site.test_settings
 - `spare_part/tests.py` — поставки V2 и пересчёт остатков.
 - `business_trip/tests.py` — расчёт суточных, автонумерация документов, валидации дат, smoke-тесты админки.
 
-**Текущее состояние тестов:** часть тестов падает. При последнем запуске из 27 тестов `FAILED (failures=2, errors=3)`. Основные проблемы:
+**Текущее состояние тестов:** часть тестов падает. При последнем запуске из 59 тестов `FAILED (failures=2, errors=3)`. Основные проблемы:
 
 - В `ebase/tests.py` в `setUp` контракту передаётся `Department` вместо `Client`.
 - В `contracts/tests.py` ожидается поле `payment_status` в форме редактирования, но оно исключено.
@@ -177,7 +177,8 @@ python manage.py test --settings=ebase_site.test_settings
 
 ### Сигналы
 
-- `contracts/signals.py` — пересчёт `payment_amount`, `expenses_amount`, `debt`, `profit` и `payment_status` контракта при изменении оплат, расходов и отгрузок запчастей.
+- `contracts/signals.py` — пересчёт `payment_amount`, `expenses_amount`, `debt`, `profit` и `payment_status` контракта при изменении оплат, расходов, отгрузок запчастей и долей командировок. В `expenses_amount` входят: отгрузки запчастей + ручные `ContractExpense` + доли `BusinessTripContractExpense`.
+- `business_trip/signals.py` — пересчёт долей расходов командировки по контрактам (`business_trip/services.py: recalc_trip_contract_shares`). Командировка относится к контракту, если контракт выбран в командировке и его клиент есть в пунктах (подразделениях) командировки. Сумма делится поровну с точностью до копеек, остаток — на первый по дате заключения контракт. После пересчёта вызывается `recalc_contract` для затронутых контрактов.
 - `spare_part/signals.py` — управление остатками `SparePartCount` при поставках и отгрузках (V1 и V2), включая FIFO-цену закупки.
 - `ebase/signals.py` — пересчёт связанного контракта при изменении ремонта `Service`.
 

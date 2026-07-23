@@ -1,7 +1,7 @@
 """Signals for the contracts app.
 
 Recalculates contract totals on Payment and ContractExpense changes,
-including spare part shipments.
+including spare part shipments and business trip expense shares.
 """
 
 from django.db.models import Sum
@@ -19,12 +19,16 @@ def recalc_contract(contract):
 
     payment_amount = contract.payments.aggregate(s=Sum("amount"))["s"] or 0
 
-    shipment_expenses = contract.spare_part_shipments.aggregate(
-        s=Sum("shipment_m2m__sum")
-    )["s"] or 0
+    shipment_expenses = (
+        contract.spare_part_shipments.aggregate(s=Sum("shipment_m2m__sum"))["s"] or 0
+    )
 
     manual_expenses = contract.expenses.aggregate(s=Sum("sum"))["s"] or 0
-    expenses_amount = shipment_expenses + manual_expenses
+
+    # Доли расходов командировок, отнесённые на контракт (авто, business_trip)
+    trip_expenses = contract.business_trip_expenses.aggregate(s=Sum("amount"))["s"] or 0
+
+    expenses_amount = shipment_expenses + manual_expenses + trip_expenses
 
     contract.payment_amount = payment_amount
     contract.expenses_amount = expenses_amount
@@ -109,7 +113,9 @@ def shipment_post_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=SparePartShipmentM2M)
 def shipment_m2m_post_save(sender, instance, **kwargs):
-    contract_id = instance.shipment_id and getattr(instance.shipment, 'contract_id', None)
+    contract_id = instance.shipment_id and getattr(
+        instance.shipment, "contract_id", None
+    )
     if contract_id:
         try:
             contract = Contract.objects.get(pk=contract_id)
@@ -120,7 +126,11 @@ def shipment_m2m_post_save(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=SparePartShipmentM2M)
 def shipment_m2m_post_delete(sender, instance, **kwargs):
-    contract_id = getattr(instance.shipment, 'contract_id', None) if instance.shipment_id else None
+    contract_id = (
+        getattr(instance.shipment, "contract_id", None)
+        if instance.shipment_id
+        else None
+    )
     if contract_id:
         try:
             contract = Contract.objects.filter(pk=contract_id).first()

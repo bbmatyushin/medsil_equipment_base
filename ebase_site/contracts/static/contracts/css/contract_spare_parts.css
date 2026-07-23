@@ -1,5 +1,6 @@
-/* Контейнер поля "Запчасти по контракту" — растягиваем на всю ширину fieldset */
-fieldset.module.aligned .form-row.field-spare_part_shipments_display {
+/* Контейнер полей "Запчасти по контракту" и "Командировки по контракту" — растягиваем на всю ширину fieldset */
+fieldset.module.aligned .form-row.field-spare_part_shipments_display,
+fieldset.module.aligned .form-row.field-business_trip_expenses_display {
     width: 100%;
     max-width: none;
     box-sizing: border-box;
@@ -7,7 +8,8 @@ fieldset.module.aligned .form-row.field-spare_part_shipments_display {
     padding-right: 0;
 }
 
-fieldset.module.aligned .form-row.field-spare_part_shipments_display > div {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display > div,
+fieldset.module.aligned .form-row.field-business_trip_expenses_display > div {
     width: 100%;
     max-width: none;
     display: block;
@@ -15,11 +17,13 @@ fieldset.module.aligned .form-row.field-spare_part_shipments_display > div {
 }
 
 /* Прячем label, чтобы таблица занимала всю ширину */
-fieldset.module.aligned .form-row.field-spare_part_shipments_display label {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display label,
+fieldset.module.aligned .form-row.field-business_trip_expenses_display label {
     display: none;
 }
 
-fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly {
+fieldset.module.aligned .form-row.field-spare_part_shipments_display .readonly,
+fieldset.module.aligned .form-row.field-business_trip_expenses_display .readonly {
     width: 100%;
     padding: 0;
     display: block;

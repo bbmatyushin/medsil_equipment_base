@@ -237,6 +237,167 @@ class BusinessTripContractTests(TestCase):
         self.assertEqual(self.trip.contract.count(), 0)
 
 
+class BusinessTripContractExpenseTests(TestCase):
+    """Тесты автоматического разнесения расходов командировки по контрактам."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+        self.city, _ = City.objects.get_or_create(
+            name="Москва", defaults={"region": None}
+        )
+        self.client_obj = Client.objects.create(
+            name="Клиент 1", city=self.city, inn="111111111111"
+        )
+        self.department = Department.objects.create(
+            name="Отделение 1",
+            client=self.client_obj,
+            city=self.city,
+            address="ул. Ленина, 1",
+        )
+        self.contract1 = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-001",
+            conclusion_date=date(2026, 1, 10),
+            contract_amount=Decimal("100000"),
+        )
+        self.contract2 = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-002",
+            conclusion_date=date(2026, 1, 15),
+            contract_amount=Decimal("200000"),
+        )
+        self.expense_type = ExpenseType.objects.create(name="Такси")
+        # Однодневная командировка: суточные = 700
+        self.trip = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 3, 26), end_dt=date(2026, 3, 26)
+        )
+        BusinessTripDestination.objects.create(
+            business_trip=self.trip,
+            department=self.department,
+            beg_dt=date(2026, 3, 26),
+            end_dt=date(2026, 3, 26),
+        )
+
+    def _shares(self):
+        return {
+            entry.contract_id: entry.amount
+            for entry in self.trip.contract_expenses.all()
+        }
+
+    def test_split_with_remainder_between_two_contracts(self):
+        """4000,33 на 2 контракта: 2000,17 первому по дате, 2000,16 второму.
+
+        4000,33 / 2 = 2000,165 — база округляется вниз до копеек (2000,16),
+        остаток 0,01 уходит на первый по дате заключения контракт.
+        """
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 26),
+            amount=Decimal("3300.33"),
+        )
+        self.trip.contract.add(self.contract1, self.contract2)
+
+        shares = self._shares()
+        # 3300,33 (затраты) + 700 (суточные) = 4000,33
+        self.assertEqual(shares[self.contract1.pk], Decimal("2000.17"))
+        self.assertEqual(shares[self.contract2.pk], Decimal("2000.16"))
+
+        self.contract1.refresh_from_db()
+        self.contract2.refresh_from_db()
+        self.assertEqual(self.contract1.expenses_amount, Decimal("2000.17"))
+        self.assertEqual(self.contract2.expenses_amount, Decimal("2000.16"))
+
+    def test_contract_of_other_client_not_attributed(self):
+        """Контракт клиента, которого нет в пунктах командировки, доли не получает."""
+        other_client = Client.objects.create(
+            name="Клиент 2", city=self.city, inn="222222222222"
+        )
+        contract3 = Contract.objects.create(
+            client=other_client,
+            contract_number="CNT-003",
+            conclusion_date=date(2026, 1, 20),
+            contract_amount=Decimal("50000"),
+        )
+        self.trip.contract.add(self.contract1, contract3)
+
+        shares = self._shares()
+        self.assertNotIn(contract3.pk, shares)
+        # Вся сумма (700 суточных) ушла на единственный подходящий контракт
+        self.assertEqual(shares[self.contract1.pk], Decimal("700.00"))
+
+    def test_split_between_contracts_of_different_clients(self):
+        """Контракты разных клиентов делят сумму, если оба клиента в пунктах."""
+        other_client = Client.objects.create(
+            name="Клиент 2", city=self.city, inn="222222222222"
+        )
+        other_department = Department.objects.create(
+            name="Отделение 2",
+            client=other_client,
+            city=self.city,
+            address="ул. Мира, 2",
+        )
+        contract3 = Contract.objects.create(
+            client=other_client,
+            contract_number="CNT-003",
+            conclusion_date=date(2026, 1, 20),
+            contract_amount=Decimal("50000"),
+        )
+        BusinessTripDestination.objects.create(
+            business_trip=self.trip,
+            department=other_department,
+            beg_dt=date(2026, 3, 26),
+            end_dt=date(2026, 3, 26),
+        )
+        self.trip.contract.add(self.contract1, contract3)
+
+        shares = self._shares()
+        self.assertEqual(shares[self.contract1.pk], Decimal("350.00"))
+        self.assertEqual(shares[contract3.pk], Decimal("350.00"))
+
+    def test_recalc_on_expense_change_and_delete(self):
+        """Изменение и удаление затрат пересчитывает доли и затраты контракта."""
+        self.trip.contract.add(self.contract1)
+        expense = BusinessTripExpense.objects.create(
+            business_trip=self.trip,
+            expense_type=self.expense_type,
+            date=date(2026, 3, 26),
+            amount=Decimal("300.00"),
+        )
+        self.assertEqual(self._shares()[self.contract1.pk], Decimal("1000.00"))
+
+        expense.amount = Decimal("800.00")
+        expense.save()
+        self.assertEqual(self._shares()[self.contract1.pk], Decimal("1500.00"))
+
+        expense.delete()
+        self.assertEqual(self._shares()[self.contract1.pk], Decimal("700.00"))
+        self.contract1.refresh_from_db()
+        self.assertEqual(self.contract1.expenses_amount, Decimal("700.00"))
+
+    def test_share_removed_with_contract_unlink(self):
+        """Удаление контракта из командировки удаляет его долю, остаток пересчитывается."""
+        self.trip.contract.add(self.contract1, self.contract2)
+        self.trip.contract.remove(self.contract2)
+
+        shares = self._shares()
+        self.assertNotIn(self.contract2.pk, shares)
+        self.assertEqual(shares[self.contract1.pk], Decimal("700.00"))
+
+        self.contract2.refresh_from_db()
+        self.assertEqual(self.contract2.expenses_amount, Decimal("0"))
+
+    def test_trip_deletion_recalc_contract(self):
+        """Удаление командировки убирает её долю из затрат контракта."""
+        self.trip.contract.add(self.contract1)
+        self.contract1.refresh_from_db()
+        self.assertEqual(self.contract1.expenses_amount, Decimal("700.00"))
+
+        self.trip.delete()
+        self.contract1.refresh_from_db()
+        self.assertEqual(self.contract1.expenses_amount, Decimal("0"))
+
+
 class BusinessTripExpensesTotalTests(TestCase):
     """Тесты расчёта итоговых затрат (командировочные + затраты на поездку)."""
 

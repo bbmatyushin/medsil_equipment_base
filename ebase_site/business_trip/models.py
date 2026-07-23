@@ -317,3 +317,56 @@ class BusinessTripPhoto(EbaseModel):
 
     def __str__(self):
         return f"{self.business_trip} — {self.photo}"
+
+
+class BusinessTripContractExpense(EbaseModel):
+    """Доля расходов командировки, отнесённая на контракт.
+
+    Заполняется автоматически (см. business_trip/services.py): сумма командировки
+    (затраты + суточные) делится поровну между выбранными в командировке
+    контрактами, чей клиент присутствует в пунктах командировки. Остаток от
+    деления уходит на первый по дате заключения контракт. Вручную не редактируется.
+    """
+
+    business_trip = models.ForeignKey(
+        BusinessTrip,
+        on_delete=models.CASCADE,
+        related_name="contract_expenses",
+        verbose_name="Командировка",
+        db_comment="ID командировки",
+    )
+    contract = models.ForeignKey(
+        "contracts.Contract",
+        on_delete=models.CASCADE,
+        related_name="business_trip_expenses",
+        verbose_name="Контракт",
+        db_comment="ID контракта",
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name="Сумма",
+        db_comment="Доля расходов командировки, отнесённая на контракт",
+    )
+
+    class Meta:
+        db_table = f'{company}."business_trip_contract_expense"'
+        db_table_comment = (
+            "Доли расходов командировок по контрактам (авто). \n\n-- Generated"
+        )
+        verbose_name = "Расход командировки по контракту"
+        verbose_name_plural = "Расходы командировок по контрактам"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business_trip", "contract"],
+                name="uniq_trip_contract_expense",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["business_trip"]),
+            models.Index(fields=["contract"]),
+        ]
+
+    def __str__(self):
+        return f"{self.business_trip} → {self.contract} — {self.amount} руб."
