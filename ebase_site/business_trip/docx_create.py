@@ -84,38 +84,68 @@ def create_trip_order(obj: BusinessTrip):
         part for part in (emp.last_name, emp.first_name, emp.patron) if part
     ).strip()
 
-    # --- Города и подразделения (через «; ») ---
+    # --- Города и подразделения по пунктам: «город, подразделение» через «; » ---
+    # Первые 2 пункта — на первую строку (P11), остальные — на P15.
     destinations = obj.destinations.select_related("department__city").all()
-    cities: list[str] = []
-    departments: list[str] = []
+    dest_pairs: list[str] = []
     for dest in destinations:
         city_name = dest.city.name if dest.city else ""
         dept_name = dest.department.name if dest.department else ""
-        if city_name and city_name not in cities:
-            cities.append(city_name)
-        if dept_name and dept_name not in departments:
-            departments.append(dept_name)
+        pair = ", ".join(p for p in (city_name, dept_name) if p)
+        if pair and pair not in dest_pairs:
+            dest_pairs.append(pair)
 
-    depart_city = "; ".join(cities)
-    department_str = "; ".join(departments)
+    first_line = "; ".join(dest_pairs[:2])
+    rest_line = "; ".join(dest_pairs[2:])
 
     # --- Словарь замен ---
+    # Шаблон содержит «{{ DEPART_CITY }}, {{ DEPARTMENT }}» — рассчитан на один
+    # пункт. Подставляем first_line в {{ DEPART_CITY }}, а {{ DEPARTMENT }}
+    # очищаем, чтобы не дублировать.
+    # Шаблон «{{ DEPART_CITY }}, {{ DEPARTMENT }}» рассчитан на один пункт.
+    # Комбинированный ключ срабатывает первым — заменяет всю конструкцию целиком,
+    # индивидуальные ключи ниже — fallback для нетипичного шаблона.
     replacements = {
+        "{{ DEPART_CITY }}, {{ DEPARTMENT }}": first_line,
         "{{ DOC_NUM }}": str(obj.doc_number or ""),
         "{{ CREATION_DATE}}": (
             obj.creation_date.strftime("%d.%m.%Y") if obj.creation_date else ""
         ),
         "{{ FIO }}": fio,
-        "{{ DEPART_CITY }}": depart_city,
-        "{{ DEPARTMENT }}": department_str,
+        "{{ DEPART_CITY }}": first_line,
+        "{{ DEPARTMENT }}": "",
         "{{ BEG_DT }}": obj.beg_dt.strftime("%d.%m.%Y") if obj.beg_dt else "",
         "{{ END_DT }}": obj.end_dt.strftime("%d.%m.%Y") if obj.end_dt else "",
         "{{ DAYS_COUNT }}": str(obj.days_count or ""),
     }
 
+    # Запоминаем индекс абзаца с местом назначения — до замены
+    depart_par_idx = None
+    for i, paragraph in enumerate(doc.paragraphs):
+        if "{{ DEPART_CITY }}" in paragraph.text:
+            depart_par_idx = i
+            break
+
     # Заменяем плейсхолдеры во всех абзацах (включая таблицы)
     for paragraph in _iter_all_paragraphs(doc):
         _replace_placeholders_in_paragraph(paragraph, replacements)
+
+    # --- Перенос оставшихся пунктов на строку P15 ---
+    # P12 — пустая, P13 — подпись «(место назначения…)», P14 — пустая, P15 — целевая.
+    if rest_line and depart_par_idx is not None:
+        next_idx = depart_par_idx + 4
+        if next_idx < len(doc.paragraphs):
+            overflow_par = doc.paragraphs[next_idx]
+            overflow_par.clear()
+            run = overflow_par.add_run(rest_line)
+            # Копируем форматирование из абзаца-источника
+            src_runs = doc.paragraphs[depart_par_idx].runs
+            if src_runs:
+                src = src_runs[0]
+                if src.font.size:
+                    run.font.size = src.font.size
+                if src.font.name:
+                    run.font.name = src.font.name
 
     # --- Сохранение ---
     trip_doc_number = f"trip{obj.doc_number}"
