@@ -102,6 +102,13 @@ class BusinessTrip(EbaseModel):
     take_with = models.TextField(blank=True, verbose_name="Взять с собой")
     comment = models.TextField(blank=True, verbose_name="Примечание")
     report = models.TextField(blank=True, verbose_name="Отчёт")
+    order_trip = models.CharField(
+        max_length=2056,
+        null=True,
+        blank=True,
+        verbose_name="Приказ о направлении в командировку",
+        db_comment="Путь к файлу приказа о направлении работника в командировку",
+    )
 
     class Meta:
         db_table = f'{company}."business_trip"'

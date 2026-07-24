@@ -1,3 +1,5 @@
+import re
+import time
 from decimal import Decimal
 
 from django.contrib import admin
@@ -5,6 +7,7 @@ from django.db.models import DecimalField, Max, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils.html import mark_safe
 
+from business_trip.docx_create import create_trip_order
 from business_trip.forms import BusinessTripForm
 from business_trip.models import (
     BusinessTrip,
@@ -115,7 +118,7 @@ class BusinessTripAdmin(MainModelAdmin):
         "Поиск по ФИО сотрудника, подразделению, городу, номеру документа"
     )
     autocomplete_fields = ("service_type", "contract")
-    readonly_fields = ("allowance_amount_display",)
+    readonly_fields = ("allowance_amount_display", "order_trip_url")
     form = BusinessTripForm
 
     fieldsets = (
@@ -135,6 +138,10 @@ class BusinessTripAdmin(MainModelAdmin):
         (
             "Дополнительно",
             {"fields": ("task", "take_with", "comment", "report")},
+        ),
+        (
+            "Документы",
+            {"fields": ("order_trip_url",)},
         ),
     )
 
@@ -163,6 +170,25 @@ class BusinessTripAdmin(MainModelAdmin):
             "Дни × 700 руб.</span>",
             value,
         )
+
+    @admin.display(description="Приказ о направлении в командировку")
+    def order_trip_url(self, obj):
+        if obj.order_trip:
+            url = re.sub(r".*/docs", "/media/docs", obj.order_trip)
+            file_name = obj.order_trip.split("/")[-1]
+            time_version = int(time.time())
+            return mark_safe(
+                f'<span class="akt-span">'
+                f'<a href="{url}?v={time_version}">{file_name}</a>'
+                f"</span>"
+                f'<input type="button" id="order-trip-btn" value="Обновить">'
+            )
+        if obj.pk:
+            return mark_safe(
+                f'<span class="akt-span">Приказ не создан</span>'
+                f'<input type="button" id="order-trip-btn" value="Создать">'
+            )
+        return mark_safe('<span class="akt-span">-------</span>')
 
     list_display = (
         "doc_number",
@@ -202,6 +228,19 @@ class BusinessTripAdmin(MainModelAdmin):
         )
 
     def get_form(self, request, obj=None, **kwargs):
+        """Перехват GET-параметра ``order_trip=create`` для формирования приказа.
+
+        Кнопка «Создать»/«Обновить» в разделе «Документы» через JS добавляет
+        в URL ``?order_trip=create`` и перезагружает страницу. Здесь мы
+        отрабатываем этот параметр — генерируем приказ и сохраняем путь в
+        ``obj.order_trip``.
+        """
+        if request.GET.get("order_trip") and obj:
+            doc_number = create_trip_order(obj)
+            self.message_user(
+                request,
+                message=f"Приказ о направлении в командировку №{doc_number} сформирован.",
+            )
         form = super().get_form(request, obj, **kwargs)
         if obj is None:
             if "employee" in form.base_fields:

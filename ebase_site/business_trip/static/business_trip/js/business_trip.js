@@ -175,5 +175,34 @@
             }
         });
         updateAllowance();
+
+        // ---------- Кнопка создания/обновления приказа ----------
+
+        /**
+         * При клике на «Создать»/«Обновить» в разделе «Документы» добавляет
+         * GET-параметр order_trip=create и перезагружает страницу — Django
+         * отрабатывает параметр в get_form и формирует приказ.
+         * После загрузки параметр удаляется из URL (ниже), чтобы обновление
+         * страницы (F5) не создавало приказ повторно.
+         */
+        var orderTripBtn = document.getElementById("order-trip-btn");
+        if (orderTripBtn) {
+            orderTripBtn.onclick = function () {
+                var url = new URL(location.href);
+                if (!url.searchParams.get("order_trip")) {
+                    url.searchParams.append("order_trip", "create");
+                }
+                location.href = url;
+            };
+        }
+
+        // Удаляем order_trip=create из URL, чтобы F5 не пересоздавал приказ.
+        (function cleanOrderTripParam() {
+            var url = new URL(location.href);
+            if (url.searchParams.has("order_trip")) {
+                url.searchParams.delete("order_trip");
+                window.history.replaceState({}, document.title, url.toString());
+            }
+        })();
     });
 })(django.jQuery);
