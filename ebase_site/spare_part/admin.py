@@ -365,7 +365,7 @@ class SparePartShipmentM2MInline(admin.TabularInline):
 
 
 @admin.register(SparePartShipmentV2)
-class SparePartShipmentV2Admin(admin.ModelAdmin):
+class SparePartShipmentV2Admin(MainModelAdmin):
     form = SparePartShipmentV2Form
     inlines = [
         SparePartShipmentM2MInline,
@@ -373,6 +373,7 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
 
     list_display = (
         "doc_num",
+        "spare_part_list",
         "shipment_dt",
         "client_shipment",
         "service_equipment",
@@ -413,6 +414,16 @@ class SparePartShipmentV2Admin(admin.ModelAdmin):
             "spare_part/js/remove_datetime_shortcuts.js",
             "spare_part/js/expiration_dt_control.js",
         )
+
+    @admin.display(description="Запчасти")
+    def spare_part_list(self, obj):
+        # Используем предзагруженные данные (prefetch_related("spare_part"))
+        spare_parts_list = [sp.name for sp in obj.spare_part.all()]
+        full_text = "; ".join(spare_parts_list) if spare_parts_list else "-"
+        if len(full_text) <= 60:
+            return full_text
+        short_text = f"{full_text[:60]}..."
+        return mark_safe(f'<span title="{full_text}">{short_text}</span>')
 
     @admin.display(description="Создал")
     def user_name(self, obj):
@@ -532,7 +543,14 @@ class SparePartSupplyItemInline(admin.TabularInline):
 class SparePartSupplyV2Admin(MainModelAdmin):
     form = SparePartSupplyV2Form
     inlines = [SparePartSupplyItemInline]
-    list_display = ("doc_num", "supply_dt", "total_sum", "user")
+    list_display = (
+        "doc_num",
+        "spare_part_list",
+        "supply_dt",
+        "total_sum",
+        "note_short",
+        "user",
+    )
     readonly_fields = ("user",)
     ordering = ("-supply_dt",)
     search_fields = ("doc_num", "items__spare_part__name", "items__spare_part__article")
@@ -569,6 +587,25 @@ class SparePartSupplyV2Admin(MainModelAdmin):
     @admin.display(description="Сумма поставки")
     def total_sum(self, obj):
         return sum((item.sum or Decimal("0") for item in obj.items.all()), Decimal("0"))
+
+    @admin.display(description="Запчасти")
+    def spare_part_list(self, obj):
+        # Используем предзагруженные данные (prefetch_related("items__spare_part__unit"))
+        spare_parts_list = [item.spare_part.name for item in obj.items.all()]
+        full_text = "; ".join(spare_parts_list) if spare_parts_list else "-"
+        if len(full_text) <= 40:
+            return full_text
+        short_text = f"{full_text[:40]}..."
+        return mark_safe(f'<span title="{full_text}">{short_text}</span>')
+
+    @admin.display(description="Примечание")
+    def note_short(self, obj):
+        note = obj.note
+        full_text = note if note else "-"
+        if len(full_text) <= 40:
+            return full_text
+        short_text = f"{full_text[:40]}..."
+        return mark_safe(f'<span title="{full_text}">{short_text}</span>')
 
     def save_model(self, request, obj, form, change):
         if not change:
