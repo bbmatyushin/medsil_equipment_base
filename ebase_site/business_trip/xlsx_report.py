@@ -99,8 +99,17 @@ def report_period(year: int, month: int) -> str:
 
 
 def money_report_filename(employee, year: int, month: int) -> str:
-    last_name = employee.last_name or employee.username
-    return f"Отчет_по_ДС_{last_name}_{year}-{month:02d}.xlsx"
+    """Имя файла, например «Отчет_по_ДС_ИвановИИ_2026-09.xlsx»."""
+    if employee.last_name:
+        initials = "".join(
+            part.strip()[0].upper()
+            for part in (employee.first_name, employee.patron)
+            if part and part.strip()
+        )
+        name = f"{employee.last_name.strip()}{initials}"
+    else:
+        name = employee.username
+    return f"Отчет_по_ДС_{name}_{year}-{month:02d}.xlsx"
 
 
 def _trip_cities(trip) -> str:
