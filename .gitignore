@@ -27,6 +27,7 @@ ebase_site/logs/*.log*
 *.xlsx*
 docs/*
 !docs/superpowers/
+!docs/server_migration_checklist.md
 docs/superpowers/specs/
 
 
