@@ -60,7 +60,7 @@
 | `ebase`      | Модели оборудования (`Equipment`), учёт по серийным номерам (`EquipmentAccounting`), установки у клиентов (`EquipmentAccDepartment`), ремонты (`Service`), фото ремонтов (`ServicePhotos`), подменное оборудование (`ReplacementEquipment`). |
 | `spare_part` | Запчасти (`SparePart`), остатки (`SparePartCount`), поставки v1/v2 (`SparePartSupply`, `SparePartSupplyV2`, `SparePartSupplyItem`), отгрузки v1/v2 (`SparePartShipment`, `SparePartShipmentV2`, `SparePartShipmentM2M`), комплектующие (`SparePartAccessories`). |
 | `contracts`  | Реестр контрактов (`Contract`), оплаты (`Payment`), расходы (`ContractExpense`). Автоматический пересчёт сумм через сигналы. |
-| `business_trip` | Командировки сотрудников (`BusinessTrip`), пункты (`BusinessTripDestination`), затраты (`BusinessTripExpense`, справочник `ExpenseType`), фото чеков (`BusinessTripPhoto`). Авто-расчёт суточных: дни × 700 руб. Доли расходов по контрактам (`BusinessTripContractExpense`) — сумма командировки (затраты + суточные), разнесённая на контракты (авто). |
+| `business_trip` | Командировки сотрудников (`BusinessTrip`), пункты (`BusinessTripDestination`), затраты (`BusinessTripExpense`, справочник `ExpenseType`), фото чеков (`BusinessTripPhoto`). Авто-расчёт суточных: дни × 700 руб. Доли расходов по контрактам (`BusinessTripContractExpense`) — сумма командировки (затраты + суточные), разнесённая на контракты (авто). Действие «Отчет по денежным средствам» (`business_trip/xlsx_report.py`) — месячный Excel-отчёт по выбранным командировкам; требует фильтр по сотруднику и месяц в навигации по датам. |
 
 Все модели используют явное указание `db_table` со схемой `"medsil"`. Базовые классы `EbaseModel`/`ContractModelBase`/`SparePartAbs` задают UUID-PK и `create_dt`.
 
@@ -153,7 +153,7 @@ python manage.py test --settings=ebase_site.test_settings
 - `ebase/tests.py` — связь ремонтов с контрактами и отгрузками.
 - `contracts/tests.py` — пересчёт оплат/расходов/прибыли по контракту, автокомплит клиента, итоги changelist.
 - `spare_part/tests.py` — поставки V2 и пересчёт остатков.
-- `business_trip/tests.py` — расчёт суточных, автонумерация документов, валидации дат, smoke-тесты админки.
+- `business_trip/tests.py` — расчёт суточных, автонумерация документов, валидации дат, smoke-тесты админки, отчёт по денежным средствам.
 
 **Текущее состояние тестов:** часть тестов падает. При последнем запуске из 59 тестов `FAILED (failures=2, errors=3)`. Основные проблемы:
 

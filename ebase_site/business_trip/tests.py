@@ -1,6 +1,7 @@
 import tempfile
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -9,6 +10,7 @@ from django.db import IntegrityError
 from django.db.models import Sum
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from openpyxl import load_workbook
 
 from business_trip.models import (
     BusinessTrip,
@@ -489,3 +491,211 @@ class BusinessTripAdminSmokeTests(TestCase):
             reverse("admin:business_trip_expensetype_changelist")
         )
         self.assertEqual(response.status_code, 200)
+
+
+class BusinessTripMoneyReportTests(TestCase):
+    """Действие «Отчет по денежным средствам» в списке командировок."""
+
+    XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="admin", password="pass")
+        self.employee = User.objects.create_user(
+            username="ivanov",
+            password="pass",
+            last_name="Иванов",
+            first_name="Иван",
+            patron="Иванович",
+        )
+        self.other = User.objects.create_user(username="petrov", password="pass")
+        self.client.force_login(self.admin)
+
+        city_1 = City.objects.create(name="Беломорск")
+        city_2 = City.objects.create(name="Сортавала")
+        client_obj = Client.objects.create(name="ЦРБ", city=city_1, inn="222222222222")
+        dept_1 = Department.objects.create(
+            name="ЦРБ Беломорск", client=client_obj, city=city_1, address="ул. 1"
+        )
+        dept_2 = Department.objects.create(
+            name="ЦРБ Сортавала", client=client_obj, city=city_2, address="ул. 2"
+        )
+        taxi = ExpenseType.objects.create(name="Такси")
+        hotel = ExpenseType.objects.create(name="Гостиница")
+
+        # 6–8 июля: Беломорск (два подразделения в одном городе) — 3 × 700 = 2100
+        self.trip_1 = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 7, 6), end_dt=date(2026, 7, 8)
+        )
+        for dept in (dept_1, dept_1):
+            BusinessTripDestination.objects.create(
+                business_trip=self.trip_1,
+                department=dept,
+                beg_dt=date(2026, 7, 6),
+                end_dt=date(2026, 7, 8),
+            )
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip_1,
+            expense_type=taxi,
+            date=date(2026, 7, 7),
+            amount=Decimal("250"),
+        )
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip_1,
+            expense_type=hotel,
+            date=date(2026, 7, 6),
+            amount=Decimal("3000"),
+            comment="2 ночи",
+        )
+        # 9 июля: Сортавала — 700
+        self.trip_2 = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 7, 9), end_dt=date(2026, 7, 9)
+        )
+        BusinessTripDestination.objects.create(
+            business_trip=self.trip_2,
+            department=dept_2,
+            beg_dt=date(2026, 7, 9),
+            end_dt=date(2026, 7, 9),
+        )
+        self.trip_august = BusinessTrip.objects.create(
+            employee=self.employee, beg_dt=date(2026, 8, 3), end_dt=date(2026, 8, 4)
+        )
+        self.trip_other = BusinessTrip.objects.create(
+            employee=self.other, beg_dt=date(2026, 7, 10), end_dt=date(2026, 7, 10)
+        )
+
+    def _post(self, query, trips):
+        url = reverse("admin:business_trip_businesstrip_changelist")
+        return self.client.post(
+            f"{url}?{query}" if query else url,
+            {
+                "action": "money_report_action",
+                "_selected_action": [str(t.pk) for t in trips],
+            },
+            follow=False,
+        )
+
+    def _query(self, **extra):
+        params = {
+            "employee": self.employee.pk,
+            "beg_dt__year": 2026,
+            "beg_dt__month": 7,
+            **extra,
+        }
+        return "&".join(f"{k}={v}" for k, v in params.items())
+
+    def _assert_rejected(self, response):
+        self.assertEqual(response.status_code, 302)
+        self.assertNotEqual(response.get("Content-Type"), self.XLSX)
+
+    def test_rejected_without_employee_filter(self):
+        response = self._post("beg_dt__year=2026&beg_dt__month=7", [self.trip_1])
+        self._assert_rejected(response)
+
+    def test_rejected_without_month(self):
+        response = self._post(
+            f"employee={self.employee.pk}&beg_dt__year=2026", [self.trip_1]
+        )
+        self._assert_rejected(response)
+
+    def test_rejected_with_day(self):
+        response = self._post(self._query(beg_dt__day=6), [self.trip_1])
+        self._assert_rejected(response)
+
+    def test_selection_outside_filter_ignored(self):
+        # Django пересекает выбранные строки с отфильтрованным списком:
+        # командировки другого месяца/сотрудника в отчёт не попадают
+        response = self._post(
+            self._query(), [self.trip_1, self.trip_august, self.trip_other]
+        )
+        self.assertEqual(response["Content-Type"], self.XLSX)
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["A24"].value, datetime(2026, 7, 6))
+        self.assertIsNone(ws["A25"].value)
+
+    def test_report_xlsx(self):
+        response = self._post(self._query(), [self.trip_1, self.trip_2])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], self.XLSX)
+        self.assertIn("attachment", response["Content-Disposition"])
+
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["B2"].value, "Ф.И.О. Иванов Иван Иванович")
+        self.assertFalse(ws["B2"].font.b)
+        self.assertEqual(ws["F2"].font.sz, 14)
+        self.assertTrue(ws["F2"].font.b)
+        self.assertEqual(ws["H2"].value, "01-31 июля 2026г")
+        self.assertEqual(ws["H2"].font.sz, 14)
+
+        # «Получено»: пустые строки 7–18, ИТОГО в 19-й
+        self.assertEqual(ws["D19"].value, "=SUM(D7:D18)")
+
+        # «перечислено по командиравкам»: строки 22–35, города без дублей
+        self.assertEqual(ws["B22"].value, "перечислено по командиравкам")
+        self.assertEqual(ws["A24"].value, datetime(2026, 7, 6))
+        self.assertEqual(ws["B24"].value, datetime(2026, 7, 8))
+        self.assertEqual(ws["C24"].value, "Беломорск")
+        self.assertEqual(ws["D24"].value, 2100)
+        self.assertEqual(ws["C25"].value, "Сортавала")
+        self.assertEqual(ws["D25"].value, 700)
+        self.assertEqual(ws["D35"].value, "=SUM(D24:D34)")
+
+        # «израсходовано»: затраты по дате, ИТОГО в 45-й строке
+        self.assertEqual(ws["F7"].value, datetime(2026, 7, 6))
+        self.assertEqual(ws["G7"].value, 3000)
+        self.assertEqual(ws["H7"].value, "Гостиница — 2 ночи")
+        self.assertEqual(ws["G8"].value, 250)
+        self.assertEqual(ws["H8"].value, "Такси")
+        self.assertEqual(ws["G45"].value, "=SUM(G7:G44)")
+
+        # Итоги — в объединённых строках 48–50, «ИТОГО расход» = затраты + суточные
+        merged = {str(r) for r in ws.merged_cells.ranges}
+        self.assertTrue({"C48:C50", "D48:D50", "F48:F50", "G48:G50"} <= merged)
+        self.assertEqual(ws["C48"].value, "ИТОГО получено")
+        self.assertEqual(ws["D48"].value, "=D19")
+        self.assertEqual(ws["F48"].value, "ИТОГО расход")
+        self.assertEqual(ws["G48"].value, "=G45+D35")
+
+        # Размеры как в образце, рамки на ячейках таблиц
+        self.assertEqual(ws.column_dimensions["C"].width, 24.57)
+        self.assertEqual(ws.row_dimensions[6].height, 29.25)
+        self.assertEqual(ws.row_dimensions[48].height, 30.75)
+        for coord in ("C18", "A34", "H44", "D44", "G50"):
+            self.assertEqual(ws[coord].border.bottom.style, "thin", coord)
+
+        # Данные внутри таблиц — обычным шрифтом, заголовки и «ИТОГО» — жирным
+        for coord in ("A24", "C24", "D24", "D35", "F7", "G7", "H7", "G45", "D48"):
+            self.assertFalse(ws[coord].font.b, coord)
+        for coord in ("C5", "A23", "F6", "C35", "F45", "C48"):
+            self.assertTrue(ws[coord].font.b, coord)
+
+    def test_report_long_text_wraps(self):
+        """Длинное описание затраты переносится, высота строки растёт."""
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip_2,
+            expense_type=ExpenseType.objects.get(name="Такси"),
+            date=date(2026, 7, 9),
+            amount=Decimal("100"),
+            comment="поездка от вокзала до больницы и обратно с заездом на склад",
+        )
+        response = self._post(self._query(), [self.trip_1, self.trip_2])
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertTrue(ws["H9"].alignment.wrap_text)
+        self.assertGreater(ws.row_dimensions[9].height, 16.5)
+
+    def test_report_overflow_shifts_blocks(self):
+        """Командировок больше 11 — таблица растёт, блоки ниже сдвигаются."""
+        trips = [self.trip_1, self.trip_2]
+        for day in range(10, 20):
+            trips.append(
+                BusinessTrip.objects.create(
+                    employee=self.employee,
+                    beg_dt=date(2026, 7, day),
+                    end_dt=date(2026, 7, day),
+                )
+            )
+        response = self._post(self._query(), trips)
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["A35"].value, datetime(2026, 7, 19))
+        self.assertEqual(ws["D36"].value, "=SUM(D24:D35)")
+        self.assertEqual(ws["C38"].value, "остаток на начало месяца")
+        self.assertEqual(ws["G49"].value, "=G45+D36")

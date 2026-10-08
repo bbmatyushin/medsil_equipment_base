@@ -2,13 +2,16 @@ import re
 import time
 from decimal import Decimal
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import DecimalField, Max, Sum, Value
 from django.db.models.functions import Coalesce
+from django.http import HttpResponse
 from django.utils.html import mark_safe
+from django.utils.http import content_disposition_header
 
 from business_trip.docx_create import create_trip_order
 from business_trip.forms import BusinessTripForm
+from business_trip.xlsx_report import build_money_report, money_report_filename
 from business_trip.models import (
     BusinessTrip,
     BusinessTripDestination,
@@ -120,6 +123,7 @@ class BusinessTripAdmin(MainModelAdmin):
     autocomplete_fields = ("service_type", "contract")
     readonly_fields = ("allowance_amount_display", "order_trip_url")
     form = BusinessTripForm
+    actions = MainModelAdmin.actions + ["money_report_action"]
 
     fieldsets = (
         (
@@ -296,3 +300,64 @@ class BusinessTripAdmin(MainModelAdmin):
     @admin.display(boolean=True, description="Фото")
     def has_photos(self, obj):
         return obj.photos.exists()
+
+    @admin.action(description="Отчет по денежным средствам")
+    def money_report_action(self, request, queryset):
+        """Месячный отчёт по денежным средствам (Excel) по выбранным командировкам.
+
+        Требуется фильтр по одному сотруднику (``employee``) и месяц одного года
+        в навигации по датам (``beg_dt__year`` + ``beg_dt__month`` без
+        ``beg_dt__day``). Форма changelist отправляется POST на текущий URL,
+        поэтому фильтры доступны в ``request.GET``.
+        """
+        employee_id = request.GET.get("employee")
+        year = request.GET.get("beg_dt__year")
+        month = request.GET.get("beg_dt__month")
+        error = None
+        if not employee_id:
+            error = "Выберите фильтр по сотруднику (справа, блок «Сотрудник»)."
+        elif not (year and month) or "beg_dt__day" in request.GET:
+            error = (
+                "Выберите месяц в навигации по датам над списком "
+                "(год → месяц, без конкретного дня)."
+            )
+        if error is None:
+            try:
+                year, month = int(year), int(month)
+            except ValueError:
+                error = "Некорректный год или месяц в фильтре по датам."
+        if error is None and (
+            queryset.exclude(employee_id=employee_id).exists()
+            or queryset.exclude(beg_dt__year=year, beg_dt__month=month).exists()
+        ):
+            error = (
+                "Выбранные командировки должны относиться к одному сотруднику "
+                "и одному месяцу из фильтра."
+            )
+        if error:
+            self.message_user(
+                request, f"Отчет не сформирован. {error}", level=messages.ERROR
+            )
+            return None
+
+        trips = list(
+            queryset.select_related("employee")
+            .prefetch_related(
+                "destinations__department__city", "expenses__expense_type"
+            )
+            .order_by("beg_dt")
+        )
+        employee = trips[0].employee
+        wb = build_money_report(employee, year, month, trips)
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        )
+        response["Content-Disposition"] = content_disposition_header(
+            as_attachment=True,
+            filename=money_report_filename(employee, year, month),
+        )
+        wb.save(response)
+        return response
