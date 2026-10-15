@@ -642,7 +642,7 @@ class BusinessTripMoneyReportTests(TestCase):
         # «израсходовано»: затраты по дате, ИТОГО в 45-й строке
         self.assertEqual(ws["F7"].value, datetime(2026, 7, 6))
         self.assertEqual(ws["G7"].value, 3000)
-        self.assertEqual(ws["H7"].value, "Гостиница — 2 ночи")
+        self.assertEqual(ws["H7"].value, "Гостиница")
         self.assertEqual(ws["G8"].value, 250)
         self.assertEqual(ws["H8"].value, "Такси")
         self.assertEqual(ws["G45"].value, "=SUM(G7:G44)")
@@ -669,18 +669,54 @@ class BusinessTripMoneyReportTests(TestCase):
             self.assertTrue(ws[coord].font.b, coord)
 
     def test_report_long_text_wraps(self):
-        """Длинное описание затраты переносится, высота строки растёт."""
+        """Длинное название вида затрат переносится, высота строки растёт."""
+        long_type = ExpenseType.objects.create(name="Проезд на общественном транспорте")
         BusinessTripExpense.objects.create(
             business_trip=self.trip_2,
-            expense_type=ExpenseType.objects.get(name="Такси"),
+            expense_type=long_type,
             date=date(2026, 7, 9),
             amount=Decimal("100"),
-            comment="поездка от вокзала до больницы и обратно с заездом на склад",
+            comment="комментарий не попадает в описание",
         )
         response = self._post(self._query(), [self.trip_1, self.trip_2])
         ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["H9"].value, "Проезд на общественном транспорте")
         self.assertTrue(ws["H9"].alignment.wrap_text)
         self.assertGreater(ws.row_dimensions[9].height, 16.5)
+
+    def test_report_skips_excluded_expense_type(self):
+        """Затраты вида «Я.командировки» не попадают в «израсходовано».
+
+        Командировка при этом остаётся в блоке «перечислено по командиравкам».
+        """
+        private_type = ExpenseType.objects.create(name="Я.командировки")
+        BusinessTripExpense.objects.create(
+            business_trip=self.trip_1,
+            expense_type=private_type,
+            date=date(2026, 7, 8),
+            amount=Decimal("5000"),
+        )
+        response = self._post(self._query(), [self.trip_1, self.trip_2])
+        self.assertEqual(response["Content-Type"], self.XLSX)
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+
+        # Командировка осталась в «перечислено по командиравкам»
+        self.assertEqual(ws["A24"].value, datetime(2026, 7, 6))
+        self.assertEqual(ws["D24"].value, 2100)
+
+        # В «израсходовано» — только гостиница и такси, строка 9 пустая
+        self.assertEqual(ws["F7"].value, datetime(2026, 7, 6))
+        self.assertEqual(ws["H7"].value, "Гостиница")
+        self.assertEqual(ws["H8"].value, "Такси")
+        self.assertIsNone(ws["F9"].value)
+        self.assertIsNone(ws["G9"].value)
+        self.assertIsNone(ws["H9"].value)
+        self.assertEqual(ws["G45"].value, "=SUM(G7:G44)")
+
+    def test_rejected_when_selection_matches_no_trips(self):
+        """Пересечение выбранных строк с фильтром пусто — сообщение, не 500."""
+        response = self._post(self._query(), [self.trip_august])
+        self._assert_rejected(response)
 
     def test_report_overflow_shifts_blocks(self):
         """Командировок больше 11 — таблица растёт, блоки ниже сдвигаются."""

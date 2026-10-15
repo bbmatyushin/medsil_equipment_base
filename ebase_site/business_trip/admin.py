@@ -347,6 +347,14 @@ class BusinessTripAdmin(MainModelAdmin):
             )
             .order_by("beg_dt")
         )
+        if not trips:
+            self.message_user(
+                request,
+                "Отчет не сформирован. Ни одна выбранная командировка "
+                "не соответствует фильтрам (сотрудник и месяц).",
+                level=messages.ERROR,
+            )
+            return None
         employee = trips[0].employee
         wb = build_money_report(employee, year, month, trips)
 

@@ -79,6 +79,9 @@ LINE_HEIGHT = 15.0  # высота одной строки текста Calibri 
 DATE_FORMAT = "dd/mmm"
 MONEY_FORMAT = "#,##0.00"
 
+# Вид затрат, строки которого не включаются в блок «израсходовано»
+EXCLUDED_EXPENSE_TYPE_NAME = "Я.командировки"
+
 _thin = Side(style="thin")
 BORDER = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
 
@@ -122,10 +125,8 @@ def _trip_cities(trip) -> str:
 
 
 def _expense_description(expense) -> str:
-    description = str(expense.expense_type)
-    if expense.comment:
-        description += f" — {expense.comment}"
-    return description
+    """Описание затраты: только вид затрат (без комментария)."""
+    return str(expense.expense_type)
 
 
 def _fit_row_height(ws, row, text, width, size=11):
@@ -231,7 +232,12 @@ def build_money_report(employee, year: int, month: int, trips) -> Workbook:
     """
     trips = sorted(trips, key=lambda t: (t.beg_dt, t.doc_number or 0))
     expenses = sorted(
-        (expense for trip in trips for expense in trip.expenses.all()),
+        (
+            expense
+            for trip in trips
+            for expense in trip.expenses.all()
+            if expense.expense_type.name != EXCLUDED_EXPENSE_TYPE_NAME
+        ),
         key=lambda e: e.date,
     )
     # Сдвиг блоков, если данные не влезают в строки образца
