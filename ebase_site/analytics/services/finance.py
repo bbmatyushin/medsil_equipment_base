@@ -1,5 +1,5 @@
 """Расчёты вкладки «Деньги»: плитки, движение денег, заключённые контракты,
-возраст долга и матрица «оказано × оплачено».
+возраст долга, матрица «оказано × оплачено», клиенты и контракты.
 
 Чистые функции без обращения к request. Группировка по месяцам выполняется
 в Python (`_bucket_by_month`), а не функциями БД: SQLite и PostgreSQL ведут
@@ -11,7 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from itertools import accumulate
 from typing import Iterable
 
-from django.db.models import Count, Q, QuerySet, Sum
+from django.db.models import Count, Max, Q, QuerySet, Sum
 from django.utils import timezone
 
 from analytics.filters import Period
@@ -39,6 +39,13 @@ AGING_BUCKETS = [
 def _round_tenth(value: Decimal) -> Decimal:
     """Округление до 0,1 по правилу «от нуля» для половинки (12,25 -> 12,3)."""
     return value.quantize(TENTH, rounding=ROUND_HALF_UP)
+
+
+def _margin_pct(profit: Decimal, payment_amount: Decimal) -> Decimal | None:
+    """Маржа в %: прибыль к сумме оплат, до 0,1; при нулевых оплатах — None."""
+    if payment_amount == 0:
+        return None
+    return _round_tenth(profit * 100 / payment_amount)
 
 
 def _bucket_by_month(
@@ -75,12 +82,7 @@ def _totals(period: Period, client: Client | None) -> dict:
     totals = {"count": aggregates["count"]}
     for key in TOTAL_KEYS:
         totals[key] = aggregates[key] or ZERO
-    if totals["payment_amount"] == 0:
-        totals["margin_pct"] = None
-    else:
-        totals["margin_pct"] = _round_tenth(
-            totals["profit"] * 100 / totals["payment_amount"]
-        )
+    totals["margin_pct"] = _margin_pct(totals["profit"], totals["payment_amount"])
     return totals
 
 
@@ -270,3 +272,149 @@ def status_matrix(period: Period, client: Client | None = None) -> dict:
             for row_key, row_label in Contract.SERVICES_PROVIDED_CHOICES
         ],
     }
+
+
+def _sum_by_client(period: Period, field: str) -> list[tuple[str, str, Decimal]]:
+    """Сумма поля контрактов периода по клиентам без нулевых итогов.
+
+    Возвращает `(str(pk клиента), название, сумма)`, отсортировано по убыванию
+    суммы, при равенстве — по названию.
+    """
+    rows = (
+        contracts_in_period(period)
+        .order_by()
+        .values("client_id", "client__name")
+        .annotate(total=Sum(field))
+    )
+    result = [
+        (str(row["client_id"]), row["client__name"], row["total"])
+        for row in rows
+        if row["total"]
+    ]
+    result.sort(key=lambda item: (-item[2], item[1]))
+    return result
+
+
+def top_clients(period: Period, limit: int = 10) -> dict:
+    """Рейтинг клиентов по сумме оплат контрактов периода и кривая Парето.
+
+    Клиент не фильтруется: виджет сравнивает клиентов между собой. Клиенты с
+    нулевой суммой исключены. `cumulative_pct` — накопленная доля от суммы по
+    всем клиентам, а не только по первым `limit`. `clients_for_80` — сколько
+    верхних клиентов дают не менее 80 % суммы (по точной, не округлённой доле);
+    0, если оплат нет.
+    """
+    ranked = _sum_by_client(period, "payment_amount")
+    total = sum((amount for _, _, amount in ranked), ZERO)
+
+    clients = []
+    clients_for_80 = 0
+    running = ZERO
+    for index, (pk, name, amount) in enumerate(ranked, start=1):
+        running += amount
+        if not clients_for_80 and running * 100 >= total * 80:
+            clients_for_80 = index
+        if index <= limit:
+            clients.append(
+                {
+                    "id": pk,
+                    "name": name,
+                    "amount": amount,
+                    "cumulative_pct": _round_tenth(running * 100 / total),
+                }
+            )
+    return {
+        "clients": clients,
+        "total": total,
+        "clients_total": len(ranked),
+        "clients_for_80": clients_for_80,
+    }
+
+
+def client_profitability(period: Period, limit: int = 10) -> dict:
+    """Прибыль по клиентам за контракты периода: лучшие и все убыточные.
+
+    Клиент не фильтруется. `best` — первые `limit` клиентов с прибылью по
+    убыванию, `losers` — все с убытком от худшего. Нулевая прибыль не попадает
+    ни в один список.
+    """
+    ranked = [
+        {"id": pk, "name": name, "profit": profit}
+        for pk, name, profit in _sum_by_client(period, "profit")
+    ]
+    best = [row for row in ranked if row["profit"] > 0][:limit]
+    losers = sorted(
+        (row for row in ranked if row["profit"] < 0),
+        key=lambda row: (row["profit"], row["name"]),
+    )
+    return {"best": best, "losers": losers}
+
+
+def contracts_scatter(period: Period, client: Client | None = None) -> list[dict]:
+    """Точки «сумма контракта × маржа» по оплаченным контрактам периода.
+
+    Контракты без оплат (`payment_amount = 0`) пропускаются: у них нет маржи.
+    `label` — «номер — клиент» для подсказки, `id` — `str(pk)` контракта.
+    """
+    rows = (
+        contracts_in_period(period, client)
+        .filter(payment_amount__gt=0)
+        .order_by("conclusion_date", "contract_number")
+        .values_list(
+            "id",
+            "contract_number",
+            "client__name",
+            "contract_amount",
+            "profit",
+            "payment_amount",
+        )
+    )
+    return [
+        {
+            "id": str(pk),
+            "label": f"{number} — {client_name}",
+            "x": contract_amount,
+            "y": _margin_pct(profit, payment_amount),
+        }
+        for pk, number, client_name, contract_amount, profit, payment_amount in rows
+    ]
+
+
+def payment_discipline(period: Period, client: Client | None = None) -> list[dict]:
+    """Платёжная дисциплина клиентов по оплаченным контрактам периода.
+
+    Дни = дата последней оплаты минус дата окончания услуг (а без неё — дата
+    заключения); отрицательное значение означает предоплату. Среднее по
+    клиенту до 0,1, сортировка по убыванию среднего, при равенстве — по
+    названию. Контракты без оплат пропускаются.
+    """
+    rows = (
+        contracts_in_period(period, client)
+        .filter(payment_status="paid")
+        .annotate(last_payment=Max("payments__date"))
+        .values_list(
+            "client_id",
+            "client__name",
+            "service_end_date",
+            "conclusion_date",
+            "last_payment",
+        )
+    )
+    days_by_client: dict[str, tuple[str, list[int]]] = {}
+    for client_id, name, end_date, conclusion_date, last_payment in rows:
+        if last_payment is None:
+            continue
+        days = (last_payment - (end_date or conclusion_date)).days
+        days_by_client.setdefault(str(client_id), (name, []))[1].append(days)
+
+    result = [
+        {
+            "client_id": client_id,
+            "name": name,
+            "avg_days": _round_tenth(Decimal(sum(days)) / len(days)),
+            "contracts": len(days),
+        }
+        for client_id, (name, days) in days_by_client.items()
+    ]
+    result.sort(key=lambda row: (-row["avg_days"], row["name"]))
+    return result

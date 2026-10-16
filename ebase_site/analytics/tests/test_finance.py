@@ -8,12 +8,16 @@ from analytics.services.finance import (
     AGING_BUCKETS,
     TOTAL_KEYS,
     _bucket_by_month,
+    client_profitability,
     concluded_by_month,
     contracts_in_period,
+    contracts_scatter,
     debt_aging,
     finance_kpis,
     money_flow,
+    payment_discipline,
     status_matrix,
+    top_clients,
 )
 from analytics.tests.factories import (
     make_client,
@@ -616,3 +620,439 @@ class StatusMatrixTests(TestCase):
 
         self.assertEqual(everyone[("not_yet", "no_receipts")], (2, Decimal("1000")))
         self.assertEqual(only_alpha[("not_yet", "no_receipts")], (1, Decimal("100")))
+
+
+def make_expense(contract, cost):
+    """Ручной расход на контракт (сигнал пересчитывает прибыль)."""
+    return ContractExpense.objects.create(
+        contract=contract, expense_type="other", quantity=1, cost=cost
+    )
+
+
+class TopClientsTests(TestCase):
+    def _paid(self, client, number, amount, conclusion=date(2026, 3, 1)):
+        contract = make_contract(client, number, conclusion, amount)
+        make_payment(contract, conclusion, amount)
+        return contract
+
+    def test_top_clients_pareto(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        gamma = make_client("Гамма")
+        # у «Альфы» два контракта: 4000 + 2000 = 6000
+        self._paid(alpha, "T-1", 4000)
+        self._paid(alpha, "T-2", 2000)
+        self._paid(beta, "T-3", 3000)
+        self._paid(gamma, "T-4", 1000)
+        # вне периода не учитывается
+        self._paid(gamma, "T-5", 50000, conclusion=date(2025, 12, 31))
+
+        result = top_clients(P)
+
+        self.assertEqual(
+            [c["name"] for c in result["clients"]], ["Альфа", "Бета", "Гамма"]
+        )
+        self.assertEqual(
+            [c["id"] for c in result["clients"]],
+            [str(alpha.pk), str(beta.pk), str(gamma.pk)],
+        )
+        self.assertEqual(
+            [c["amount"] for c in result["clients"]],
+            [Decimal("6000"), Decimal("3000"), Decimal("1000")],
+        )
+        self.assertEqual(
+            [c["cumulative_pct"] for c in result["clients"]],
+            [Decimal("60.0"), Decimal("90.0"), Decimal("100.0")],
+        )
+        self.assertEqual(result["total"], Decimal("10000"))
+        self.assertEqual(result["clients_total"], 3)
+        self.assertEqual(result["clients_for_80"], 2)
+
+    def test_top_clients_excludes_zero(self):
+        paid = make_client("Оплативший")
+        unpaid = make_client("Без оплат")
+        self._paid(paid, "Z-1", 500)
+        make_contract(unpaid, "Z-2", date(2026, 3, 1), 9000)
+
+        result = top_clients(P)
+
+        self.assertEqual([c["name"] for c in result["clients"]], ["Оплативший"])
+        self.assertEqual(result["clients_total"], 1)
+        self.assertEqual(result["total"], Decimal("500"))
+        self.assertEqual(result["clients_for_80"], 1)
+
+    def test_top_clients_limit_keeps_totals_over_all_clients(self):
+        for name, amount in [("К1", 4000), ("К2", 3000), ("К3", 2000), ("К4", 1000)]:
+            self._paid(make_client(name), f"L-{name}", amount)
+
+        result = top_clients(P, limit=2)
+
+        self.assertEqual([c["name"] for c in result["clients"]], ["К1", "К2"])
+        # доли считаются от суммы по всем клиентам (10000), а не по первым двум
+        self.assertEqual(
+            [c["cumulative_pct"] for c in result["clients"]],
+            [Decimal("40.0"), Decimal("70.0")],
+        )
+        self.assertEqual(result["total"], Decimal("10000"))
+        self.assertEqual(result["clients_total"], 4)
+        # 40 + 30 + 20 = 90 >= 80: три клиента, хотя в списке только два
+        self.assertEqual(result["clients_for_80"], 3)
+
+    def test_top_clients_for_80_reached_exactly(self):
+        for name, amount in [("К1", 5000), ("К2", 3000), ("К3", 2000)]:
+            self._paid(make_client(name), f"E-{name}", amount)
+
+        # 50 + 30 = ровно 80 %
+        self.assertEqual(top_clients(P)["clients_for_80"], 2)
+
+    def test_top_clients_for_80_uses_unrounded_share(self):
+        self._paid(make_client("К1"), "U-1", 7996)
+        self._paid(make_client("К2"), "U-2", 2004)
+
+        result = top_clients(P)
+
+        # 79,96 % округляется до 80,0, но порога ещё не достигает
+        self.assertEqual(result["clients"][0]["cumulative_pct"], Decimal("80.0"))
+        self.assertEqual(result["clients_for_80"], 2)
+
+    def test_top_clients_cumulative_rounded_half_up(self):
+        self._paid(make_client("К1"), "H-1", 125)
+        self._paid(make_client("К2"), "H-2", 9875)
+
+        result = top_clients(P)
+
+        # 9875 / 10000 = 98,75 % -> 98,8 (не банковское округление)
+        self.assertEqual(
+            [c["cumulative_pct"] for c in result["clients"]],
+            [Decimal("98.8"), Decimal("100.0")],
+        )
+
+    def test_top_clients_equal_amounts_sorted_by_name(self):
+        self._paid(make_client("Яблоко"), "S-1", 1000)
+        self._paid(make_client("Арбуз"), "S-2", 1000)
+
+        names = [c["name"] for c in top_clients(P)["clients"]]
+
+        self.assertEqual(names, ["Арбуз", "Яблоко"])
+
+    def test_top_clients_empty_period(self):
+        self.assertEqual(
+            top_clients(P),
+            {
+                "clients": [],
+                "total": Decimal("0"),
+                "clients_total": 0,
+                "clients_for_80": 0,
+            },
+        )
+
+
+class ClientProfitabilityTests(TestCase):
+    def _profit(self, client, number, payment, expense=0, conclusion=date(2026, 3, 1)):
+        contract = make_contract(client, number, conclusion, 100000)
+        make_payment(contract, conclusion, payment)
+        if expense:
+            make_expense(contract, expense)
+        return contract
+
+    def test_client_profitability_split(self):
+        top = make_client("Лидер")
+        mid = make_client("Середняк")
+        bad = make_client("Убыточный")
+        self._profit(top, "P-1", 800, expense=300)  # +500
+        self._profit(mid, "P-2", 100)  # +100
+        self._profit(bad, "P-3", 100, expense=300)  # -200
+
+        result = client_profitability(P)
+
+        self.assertEqual(
+            result["best"],
+            [
+                {"id": str(top.pk), "name": "Лидер", "profit": Decimal("500")},
+                {"id": str(mid.pk), "name": "Середняк", "profit": Decimal("100")},
+            ],
+        )
+        self.assertEqual(
+            result["losers"],
+            [{"id": str(bad.pk), "name": "Убыточный", "profit": Decimal("-200")}],
+        )
+
+    def test_client_profitability_sums_contracts_per_client_in_period(self):
+        mixed = make_client("Смешанный")
+        self._profit(mixed, "Q-1", 1000)  # +1000
+        self._profit(mixed, "Q-2", 100, expense=400)  # -300
+        # вне периода не учитывается
+        self._profit(mixed, "Q-3", 9000, conclusion=date(2025, 12, 31))
+
+        result = client_profitability(P)
+
+        self.assertEqual([c["profit"] for c in result["best"]], [Decimal("700")])
+        self.assertEqual(result["losers"], [])
+
+    def test_client_profitability_zero_profit_in_neither_list(self):
+        client = make_client("Нулевой")
+        self._profit(client, "ZP-1", 500, expense=500)  # 0
+        make_contract(make_client("Без оплат"), "ZP-2", date(2026, 3, 1), 777)  # 0
+
+        result = client_profitability(P)
+
+        self.assertEqual(result, {"best": [], "losers": []})
+
+    def test_client_profitability_limit_applies_to_best_only(self):
+        for index, profit in enumerate([100, 400, 300, 200], start=1):
+            self._profit(make_client(f"Плюс {index}"), f"B-{index}", profit)
+        for index, loss in enumerate([50, 150, 100], start=1):
+            self._profit(
+                make_client(f"Минус {index}"), f"W-{index}", 10, expense=10 + loss
+            )
+
+        result = client_profitability(P, limit=2)
+
+        self.assertEqual(
+            [c["profit"] for c in result["best"]], [Decimal("400"), Decimal("300")]
+        )
+        # убыточные показываются все, от худшего к лучшему
+        self.assertEqual(
+            [c["profit"] for c in result["losers"]],
+            [Decimal("-150"), Decimal("-100"), Decimal("-50")],
+        )
+
+    def test_client_profitability_equal_profit_sorted_by_name(self):
+        self._profit(make_client("Яблоко"), "N-1", 100)
+        self._profit(make_client("Арбуз"), "N-2", 100)
+
+        self._profit(make_client("Волк"), "N-3", 10, expense=110)
+        self._profit(make_client("Бобр"), "N-4", 10, expense=110)
+
+        result = client_profitability(P)
+
+        self.assertEqual([c["name"] for c in result["best"]], ["Арбуз", "Яблоко"])
+        self.assertEqual([c["name"] for c in result["losers"]], ["Бобр", "Волк"])
+
+    def test_client_profitability_empty_period(self):
+        self.assertEqual(client_profitability(P), {"best": [], "losers": []})
+
+
+class ContractsScatterTests(TestCase):
+    def test_contracts_scatter_skips_unpaid(self):
+        client = make_client("Альфа")
+        paid = make_contract(client, "SC-1", date(2026, 3, 1), 100000)
+        make_payment(paid, date(2026, 3, 5), 3000)
+        make_expense(paid, 1000)
+        make_contract(client, "SC-2", date(2026, 4, 1), 50000)  # без оплат
+
+        result = contracts_scatter(P)
+
+        # прибыль 3000 - 1000 = 2000; 2000 / 3000 * 100 = 66.666... -> 66.7
+        self.assertEqual(
+            result,
+            [
+                {
+                    "id": str(paid.pk),
+                    "label": "SC-1 — Альфа",
+                    "x": Decimal("100000"),
+                    "y": Decimal("66.7"),
+                }
+            ],
+        )
+
+    def test_contracts_scatter_negative_margin(self):
+        client = make_client("Альфа")
+        loss = make_contract(client, "SN-1", date(2026, 3, 1), 10000)
+        make_payment(loss, date(2026, 3, 5), 400)
+        make_expense(loss, 500)
+
+        (point,) = contracts_scatter(P)
+
+        # прибыль -100; -100 / 400 * 100 = -25
+        self.assertEqual(point["y"], Decimal("-25.0"))
+
+    def test_contracts_scatter_y_matches_kpi_margin(self):
+        client = make_client("Альфа")
+        contract = make_contract(client, "SK-1", date(2026, 3, 1), 100000)
+        make_payment(contract, date(2026, 3, 5), 2000)
+        make_expense(contract, 1999)
+
+        (point,) = contracts_scatter(P)
+
+        # прибыль 1 / оплата 2000 * 100 = 0.05 -> 0.1 (как в плитке)
+        self.assertEqual(point["y"], Decimal("0.1"))
+        self.assertEqual(point["y"], finance_kpis(P)["current"]["margin_pct"])
+
+    def test_contracts_scatter_period_and_client_filter(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        for client, number, conclusion in [
+            (alpha, "SF-1", date(2026, 3, 1)),
+            (beta, "SF-2", date(2026, 3, 2)),
+            (alpha, "SF-3", date(2025, 12, 31)),  # вне периода
+        ]:
+            contract = make_contract(client, number, conclusion, 1000)
+            make_payment(contract, conclusion, 100)
+
+        def labels(points):
+            return [point["label"] for point in points]
+
+        self.assertEqual(labels(contracts_scatter(P)), ["SF-1 — Альфа", "SF-2 — Бета"])
+        self.assertEqual(labels(contracts_scatter(P, client=beta)), ["SF-2 — Бета"])
+
+    def test_contracts_scatter_reads_client_name_without_extra_queries(self):
+        for index in range(3):
+            client = make_client(f"Клиент {index}")
+            contract = make_contract(client, f"SQ-{index}", date(2026, 3, 1), 1000)
+            make_payment(contract, date(2026, 3, 2), 100)
+
+        with self.assertNumQueries(1):
+            points = contracts_scatter(P)
+
+        self.assertEqual(len(points), 3)
+
+    def test_contracts_scatter_empty_period(self):
+        self.assertEqual(contracts_scatter(P), [])
+
+
+class PaymentDisciplineTests(TestCase):
+    def _paid(
+        self, client, number, end_date, payment_date, conclusion=None, amount=1000
+    ):
+        contract = make_contract(
+            client,
+            number,
+            conclusion or date(2026, 1, 15),
+            amount,
+            service_end_date=end_date,
+        )
+        make_payment(contract, payment_date, amount)
+        return contract
+
+    def test_payment_discipline_days(self):
+        client = make_client("Альфа")
+        # конец услуг 1 марта, оплата 31 марта: 30 дней
+        self._paid(client, "PD-1", date(2026, 3, 1), date(2026, 3, 31))
+        # предоплата за 10 дней: -10
+        self._paid(client, "PD-2", date(2026, 5, 11), date(2026, 5, 1))
+
+        result = payment_discipline(P)
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "client_id": str(client.pk),
+                    "name": "Альфа",
+                    "avg_days": Decimal("10.0"),
+                    "contracts": 2,
+                }
+            ],
+        )
+
+    def test_payment_discipline_uses_last_payment(self):
+        client = make_client("Альфа")
+        contract = make_contract(
+            client,
+            "PL-1",
+            date(2026, 1, 15),
+            1000,
+            service_end_date=date(2026, 2, 1),
+        )
+        make_payment(contract, date(2026, 2, 5), 400)
+        make_payment(contract, date(2026, 2, 21), 600)
+
+        (row,) = payment_discipline(P)
+
+        # последняя оплата 21 февраля: 20 дней
+        self.assertEqual(row["avg_days"], Decimal("20.0"))
+
+    def test_payment_discipline_falls_back_to_conclusion_date(self):
+        client = make_client("Альфа")
+        self._paid(client, "PF-1", None, date(2026, 2, 14), conclusion=date(2026, 2, 4))
+
+        (row,) = payment_discipline(P)
+
+        self.assertEqual(row["avg_days"], Decimal("10.0"))
+
+    def test_payment_discipline_only_paid_contracts(self):
+        client = make_client("Альфа")
+        self._paid(client, "PP-1", date(2026, 3, 1), date(2026, 3, 11))  # paid: 10
+        partial = make_contract(
+            client, "PP-2", date(2026, 1, 15), 5000, service_end_date=date(2026, 3, 1)
+        )
+        make_payment(partial, date(2026, 9, 1), 1000)  # частичная оплата
+        make_contract(client, "PP-3", date(2026, 1, 15), 5000)  # без оплат
+
+        (row,) = payment_discipline(P)
+
+        self.assertEqual(row["contracts"], 1)
+        self.assertEqual(row["avg_days"], Decimal("10.0"))
+
+    def test_payment_discipline_sorted_by_avg_days_desc_then_name(self):
+        slow = make_client("Медленный")
+        fast = make_client("Быстрый")
+        tie_b = make_client("Яблоко")
+        tie_a = make_client("Арбуз")
+        self._paid(slow, "PS-1", date(2026, 3, 1), date(2026, 4, 1))  # 31
+        self._paid(fast, "PS-2", date(2026, 3, 11), date(2026, 3, 1))  # -10
+        self._paid(tie_b, "PS-3", date(2026, 3, 1), date(2026, 3, 6))  # 5
+        self._paid(tie_a, "PS-4", date(2026, 3, 1), date(2026, 3, 6))  # 5
+
+        result = payment_discipline(P)
+
+        self.assertEqual(
+            [(r["name"], r["avg_days"]) for r in result],
+            [
+                ("Медленный", Decimal("31.0")),
+                ("Арбуз", Decimal("5.0")),
+                ("Яблоко", Decimal("5.0")),
+                ("Быстрый", Decimal("-10.0")),
+            ],
+        )
+
+    def test_payment_discipline_avg_rounded_half_up(self):
+        client = make_client("Альфа")
+        for index, days in enumerate([1, 0, 0, 0], start=1):
+            self._paid(
+                client,
+                f"PR-{index}",
+                date(2026, 3, 1),
+                date(2026, 3, 1) + timedelta(days=days),
+            )
+
+        (row,) = payment_discipline(P)
+
+        # 1 / 4 = 0,25 -> 0,3 (не банковское округление)
+        self.assertEqual(row["avg_days"], Decimal("0.3"))
+        self.assertEqual(row["contracts"], 4)
+
+    def test_payment_discipline_period_and_client_filter(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        self._paid(alpha, "PC-1", date(2026, 3, 1), date(2026, 3, 11))  # 10
+        self._paid(beta, "PC-2", date(2026, 3, 1), date(2026, 3, 21))  # 20
+        # заключён вне периода
+        self._paid(
+            alpha,
+            "PC-3",
+            date(2025, 11, 1),
+            date(2025, 12, 31),
+            conclusion=date(2025, 10, 1),
+        )
+
+        everyone = {r["name"]: r["avg_days"] for r in payment_discipline(P)}
+        only_alpha = payment_discipline(P, client=alpha)
+
+        self.assertEqual(everyone, {"Альфа": Decimal("10.0"), "Бета": Decimal("20.0")})
+        self.assertEqual([r["name"] for r in only_alpha], ["Альфа"])
+        self.assertEqual(only_alpha[0]["contracts"], 1)
+
+    def test_payment_discipline_one_query(self):
+        for index in range(3):
+            client = make_client(f"Клиент {index}")
+            self._paid(client, f"PQ-{index}", date(2026, 3, 1), date(2026, 3, 11))
+
+        with self.assertNumQueries(1):
+            result = payment_discipline(P)
+
+        self.assertEqual(len(result), 3)
+
+    def test_payment_discipline_empty_period(self):
+        self.assertEqual(payment_discipline(P), [])
