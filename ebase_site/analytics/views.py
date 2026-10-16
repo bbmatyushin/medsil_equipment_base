@@ -81,6 +81,10 @@ class AnalyticsTabView(TemplateView):
 # Список контрактов в админке: сюда ведут клики по виджетам
 CONTRACTS = "contracts_contract"
 
+# Не больше стольких id в ссылке `?id__in=`: UUID с разделителем «%2C» — 39 символов,
+# 90 штук ≈ 3,5 КБ, меньше предела строки запроса gunicorn по умолчанию (4094 байта)
+MAX_LINK_IDS = 90
+
 # Плитки: ключ показателя finance_kpis, подпись, «рост — плохо» (затраты, долг)
 FINANCE_TILES = [
     ("contract_amount", "Сумма контрактов", False),
@@ -112,19 +116,26 @@ def _finance_tiles(kpis: dict) -> list[dict]:
     ]
 
 
+def _aging_link(ids: list[str]) -> tuple[str | None, bool]:
+    """Ссылка корзины долга и признак «ведёт на всех должников».
+
+    Пустая корзина — без ссылки. Корзина больше `MAX_LINK_IDS` ведёт на всех
+    должников: длинный `?id__in=` gunicorn отклонил бы с ответом 400.
+    """
+    if not ids:
+        return None, False
+    if len(ids) > MAX_LINK_IDS:
+        return changelist_url(CONTRACTS, debt__gt=0), True
+    return changelist_url(CONTRACTS, id__in=ids), False
+
+
 def _with_aging_links(aging: list[dict]) -> list[dict]:
-    """Корзины долга со ссылкой на их контракты (у пустой корзины — None)."""
-    return [
-        {
-            **bucket,
-            "url": (
-                changelist_url(CONTRACTS, id__in=bucket["ids"])
-                if bucket["ids"]
-                else None
-            ),
-        }
-        for bucket in aging
-    ]
+    """Корзины долга со ссылкой (`url`) и признаком `all_debtors`."""
+    result = []
+    for bucket in aging:
+        url, all_debtors = _aging_link(bucket["ids"])
+        result.append({**bucket, "url": url, "all_debtors": all_debtors})
+    return result
 
 
 def _with_matrix_links(matrix: dict, period: Period, client: Client | None) -> dict:
@@ -296,6 +307,7 @@ class FinanceView(AnalyticsTabView):
                 finance.status_matrix(period, client), period, client
             ),
             aging=aging,
+            max_link_ids=MAX_LINK_IDS,
             pareto_caption=_pareto_caption(top),
             profitability_height=_horizontal_chart_height(len(profit_rows)),
             discipline=finance.payment_discipline(period, client),

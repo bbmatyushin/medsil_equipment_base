@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from analytics.tests.factories import make_client, make_contract, make_payment
-from analytics.views import TABS, Tab, _pareto_caption, visible_tabs
+from analytics.views import MAX_LINK_IDS, TABS, Tab, _pareto_caption, visible_tabs
 from clients.models import Client
 from contracts.admin import format_money
 from contracts.models import Contract, ContractExpense
@@ -363,6 +363,34 @@ class FinancePageTests(TestCase):
         self.assertEqual(changelist.status_code, 200)
         self.assertContains(changelist, "D-OLD")
         self.assertNotContains(changelist, "D-FRESH")
+
+    def test_finance_aging_large_bucket_links_to_all_debtors(self):
+        alpha = make_client("Альфа")
+        # корзина «Более 180 дн.» длиннее предела ссылки, «0–30 дн.» — короткая
+        for number in range(MAX_LINK_IDS + 1):
+            make_contract(alpha, f"BIG-{number:03d}", date(2026, 1, 10), 100)
+        make_contract(alpha, "D-FRESH", date(2026, 10, 1), 500)
+
+        response = self._get()
+
+        aging = {bucket["key"]: bucket for bucket in response.context["aging"]}
+        large, small = aging["180_plus"], aging["0_30"]
+        self.assertEqual(large["count"], MAX_LINK_IDS + 1)
+        all_debtors = reverse("admin:contracts_contract_changelist") + "?debt__gt=0"
+        self.assertEqual(large["url"], all_debtors)
+        self.assertIs(large["all_debtors"], True)
+        self.assertIn("id__in=", small["url"])
+        self.assertIs(small["all_debtors"], False)
+        self.assertEqual(
+            response.context["charts"]["debt_aging"]["links"][4], all_debtors
+        )
+        self.assertContains(
+            response, f"все должники: в корзине больше {MAX_LINK_IDS} контрактов"
+        )
+
+        changelist = self.client.get(large["url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertContains(changelist, "D-FRESH")
 
     def test_finance_top_clients_ignore_client_filter(self):
         alpha = make_client("Альфа")

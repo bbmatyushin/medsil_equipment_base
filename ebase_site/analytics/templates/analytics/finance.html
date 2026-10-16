@@ -54,7 +54,10 @@
                     <tbody>
                         {% for bucket in aging %}
                             <tr>
-                                <td>{% if bucket.url %}<a href="{{ bucket.url }}">{{ bucket.label }}</a>{% else %}{{ bucket.label }}{% endif %}</td>
+                                <td>
+                                    {% if bucket.url %}<a href="{{ bucket.url }}">{{ bucket.label }}</a>{% else %}{{ bucket.label }}{% endif %}
+                                    {% if bucket.all_debtors %}<div class="an-note">все должники: в корзине больше {{ max_link_ids }} контрактов</div>{% endif %}
+                                </td>
                                 <td class="num">{{ bucket.count }}</td>
                                 <td class="num">{{ bucket.amount|money }}</td>
                             </tr>
