@@ -194,6 +194,13 @@ html[data-theme="dark"] {
     font-size: 0.75rem;
 }
 
+/* Ссылка «Открыть в реестре» под плитками */
+.an-registry-link {
+    margin: 0 0 16px;
+    color: var(--an-text);
+    font-size: 0.8125rem;
+}
+
 /* Дельта к прошлому году: цвет по направлению, знак «+/−» дублирует его в тексте */
 .an-delta--up {
     color: var(--an-good);

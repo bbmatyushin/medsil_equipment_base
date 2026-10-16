@@ -7,8 +7,15 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils.html import escape
 
-from analytics.tests.factories import make_client, make_contract, make_payment
+from analytics.services.finance import TOTAL_KEYS
+from analytics.tests.factories import (
+    make_client,
+    make_contract,
+    make_payment,
+    make_shipment,
+)
 from analytics.views import MAX_LINK_IDS, TABS, Tab, _pareto_caption, visible_tabs
 from clients.models import Client
 from contracts.admin import format_money
@@ -300,7 +307,8 @@ class FinancePageTests(TestCase):
             parse_qs(urlsplit(cell["url"]).query),
             {
                 "services_provided": ["fully"],
-                "payment_status": ["paid"],
+                # параметр бокового фильтра «Оплата?» (list_filter): `__exact`
+                "payment_status__exact": ["paid"],
                 "conclusion_date__gte": ["2026-01-01"],
                 "conclusion_date__lte": ["2026-12-31"],
             },
@@ -318,6 +326,31 @@ class FinancePageTests(TestCase):
         self.assertContains(changelist, "M-PAID")
         self.assertNotContains(changelist, "M-OPEN")
         self.assertNotContains(changelist, "M-OLD")
+
+        # боковой фильтр «Оплата?» отмечает выбранный статус, а не «Все»:
+        # иначе «Итого» можно принять за итог по всем контрактам
+        cl = changelist.context["cl"]
+        status_spec = next(
+            spec
+            for spec in cl.filter_specs
+            if spec.lookup_kwarg == "payment_status__exact"
+        )
+        choices = list(status_spec.choices(cl))
+        selected = [choice["display"] for choice in choices if choice["selected"]]
+        self.assertEqual(
+            selected, [Contract(payment_status="paid").get_payment_status_display()]
+        )
+        # клик по другому статусу в панели заменяет выбранный, а не складывается с ним
+        other = next(
+            choice
+            for choice in choices
+            if choice["display"]
+            == Contract(payment_status="no_receipts").get_payment_status_display()
+        )
+        self.assertEqual(
+            parse_qs(other["query_string"].lstrip("?"))["payment_status__exact"],
+            ["no_receipts"],
+        )
 
     def test_finance_matrix_links_keep_selected_client(self):
         alpha = make_client("Альфа")
@@ -338,6 +371,99 @@ class FinancePageTests(TestCase):
         self.assertEqual(changelist.status_code, 200)
         self.assertContains(changelist, "A-1")
         self.assertNotContains(changelist, "B-1")
+
+    def test_finance_tiles_match_contract_changelist_totals(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        # контракты внутри периода 01.02–30.06.2026
+        first = make_contract(alpha, "R-1", date(2026, 3, 1), 1000)
+        make_payment(first, date(2026, 3, 5), 250)
+        second = make_contract(alpha, "R-2", date(2026, 5, 10), 2000)
+        make_payment(second, date(2026, 5, 20), 800)
+        ContractExpense.objects.create(
+            contract=second, expense_type="other", quantity=1, cost=150
+        )
+        make_shipment(second, date(2026, 5, 12), 300)
+        make_contract(beta, "R-3", date(2026, 4, 1), 700)
+        # граничные дни периода входят в него
+        make_contract(alpha, "R-FIRST-DAY", date(2026, 2, 1), 400)
+        make_contract(beta, "R-LAST-DAY", date(2026, 6, 30), 600)
+        # вне периода: до начала и после конца
+        _paid_contract(alpha, "R-OLD", date(2026, 1, 31), 5000)
+        make_contract(alpha, "R-LATE", date(2026, 7, 1), 9000)
+
+        params = {
+            "preset": "custom",
+            "date_from": "2026-02-01",
+            "date_to": "2026-06-30",
+        }
+        for client in (alpha, None):
+            with self.subTest(client=client):
+                tiles_params = dict(params)
+                register_params = {
+                    "conclusion_date__gte": params["date_from"],
+                    "conclusion_date__lte": params["date_to"],
+                }
+                if client is not None:
+                    tiles_params["client"] = client.pk
+                    register_params["client"] = client.pk
+
+                current = self._get(tiles_params).context["kpis"]["current"]
+                changelist = self.client.get(
+                    reverse("admin:contracts_contract_changelist"), register_params
+                )
+                self.assertEqual(changelist.status_code, 200)
+                totals = changelist.context["totals"]
+
+                self.assertEqual(set(totals), set(TOTAL_KEYS))
+                for key in TOTAL_KEYS:
+                    self.assertEqual(totals[key], format_money(current[key]), key)
+
+        # фильтры действительно применены: клиент и период сужают итог
+        alpha_only = self._get({**params, "client": alpha.pk}).context["kpis"]
+        everyone = self._get(params).context["kpis"]
+        self.assertEqual(alpha_only["current"]["count"], 3)
+        self.assertEqual(everyone["current"]["count"], 5)
+
+    def test_finance_registry_link_opens_same_contracts_as_tiles(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        make_contract(alpha, "L-IN", date(2026, 3, 1), 100)
+        make_contract(alpha, "L-OLD", date(2025, 3, 1), 200)
+        make_contract(beta, "L-BETA", date(2026, 3, 1), 400)
+
+        response = self._get({"client": alpha.pk})
+
+        registry_url = response.context["registry_url"]
+        self.assertEqual(
+            parse_qs(urlsplit(registry_url).query),
+            {
+                "conclusion_date__gte": ["2026-01-01"],
+                "conclusion_date__lte": ["2026-12-31"],
+                "client": [str(alpha.pk)],
+            },
+        )
+        self.assertContains(response, f'href="{escape(registry_url)}"')
+        self.assertContains(response, "Открыть в реестре")
+
+        changelist = self.client.get(registry_url)
+        self.assertEqual(changelist.status_code, 200)
+        self.assertContains(changelist, "L-IN")
+        self.assertNotContains(changelist, "L-OLD")
+        self.assertNotContains(changelist, "L-BETA")
+
+    def test_finance_registry_link_without_client_has_no_client_param(self):
+        response = self._get()
+
+        self.assertEqual(
+            parse_qs(urlsplit(response.context["registry_url"]).query),
+            {
+                "conclusion_date__gte": ["2026-01-01"],
+                "conclusion_date__lte": ["2026-12-31"],
+            },
+        )
+        changelist = self.client.get(response.context["registry_url"])
+        self.assertEqual(changelist.status_code, 200)
 
     def test_finance_aging_link_opens_changelist(self):
         alpha = make_client("Альфа")
@@ -391,6 +517,38 @@ class FinancePageTests(TestCase):
         changelist = self.client.get(large["url"])
         self.assertEqual(changelist.status_code, 200)
         self.assertContains(changelist, "D-FRESH")
+
+    def test_finance_aging_large_bucket_keeps_selected_client(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        for number in range(MAX_LINK_IDS + 1):
+            make_contract(alpha, f"BIG-{number:03d}", date(2026, 1, 10), 100)
+        make_contract(beta, "B-DEBT", date(2026, 1, 10), 700)
+
+        response = self._get({"client": alpha.pk})
+
+        large = next(
+            bucket
+            for bucket in response.context["aging"]
+            if bucket["key"] == "180_plus"
+        )
+        self.assertEqual(large["count"], MAX_LINK_IDS + 1)
+        self.assertIs(large["all_debtors"], True)
+        self.assertEqual(
+            parse_qs(urlsplit(large["url"]).query),
+            {"debt__gt": ["0"], "client": [str(alpha.pk)]},
+        )
+        self.assertContains(
+            response,
+            f"все должники клиента: в корзине больше {MAX_LINK_IDS} контрактов",
+        )
+        self.assertNotContains(response, "все должники: в корзине")
+
+        changelist = self.client.get(large["url"])
+        self.assertEqual(changelist.status_code, 200)
+        # список постраничный: считаем все найденные, а не видимые на странице
+        self.assertEqual(changelist.context["cl"].result_count, MAX_LINK_IDS + 1)
+        self.assertNotContains(changelist, "B-DEBT")
 
     def test_finance_top_clients_ignore_client_filter(self):
         alpha = make_client("Альфа")

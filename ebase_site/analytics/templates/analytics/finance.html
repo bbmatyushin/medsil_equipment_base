@@ -17,6 +17,7 @@
         </div>
     {% endfor %}
 </section>
+<p class="an-registry-link"><a href="{{ registry_url }}">Открыть в реестре</a> — контракты периода с теми же фильтрами; «Итого» списка совпадает с плитками.</p>
 
 <div class="an-charts">
     <section class="an-card an-card--wide">
@@ -56,7 +57,7 @@
                             <tr>
                                 <td>
                                     {% if bucket.url %}<a href="{{ bucket.url }}">{{ bucket.label }}</a>{% else %}{{ bucket.label }}{% endif %}
-                                    {% if bucket.all_debtors %}<div class="an-note">все должники: в корзине больше {{ max_link_ids }} контрактов</div>{% endif %}
+                                    {% if bucket.all_debtors %}<div class="an-note">{% if client %}все должники клиента{% else %}все должники{% endif %}: в корзине больше {{ max_link_ids }} контрактов</div>{% endif %}
                                 </td>
                                 <td class="num">{{ bucket.count }}</td>
                                 <td class="num">{{ bucket.amount|money }}</td>

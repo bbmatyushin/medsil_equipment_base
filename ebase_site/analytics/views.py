@@ -116,24 +116,33 @@ def _finance_tiles(kpis: dict) -> list[dict]:
     ]
 
 
-def _aging_link(ids: list[str]) -> tuple[str | None, bool]:
+def _client_param(client: Client | None) -> str | None:
+    """Значение GET-параметра `client` для ссылок в реестр; None — без клиента."""
+    return str(client.pk) if client is not None else None
+
+
+def _aging_link(
+    ids: list[str], client_pk: str | None = None
+) -> tuple[str | None, bool]:
     """Ссылка корзины долга и признак «ведёт на всех должников».
 
     Пустая корзина — без ссылки. Корзина больше `MAX_LINK_IDS` ведёт на всех
-    должников: длинный `?id__in=` gunicorn отклонил бы с ответом 400.
+    должников (выбранного клиента, если он задан): длинный `?id__in=` gunicorn
+    отклонил бы с ответом 400.
     """
     if not ids:
         return None, False
     if len(ids) > MAX_LINK_IDS:
-        return changelist_url(CONTRACTS, debt__gt=0), True
+        return changelist_url(CONTRACTS, debt__gt=0, client=client_pk), True
     return changelist_url(CONTRACTS, id__in=ids), False
 
 
-def _with_aging_links(aging: list[dict]) -> list[dict]:
+def _with_aging_links(aging: list[dict], client: Client | None) -> list[dict]:
     """Корзины долга со ссылкой (`url`) и признаком `all_debtors`."""
+    client_pk = _client_param(client)
     result = []
     for bucket in aging:
-        url, all_debtors = _aging_link(bucket["ids"])
+        url, all_debtors = _aging_link(bucket["ids"], client_pk)
         result.append({**bucket, "url": url, "all_debtors": all_debtors})
     return result
 
@@ -145,12 +154,23 @@ def _with_matrix_links(matrix: dict, period: Period, client: Client | None) -> d
             cell["url"] = changelist_url(
                 CONTRACTS,
                 services_provided=row["key"],
-                payment_status=cell["payment_status"],
+                # параметр бокового фильтра «Оплата?»: без `__exact` он его не отметит
+                payment_status__exact=cell["payment_status"],
                 conclusion_date__gte=period.date_from.isoformat(),
                 conclusion_date__lte=period.date_to.isoformat(),
-                client=str(client.pk) if client is not None else None,
+                client=_client_param(client),
             )
     return matrix
+
+
+def _registry_url(period: Period, client: Client | None) -> str:
+    """Реестр контрактов с теми же фильтрами, что у плиток: сверка с «Итого» списка."""
+    return changelist_url(
+        CONTRACTS,
+        conclusion_date__gte=period.date_from.isoformat(),
+        conclusion_date__lte=period.date_to.isoformat(),
+        client=_client_param(client),
+    )
 
 
 def _is_singular(number: int) -> bool:
@@ -284,7 +304,7 @@ class FinanceView(AnalyticsTabView):
         client = self.form.get_client()
 
         kpis = finance.finance_kpis(period, client)
-        aging = _with_aging_links(finance.debt_aging(context["today"], client))
+        aging = _with_aging_links(finance.debt_aging(context["today"], client), client)
         # «Топ» и «Рентабельность» сравнивают клиентов: фильтр клиента не применяется
         top = finance.top_clients(period)
         profitability = finance.client_profitability(period)
@@ -295,6 +315,7 @@ class FinanceView(AnalyticsTabView):
             client=client,
             kpis=kpis,
             tiles=_finance_tiles(kpis),
+            registry_url=_registry_url(period, client),
             charts=_finance_charts(
                 flow=finance.money_flow(period, client),
                 concluded=finance.concluded_by_month(period, client),
