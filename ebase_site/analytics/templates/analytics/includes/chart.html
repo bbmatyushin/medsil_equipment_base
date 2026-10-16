@@ -1,0 +1,13 @@
+{% comment %}
+График по спецификации analytics.charts.chart_spec.
+Параметры: spec — спецификация, chart_id — уникальный id на странице,
+title — необязательная подпись для экранных дикторов.
+{% endcomment %}
+{{ spec|json_script:chart_id }}
+{% if spec.empty %}
+    <p class="an-chart-empty">Нет данных за выбранный период</p>
+{% else %}
+    <div class="an-chart">
+        <canvas data-chart="{{ chart_id }}" role="img" aria-label="{{ title|default:'График' }}"></canvas>
+    </div>
+{% endif %}

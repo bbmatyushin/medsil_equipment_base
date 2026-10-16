@@ -1,8 +1,12 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
 
 {% block extrahead %}
     {{ block.super }}
-    {# Task 5: сюда подключаются chart.umd.min.js, charts.js и analytics.css #}
+    <link rel="stylesheet" href="{% static 'analytics/css/analytics.css' %}">
+    {# Chart.js лежит в проекте (без CDN); defer сохраняет порядок: сначала библиотека, потом наш скрипт #}
+    <script src="{% static 'analytics/vendor/chart.umd.min.js' %}" defer></script>
+    <script src="{% static 'analytics/js/charts.js' %}" defer></script>
 {% endblock %}
 
 {% block bodyclass %}{{ block.super }} analytics{% endblock %}
