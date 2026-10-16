@@ -57,6 +57,7 @@ class ChartSpecTests(SimpleTestCase):
                 "kind": "bar",
                 "axis": "y",
                 "sign_colors": False,
+                "fmt": None,
             },
         )
 
@@ -83,6 +84,31 @@ class ChartSpecTests(SimpleTestCase):
         self.assertTrue(spec["datasets"][2]["sign_colors"])
         self.assertTrue(spec["horizontal"])
         self.assertTrue(spec["stacked"])
+
+    def test_dataset_fmt(self):
+        spec = chart_spec(
+            "bar",
+            ["янв 2026", "фев 2026"],
+            [
+                {"label": "Сумма", "data": [100, 50]},
+                {
+                    "label": "Накопительно",
+                    "data": [100, 150],
+                    "kind": "line",
+                    "axis": "y2",
+                    "fmt": "money",
+                },
+            ],
+        )
+        self.assertIsNone(spec["datasets"][0]["fmt"])
+        self.assertEqual(spec["datasets"][1]["fmt"], "money")
+        self.assertEqual(spec["datasets"][1]["axis"], "y2")
+        with self.assertRaises(ValueError):
+            chart_spec(
+                "bar",
+                ["янв 2026"],
+                [{"label": "Сумма", "data": [1], "fmt": "rubles"}],
+            )
 
     def test_chart_spec_empty_when_all_zero(self):
         spec = chart_spec(

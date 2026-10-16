@@ -93,8 +93,12 @@
 
     // --- Сборка конфигурации Chart.js -------------------------------------------
 
-    // Формат значений серии: правая ось y2 — всегда проценты
+    // Формат значений серии: свой fmt серии, иначе на правой оси y2 — проценты,
+    // иначе формат графика
     function seriesFormat(spec, dataset) {
+        if (dataset.fmt) {
+            return dataset.fmt;
+        }
         return dataset.axis === "y2" ? "percent" : spec.format;
     }
 
@@ -203,16 +207,21 @@
             border: border,
             ticks: valueTicks(spec.format),
         };
-        if (!spec.horizontal && spec.datasets.some((d) => d.axis === "y2")) {
-            // Накопленная доля (Парето): шкала 0–100 % справа, без своей сетки
+        const y2Series = spec.datasets.find((d) => d.axis === "y2");
+        if (!spec.horizontal && y2Series) {
+            // Правая шкала в формате своей серии, без своей сетки
+            const y2Format = seriesFormat(spec, y2Series);
             scales.y2 = {
                 position: "right",
                 beginAtZero: true,
-                suggestedMax: 100,
                 grid: { drawOnChartArea: false },
                 border: border,
-                ticks: valueTicks("percent"),
+                ticks: valueTicks(y2Format),
             };
+            if (y2Format === "percent") {
+                // Накопленная доля (Парето): шкала 0–100 %
+                scales.y2.suggestedMax = 100;
+            }
         }
         return scales;
     }

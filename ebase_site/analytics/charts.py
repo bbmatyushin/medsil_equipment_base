@@ -32,10 +32,13 @@ def _dataset(dataset: dict, chart_kind: str) -> dict:
     """Серия графика с проверенными необязательными ключами."""
     kind = dataset.get("kind") or chart_kind
     axis = dataset.get("axis") or "y"
+    fmt = dataset.get("fmt")
     if kind not in KINDS:
         raise ValueError(f"Неизвестный тип серии: {kind!r}")
     if axis not in AXES:
         raise ValueError(f"Неизвестная ось серии: {axis!r}")
+    if fmt is not None and fmt not in FORMATS:
+        raise ValueError(f"Неизвестный формат серии: {fmt!r}")
     convert = _point if kind == "scatter" else to_float
     return {
         "label": str(dataset.get("label", "")),
@@ -43,6 +46,7 @@ def _dataset(dataset: dict, chart_kind: str) -> dict:
         "kind": kind,
         "axis": axis,
         "sign_colors": bool(dataset.get("sign_colors", False)),
+        "fmt": fmt,
     }
 
 
@@ -69,9 +73,14 @@ def chart_spec(
     """JSON-совместимая спецификация графика.
 
     - `kind`: "bar" | "line" | "scatter".
-    - `datasets`: серии `{"label", "data", "kind"?, "axis"?, "sign_colors"?}`.
+    - `datasets`: серии `{"label", "data", "kind"?, "axis"?, "sign_colors"?, "fmt"?}`.
       `kind` серии задаёт смешанный график (линия поверх столбцов),
-      `axis="y2"` — шкала процентов справа, `sign_colors` — окраска столбцов по знаку.
+      `axis="y2"` — вторая шкала справа, `sign_colors` — окраска столбцов по знаку.
+      `fmt` серии (один из форматов ниже) — формат её значений в подсказке
+      и, при `axis="y2"`, правой шкалы. Без `fmt` серия на y2 — проценты
+      со шкалой 0–100 %, остальные серии — в формате графика (`fmt`).
+      Пример: «Накопительно» поверх столбцов — `axis="y2", fmt="money"`
+      (правая шкала денег подстраивается под данные и не сплющивает столбцы).
       У scatter `data` — точки `{"x", "y", "label", "url"}`.
     - `fmt`: формат значений ("money" | "count" | "percent"); у scatter — ось Y.
     - `x_fmt`: формат оси X у scatter (по умолчанию деньги), у остальных не используется.
