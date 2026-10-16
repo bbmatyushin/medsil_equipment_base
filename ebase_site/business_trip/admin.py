@@ -18,7 +18,9 @@ from business_trip.models import (
     BusinessTripExpense,
     BusinessTripPhoto,
     ExpenseType,
+    MoneyReceipt,
 )
+from contracts.admin import format_money
 from users.models import CompanyUser
 from utils import MainModelAdmin
 
@@ -301,31 +303,52 @@ class BusinessTripAdmin(MainModelAdmin):
     def has_photos(self, obj):
         return obj.photos.exists()
 
+    def _filtered_trip_months(self, request):
+        """Месяцы (год, месяц) дат выезда всех командировок текущего списка.
+
+        Учитываются все фильтры, поиск и навигация по датам — то есть весь
+        отфильтрованный список, а не только отмеченные строки.
+        """
+        trips = self.get_changelist_instance(request).get_queryset(request)
+        dates = trips.prefetch_related(None).order_by().values_list("beg_dt", flat=True)
+        return {(d.year, d.month) for d in dates}
+
     @admin.action(description="Отчет по денежным средствам")
     def money_report_action(self, request, queryset):
         """Месячный отчёт по денежным средствам (Excel) по выбранным командировкам.
 
-        Требуется фильтр по одному сотруднику (``employee``) и месяц одного года
-        в навигации по датам (``beg_dt__year`` + ``beg_dt__month`` без
-        ``beg_dt__day``). Форма changelist отправляется POST на текущий URL,
-        поэтому фильтры доступны в ``request.GET``.
+        Требуется фильтр по одному сотруднику (``employee``). Месяц берётся из
+        навигации по датам (``beg_dt__year`` + ``beg_dt__month`` без
+        ``beg_dt__day``); если месяц там не выбран, достаточно, чтобы все
+        командировки отфильтрованного списка были за один месяц одного года.
+        Форма changelist отправляется POST на текущий URL, поэтому фильтры
+        доступны в ``request.GET``.
         """
         employee_id = request.GET.get("employee")
-        year = request.GET.get("beg_dt__year")
-        month = request.GET.get("beg_dt__month")
+        year = month = None
         error = None
         if not employee_id:
             error = "Выберите фильтр по сотруднику (справа, блок «Сотрудник»)."
-        elif not (year and month) or "beg_dt__day" in request.GET:
+        elif "beg_dt__day" in request.GET:
             error = (
                 "Выберите месяц в навигации по датам над списком "
                 "(год → месяц, без конкретного дня)."
             )
-        if error is None:
+        elif "beg_dt__month" in request.GET:
             try:
-                year, month = int(year), int(month)
-            except ValueError:
+                year = int(request.GET.get("beg_dt__year"))
+                month = int(request.GET.get("beg_dt__month"))
+            except (TypeError, ValueError):
                 error = "Некорректный год или месяц в фильтре по датам."
+        else:
+            months = self._filtered_trip_months(request)
+            if len(months) == 1:
+                ((year, month),) = months
+            else:
+                error = (
+                    "В списке командировки за разные месяцы. Выберите месяц "
+                    "в навигации по датам над списком (год → месяц)."
+                )
         if error is None and (
             queryset.exclude(employee_id=employee_id).exists()
             or queryset.exclude(beg_dt__year=year, beg_dt__month=month).exists()
@@ -356,7 +379,12 @@ class BusinessTripAdmin(MainModelAdmin):
             )
             return None
         employee = trips[0].employee
-        wb = build_money_report(employee, year, month, trips)
+        receipts = MoneyReceipt.objects.filter(
+            employee_id=employee.pk,
+            receipt_date__year=year,
+            receipt_date__month=month,
+        ).order_by("receipt_date", "number")
+        wb = build_money_report(employee, year, month, trips, receipts)
 
         response = HttpResponse(
             content_type=(
@@ -368,4 +396,84 @@ class BusinessTripAdmin(MainModelAdmin):
             filename=money_report_filename(employee, year, month),
         )
         wb.save(response)
+        return response
+
+
+class ReceiptEmployeeFilter(admin.SimpleListFilter):
+    """Фильтр по сотруднику: только те, у кого есть поступления ДС."""
+
+    title = "Сотрудник"
+    parameter_name = "employee"
+
+    def lookups(self, request, model_admin):
+        employees = (
+            CompanyUser.objects.filter(money_receipts__isnull=False)
+            .distinct()
+            .order_by("last_name", "first_name", "patron")
+        )
+        return [(e.pk, str(e)) for e in employees]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(employee_id=self.value())
+        return queryset
+
+
+@admin.register(MoneyReceipt)
+class MoneyReceiptAdmin(MainModelAdmin):
+    """Поступление ДС. Под списком — сводная по сотрудникам с учётом фильтров."""
+
+    date_hierarchy = "receipt_date"
+    list_display = ("number", "receipt_date", "amount", "employee", "created_at")
+    list_filter = (ReceiptEmployeeFilter,)
+    list_select_related = ("employee",)
+    # Сортировка по клику на заголовок — только по дате получения
+    sortable_by = ("receipt_date",)
+    readonly_fields = ("number", "employee", "created_at")
+
+    class Media:
+        css = {"all": ("business_trip/css/money_receipt_changelist.css",)}
+
+    def get_fieldsets(self, request, obj=None):
+        fields = [("receipt_date", "amount")]
+        if obj is not None:
+            fields.append(("number", "employee", "created_at"))
+        return (("Поступление ДС", {"fields": fields}),)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.employee = request.user
+        super().save_model(request, obj, form, change)
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        try:
+            cl = response.context_data["cl"]
+        except (AttributeError, KeyError):
+            return response
+
+        rows = list(
+            cl.queryset.order_by()
+            .values("employee")
+            .annotate(total=Sum("amount"))
+            .values_list("employee", "total")
+        )
+        employees = CompanyUser.objects.in_bulk([pk for pk, _ in rows])
+        rows.sort(
+            key=lambda row: (
+                employees[row[0]].last_name or "",
+                employees[row[0]].first_name or "",
+            )
+        )
+        response.context_data["receipt_totals"] = {
+            "rows": [
+                {
+                    # str(CompanyUser) даёт двойные пробелы при пустом отчестве
+                    "employee": " ".join(str(employees[pk]).split()),
+                    "amount": format_money(total),
+                }
+                for pk, total in rows
+            ],
+            "total": format_money(sum((t for _, t in rows), Decimal("0"))),
+        }
         return response

@@ -4,14 +4,14 @@
 ``docs/business_trip/files/КОМАНДИРОВКИ.xlsx``:
 
 * B2 — «Ф.И.О. …», F2/H2 — заголовок и период;
-* C5:D19 — «Получено» (12 пустых строк под ручной ввод, ИТОГО в 19-й строке);
+* C5:D19 — «Получено» (12 строк из «Поступление ДС», ИТОГО в 19-й строке);
 * A22:D35 — «перечислено по командиравкам» (11 строк, ИТОГО в 35-й строке);
 * C37:D44 — «остаток на начало/конец месяца» (только заголовки);
 * F5:H45 — «израсходовано» (38 строк, ИТОГО в 45-й строке);
 * C48:D50 / F48:G50 — «ИТОГО получено» / «ИТОГО расход».
 
-Если командировок больше 11 или затрат больше 38, таблица растягивается вниз,
-а блоки под ней сдвигаются на столько же строк.
+Если поступлений больше 12, командировок больше 11 или затрат больше 38,
+таблица растягивается вниз, а блоки под ней сдвигаются на столько же строк.
 """
 
 import calendar
@@ -220,7 +220,7 @@ def _total_label(ws, row, col):
     _cell(ws, row, col, "ИТОГО", bold=True, horizontal="right", vertical="center")
 
 
-def build_money_report(employee, year: int, month: int, trips) -> Workbook:
+def build_money_report(employee, year: int, month: int, trips, receipts=()) -> Workbook:
     """Сформировать отчёт по денежным средствам за месяц.
 
     :param employee: сотрудник (``CompanyUser``)
@@ -228,6 +228,7 @@ def build_money_report(employee, year: int, month: int, trips) -> Workbook:
     :param month: месяц отчёта
     :param trips: командировки сотрудника за месяц; ожидается prefetch
         ``destinations__department__city`` и ``expenses__expense_type``
+    :param receipts: поступления ДС сотрудника за месяц (``MoneyReceipt``)
     :return: книга openpyxl
     """
     trips = sorted(trips, key=lambda t: (t.beg_dt, t.doc_number or 0))
@@ -240,8 +241,11 @@ def build_money_report(employee, year: int, month: int, trips) -> Workbook:
         ),
         key=lambda e: e.date,
     )
+    receipts = sorted(receipts, key=lambda r: (r.receipt_date, r.number or 0))
     # Сдвиг блоков, если данные не влезают в строки образца
-    left_shift = max(len(trips) - ALLOWANCE_ROWS, 0)
+    received_shift = max(len(receipts) - RECEIVED_ROWS, 0)
+    trips_shift = max(len(trips) - ALLOWANCE_ROWS, 0)
+    left_shift = received_shift + trips_shift
     right_shift = max(len(expenses) - SPENT_ROWS, 0)
 
     wb = Workbook()
@@ -268,14 +272,18 @@ def build_money_report(employee, year: int, month: int, trips) -> Workbook:
     _cell(ws, 2, 6, "Отчет по денежным средствам за ", **title_style)
     _cell(ws, 2, 8, report_period(year, month), **title_style)
 
-    # --- «Получено» (данных в базе пока нет — пустые строки под ручной ввод) ---
+    # --- «Получено» (поступления ДС сотрудника за месяц) ---
+    data_style = dict(horizontal="center", vertical="center")
     _header(ws, 5, 3, 4, "Получено")
     _header(ws, 6, 3, 3, "дата")
     _header(ws, 6, 4, 4, "сумма")
-    received_last = RECEIVED_FIRST_ROW + RECEIVED_ROWS - 1
-    for row in range(RECEIVED_FIRST_ROW, received_last + 1):
-        _cell(ws, row, 3, fmt=DATE_FORMAT)
-        _cell(ws, row, 4, fmt=MONEY_FORMAT)
+    received_last = RECEIVED_FIRST_ROW + RECEIVED_ROWS + received_shift - 1
+    for index, row in enumerate(range(RECEIVED_FIRST_ROW, received_last + 1)):
+        receipt = receipts[index] if index < len(receipts) else None
+        _cell(
+            ws, row, 3, receipt and receipt.receipt_date, fmt=DATE_FORMAT, **data_style
+        )
+        _cell(ws, row, 4, receipt and receipt.amount, fmt=MONEY_FORMAT, **data_style)
     received_total_row = received_last + 1
     _total_label(ws, received_total_row, 3)
     _cell(
@@ -290,15 +298,14 @@ def build_money_report(employee, year: int, month: int, trips) -> Workbook:
     # Одна строка на командировку: даты командировки, города пунктов и
     # «Командировочные» (allowance_amount). Формат строк может дорабатываться
     # (например, разбивка по пунктам/подразделениям).
-    row = ALLOWANCE_TITLE_ROW
+    row = ALLOWANCE_TITLE_ROW + received_shift
     _cell(ws, row, 1)
     _header(ws, row, 2, 4, "перечислено по командиравкам")
     row += 1
     for col, title in enumerate(("Дата с", "Дата по", "Направление", "сумма"), 1):
         _header(ws, row, col, col, title)
     allowance_first = row + 1
-    allowance_last = allowance_first + ALLOWANCE_ROWS + left_shift - 1
-    data_style = dict(horizontal="center", vertical="center")
+    allowance_last = allowance_first + ALLOWANCE_ROWS + trips_shift - 1
     for index, row in enumerate(range(allowance_first, allowance_last + 1)):
         trip = trips[index] if index < len(trips) else None
         _cell(ws, row, 1, trip and trip.beg_dt, fmt=DATE_FORMAT, **data_style)

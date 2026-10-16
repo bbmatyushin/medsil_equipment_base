@@ -18,6 +18,7 @@ from business_trip.models import (
     BusinessTripExpense,
     BusinessTripPhoto,
     ExpenseType,
+    MoneyReceipt,
 )
 from clients.models import Client, Department
 from contracts.models import Contract
@@ -592,10 +593,25 @@ class BusinessTripMoneyReportTests(TestCase):
         self._assert_rejected(response)
 
     def test_rejected_without_month(self):
+        # В отфильтрованном списке командировки за июль и август
         response = self._post(
             f"employee={self.employee.pk}&beg_dt__year=2026", [self.trip_1]
         )
         self._assert_rejected(response)
+        response = self._post(f"employee={self.employee.pk}", [self.trip_1])
+        self._assert_rejected(response)
+
+    def test_report_without_month_when_list_in_one_month(self):
+        """Месяц не выбран, но весь отфильтрованный список за один месяц."""
+        for query in (
+            f"employee={self.other.pk}",
+            f"employee={self.other.pk}&beg_dt__year=2026",
+        ):
+            response = self._post(query, [self.trip_other])
+            self.assertEqual(response["Content-Type"], self.XLSX, query)
+            ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+            self.assertEqual(ws["H2"].value, "01-31 июля 2026г")
+            self.assertEqual(ws["A24"].value, datetime(2026, 7, 10))
 
     def test_rejected_with_day(self):
         response = self._post(self._query(beg_dt__day=6), [self.trip_1])
@@ -735,3 +751,164 @@ class BusinessTripMoneyReportTests(TestCase):
         self.assertEqual(ws["D36"].value, "=SUM(D24:D35)")
         self.assertEqual(ws["C38"].value, "остаток на начало месяца")
         self.assertEqual(ws["G49"].value, "=G45+D36")
+
+    def test_report_received_from_money_receipts(self):
+        """«Получено» — поступления ДС только этого сотрудника за месяц отчёта."""
+        for employee, day, amount in (
+            (self.employee, date(2026, 7, 15), "2000"),
+            (self.employee, date(2026, 7, 1), "1000"),
+            (self.employee, date(2026, 6, 30), "999"),
+            (self.employee, date(2026, 8, 1), "888"),
+            (self.other, date(2026, 7, 10), "777"),
+        ):
+            MoneyReceipt.objects.create(
+                employee=employee, receipt_date=day, amount=Decimal(amount)
+            )
+        response = self._post(self._query(), [self.trip_1, self.trip_2])
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["C7"].value, datetime(2026, 7, 1))
+        self.assertEqual(ws["D7"].value, 1000)
+        self.assertEqual(ws["C8"].value, datetime(2026, 7, 15))
+        self.assertEqual(ws["D8"].value, 2000)
+        self.assertIsNone(ws["C9"].value)
+        self.assertIsNone(ws["D9"].value)
+        self.assertFalse(ws["D7"].font.b)
+        self.assertEqual(ws["D19"].value, "=SUM(D7:D18)")
+        self.assertEqual(ws["D48"].value, "=D19")
+
+    def test_report_received_overflow_shifts_left_blocks(self):
+        """Поступлений больше 12 — «Получено» растёт, левые блоки сдвигаются."""
+        for day in range(1, 15):
+            MoneyReceipt.objects.create(
+                employee=self.employee,
+                receipt_date=date(2026, 7, day),
+                amount=Decimal("100"),
+            )
+        response = self._post(self._query(), [self.trip_1, self.trip_2])
+        ws = load_workbook(BytesIO(response.content))["ОТЧЕТ"]
+        self.assertEqual(ws["C20"].value, datetime(2026, 7, 14))
+        self.assertEqual(ws["D21"].value, "=SUM(D7:D20)")
+        self.assertEqual(ws["B24"].value, "перечислено по командиравкам")
+        self.assertEqual(ws["A26"].value, datetime(2026, 7, 6))
+        self.assertEqual(ws["D37"].value, "=SUM(D26:D36)")
+        self.assertEqual(ws["C39"].value, "остаток на начало месяца")
+        # «израсходовано» не сдвигается, итоги — ниже на 2 строки
+        self.assertEqual(ws["G45"].value, "=SUM(G7:G44)")
+        self.assertEqual(ws["C50"].value, "ИТОГО получено")
+        self.assertEqual(ws["D50"].value, "=D21")
+        self.assertEqual(ws["G50"].value, "=G45+D37")
+
+
+class MoneyReceiptModelTests(TestCase):
+    def setUp(self):
+        self.employee = User.objects.create_user(username="ivanov", password="pass")
+
+    def _make(self, **kwargs):
+        return MoneyReceipt.objects.create(
+            employee=self.employee, amount=Decimal("1000"), **kwargs
+        )
+
+    def test_number_auto_increment(self):
+        self.assertEqual(self._make().number, 1)
+        self.assertEqual(self._make().number, 2)
+
+    def test_created_at_not_changed_on_update(self):
+        receipt = self._make()
+        created_at = receipt.created_at
+        receipt.amount = Decimal("2000")
+        receipt.save()
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.created_at, created_at)
+        self.assertEqual(receipt.number, 1)
+
+
+class MoneyReceiptAdminTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="admin", password="pass", last_name="Админов", first_name="Адам"
+        )
+        self.employee = User.objects.create_user(
+            username="ivanov", password="pass", last_name="Иванов", first_name="Иван"
+        )
+        self.client.force_login(self.admin)
+        self.url = reverse("admin:business_trip_moneyreceipt_changelist")
+
+    def _receipt(self, employee, day, amount):
+        return MoneyReceipt.objects.create(
+            employee=employee, receipt_date=day, amount=Decimal(amount)
+        )
+
+    def test_add_form_has_only_date_and_amount(self):
+        response = self.client.get(reverse("admin:business_trip_moneyreceipt_add"))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["adminform"].form
+        self.assertEqual(set(form.fields), {"receipt_date", "amount"})
+        # Синяя шапка над полями
+        self.assertContains(response, "<h2>Поступление ДС</h2>", html=True)
+
+    def test_changelist_sortable_only_by_receipt_date(self):
+        response = self.client.get(self.url)
+        sortable = [
+            h["text"] for h in response.context["result_headers"] if h["sortable"]
+        ]
+        self.assertEqual(sortable, ["Дата получения"])
+
+    def test_add_sets_employee_and_number(self):
+        response = self.client.post(
+            reverse("admin:business_trip_moneyreceipt_add"),
+            {"receipt_date": "16.10.2026", "amount": "5000"},
+        )
+        self.assertEqual(response.status_code, 302)
+        receipt = MoneyReceipt.objects.get()
+        self.assertEqual(receipt.employee, self.admin)
+        self.assertEqual(receipt.number, 1)
+        self.assertEqual(receipt.amount, Decimal("5000"))
+
+    def test_change_keeps_employee(self):
+        receipt = self._receipt(self.employee, date(2026, 10, 1), "100")
+        response = self.client.post(
+            reverse("admin:business_trip_moneyreceipt_change", args=[receipt.pk]),
+            {"receipt_date": "02.10.2026", "amount": "200"},
+        )
+        self.assertEqual(response.status_code, 302)
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.employee, self.employee)
+        self.assertEqual(receipt.receipt_date, date(2026, 10, 2))
+        self.assertEqual(receipt.number, 1)
+
+    def test_change_page_200(self):
+        receipt = self._receipt(self.employee, date(2026, 10, 1), "100")
+        response = self.client.get(
+            reverse("admin:business_trip_moneyreceipt_change", args=[receipt.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_changelist_totals_by_employee(self):
+        self._receipt(self.employee, date(2026, 9, 30), "1000")
+        self._receipt(self.employee, date(2026, 10, 1), "2000")
+        self._receipt(self.employee, date(2026, 10, 15), "500.50")
+        self._receipt(self.admin, date(2026, 10, 2), "300")
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        totals = response.context["receipt_totals"]
+        self.assertEqual(
+            totals["rows"],
+            [
+                {"employee": "Адам Админов", "amount": "300,00"},
+                {"employee": "Иван Иванов", "amount": "3 500,50"},
+            ],
+        )
+        self.assertEqual(totals["total"], "3 800,50")
+        self.assertContains(response, "Итого по отображаемым поступлениям")
+
+        # Фильтр по сотруднику и месяцу
+        response = self.client.get(
+            f"{self.url}?employee={self.employee.pk}"
+            "&receipt_date__year=2026&receipt_date__month=10"
+        )
+        totals = response.context["receipt_totals"]
+        self.assertEqual(
+            totals["rows"], [{"employee": "Иван Иванов", "amount": "2 500,50"}]
+        )
+        self.assertEqual(totals["total"], "2 500,50")

@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
@@ -377,3 +378,76 @@ class BusinessTripContractExpense(EbaseModel):
 
     def __str__(self):
         return f"{self.business_trip} → {self.contract} — {self.amount} руб."
+
+
+class MoneyReceipt(models.Model):
+    """Поступление денежных средств сотруднику.
+
+    Сотрудник — пользователь, создавший запись (ставится в админке). Порядковый
+    номер присваивается автоматически (max + 1). Записи за месяц попадают в блок
+    «Получено» отчёта по денежным средствам (business_trip/xlsx_report.py).
+    """
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID",
+        db_comment="ID записи",
+    )
+    number = models.PositiveIntegerField(
+        unique=True,
+        editable=False,
+        verbose_name="Порядковый номер",
+        db_comment="Порядковый номер поступления (автоматически, с 1)",
+    )
+    receipt_date = models.DateField(
+        default=timezone.localdate,
+        verbose_name="Дата получения",
+        db_comment="Дата получения денежных средств",
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        verbose_name="Сумма",
+        db_comment="Сумма полученных денежных средств",
+    )
+    employee = models.ForeignKey(
+        "users.CompanyUser",
+        on_delete=models.RESTRICT,
+        editable=False,
+        related_name="money_receipts",
+        verbose_name="Сотрудник",
+        db_comment="ID сотрудника (пользователь, создавший запись)",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+        db_comment="Дата и время создания записи",
+    )
+
+    class Meta:
+        db_table = f'{company}."business_trip_money_receipt"'
+        db_table_comment = "Поступления денежных средств сотрудникам. \n\n-- Generated"
+        verbose_name = "Поступление ДС"
+        verbose_name_plural = "Поступление ДС"
+        ordering = ("-receipt_date", "-number")
+        indexes = [
+            models.Index(fields=["employee"]),
+            models.Index(fields=["receipt_date"]),
+        ]
+
+    def __str__(self):
+        return f"№{self.number} {self.employee} — {self.amount} руб."
+
+    def save(self, *args, **kwargs):
+        # max+1 без блокировки — как BusinessTrip._assign_doc_number;
+        # уникальность гарантирует constraint.
+        if self.number is None:
+            max_num = (
+                MoneyReceipt.objects.aggregate(max_num=models.Max("number"))["max_num"]
+                or 0
+            )
+            self.number = max_num + 1
+        super().save(*args, **kwargs)

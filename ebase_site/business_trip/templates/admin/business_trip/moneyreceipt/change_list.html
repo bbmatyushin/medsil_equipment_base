@@ -1,0 +1,32 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+{{ block.super }}
+{% if receipt_totals.rows %}
+<div class="receipt-totals-wrapper">
+  <h3>Итого по отображаемым поступлениям</h3>
+  <table class="receipt-totals-table">
+    <thead>
+      <tr>
+        <th>Сотрудник</th>
+        <th class="num">Сумма</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in receipt_totals.rows %}
+      <tr>
+        <td>{{ row.employee }}</td>
+        <td class="num">{{ row.amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>ИТОГО</td>
+        <td class="num">{{ receipt_totals.total }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

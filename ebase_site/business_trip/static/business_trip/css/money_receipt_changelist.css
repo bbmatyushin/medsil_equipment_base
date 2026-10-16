@@ -1,0 +1,76 @@
+/* Сводная по сотрудникам под списком «Поступление ДС»
+   (по образцу contracts/css/contract_changelist.css). */
+.receipt-totals-wrapper {
+    margin-top: 20px;
+    padding: 12px 15px;
+    background: var(--darkened-bg, #f8f8f8);
+    border: 1px solid var(--hairline-color, #e8e8e8);
+    border-radius: 4px;
+}
+
+.receipt-totals-wrapper h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.receipt-totals-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.receipt-totals-table th,
+.receipt-totals-table td {
+    padding: 5px 10px;
+    text-align: left;
+    border: 1px solid var(--border-color, #e0e0e0);
+}
+
+.receipt-totals-table .num {
+    text-align: right;
+    font-family: "Courier New", Courier, monospace;
+    white-space: nowrap;
+}
+
+.receipt-totals-table thead th {
+    background: var(--header-bg, #f0f0f0);
+    font-weight: 600;
+    color: var(--header-link-color, var(--body-fg, #333));
+    font-size: 0.6875rem;
+    line-height: normal;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: middle;
+    height: 32px;
+    padding: 8px 12px !important;
+    box-sizing: border-box;
+}
+
+.receipt-totals-table tfoot td {
+    font-weight: 600;
+}
+
+/* Общая сумма — тем же размером, что суммы по сотрудникам
+   (base.css админки уменьшает шрифт в tfoot до 0.6875rem). */
+.receipt-totals-table tfoot td.num {
+    font-size: 0.8125rem;
+}
+
+/* Десктоп: половина ширины списка, справа. Ширина в процентах от формы
+   списка, поэтому при скрытии фильтра таблица растягивается вместе со списком. */
+@media (min-width: 768px) {
+    .receipt-totals-wrapper {
+        width: 50%;
+        margin-left: auto;
+        box-sizing: border-box;
+    }
+}
+
+@media (max-width: 600px) {
+    .receipt-totals-wrapper {
+        padding: 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
