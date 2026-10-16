@@ -2,12 +2,14 @@
 График по спецификации analytics.charts.chart_spec.
 Параметры: spec — спецификация, chart_id — уникальный id на странице,
 title — необязательная подпись для экранных дикторов.
+Необязательные: height — высота графика в px (по умолчанию из CSS, 300px),
+empty_text — текст вместо пустого графика.
 {% endcomment %}
 {{ spec|json_script:chart_id }}
 {% if spec.empty %}
-    <p class="an-chart-empty">Нет данных за выбранный период</p>
+    <p class="an-chart-empty">{{ empty_text|default:"Нет данных за выбранный период" }}</p>
 {% else %}
-    <div class="an-chart">
+    <div class="an-chart"{% if height %} style="height: {{ height }}px"{% endif %}>
         <canvas data-chart="{{ chart_id }}" role="img" aria-label="{{ title|default:'График' }}"></canvas>
     </div>
 {% endif %}

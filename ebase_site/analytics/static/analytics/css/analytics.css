@@ -302,6 +302,38 @@ html[data-theme="dark"] {
     white-space: nowrap;
 }
 
+/* Пояснение рядом со значением («предоплата») */
+.an-note {
+    color: var(--an-text);
+    font-size: 0.75rem;
+}
+
+/* Матрица «оказано × оплачено»: количество, под ним сумма; ссылка — на всю ячейку.
+   Заголовки столбцов переносятся, чтобы матрица помещалась в половину ширины */
+.an-table.an-matrix th,
+.an-table.an-matrix td {
+    padding: 6px;
+}
+
+.an-table.an-matrix thead th {
+    white-space: normal;
+}
+
+.an-matrix td a {
+    display: block;
+}
+
+.an-matrix-amount {
+    display: block;
+    color: var(--an-text);
+    font-size: 0.75rem;
+}
+
+/* таблица под графиком в той же карточке («Возраст долга») */
+.an-card .an-chart + .an-table-wrap {
+    margin-top: 12px;
+}
+
 /*
  * Ячейка тепловой карты: класс an-heat-N, N = 0…5 — доля от максимума таблицы (считает view).
  * Один оттенок (синий) поверх фона карточки: в тёмной теме малые значения темнее, большие светлее.
