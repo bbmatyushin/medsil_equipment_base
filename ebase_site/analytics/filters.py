@@ -101,11 +101,16 @@ class PeriodForm(forms.Form):
     """Выбор периода. Создаётся с `data=request.GET`; мусор в параметрах не падает."""
 
     preset = forms.ChoiceField(choices=PRESETS, required=False, label="Период")
+    # format="%Y-%m-%d": в ru-локали DateInput иначе выводит 05.03.2026, а type="date" ждёт ISO
     date_from = forms.DateField(
-        required=False, widget=forms.DateInput(attrs={"type": "date"}), label="С"
+        required=False,
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        label="С",
     )
     date_to = forms.DateField(
-        required=False, widget=forms.DateInput(attrs={"type": "date"}), label="По"
+        required=False,
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        label="По",
     )
 
     def _cleaned(self) -> dict:

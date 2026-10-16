@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.test import SimpleTestCase, TestCase
+from django.utils import translation
 
 from clients.models import Client
 from contracts.models import Contract
@@ -259,3 +260,14 @@ class FinanceFilterFormTests(TestCase):
             )
         queryset = FinanceFilterForm().fields["client"].queryset
         self.assertEqual(list(queryset), [second, self.with_contract])
+
+
+class DateWidgetFormatTests(SimpleTestCase):
+    def test_initial_dates_render_as_iso_for_date_input(self):
+        """В ru-локали DateInput без format выводит 05.03.2026, а type=date ждёт ISO."""
+        form = PeriodForm(
+            initial={"date_from": date(2026, 3, 5), "date_to": date(2026, 4, 10)}
+        )
+        with translation.override("ru"):
+            self.assertIn('value="2026-03-05"', str(form["date_from"]))
+            self.assertIn('value="2026-04-10"', str(form["date_to"]))
