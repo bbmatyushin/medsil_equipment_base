@@ -100,6 +100,39 @@ class PeriodFormTests(SimpleTestCase):
         )
         self.assertEqual(form.get_period(TODAY), YEAR_2026)
 
+    def test_invalid_extreme_dates_fall_back_to_year(self):
+        cases = [
+            ("0001-01-01", "9999-12-31"),
+            ("1899-12-31", "2026-03-15"),
+            ("2026-03-15", "2101-01-01"),
+            ("9999-12-31", "0001-01-01"),  # после обмена местами тоже вне границ
+        ]
+        for date_from, date_to in cases:
+            with self.subTest(date_from=date_from, date_to=date_to):
+                period = PeriodForm(
+                    data={
+                        "preset": "custom",
+                        "date_from": date_from,
+                        "date_to": date_to,
+                    }
+                ).get_period(TODAY)
+                self.assertEqual(period, YEAR_2026)
+                # потребители периода не падают
+                period.previous_year()
+                period.months()
+
+    def test_boundary_years_are_allowed(self):
+        form = PeriodForm(
+            data={
+                "preset": "custom",
+                "date_from": "1900-01-01",
+                "date_to": "2100-12-31",
+            }
+        )
+        self.assertEqual(
+            form.get_period(TODAY), Period(date(1900, 1, 1), date(2100, 12, 31))
+        )
+
     def test_invalid_reversed_range_is_swapped(self):
         form = PeriodForm(
             data={
@@ -191,6 +224,11 @@ class FinanceFilterFormTests(TestCase):
     def test_client_without_contract_is_ignored(self):
         form = FinanceFilterForm(data={"client": str(self.without_contract.pk)})
         self.assertIsNone(form.get_client())
+
+    def test_client_empty_label(self):
+        self.assertEqual(
+            FinanceFilterForm().fields["client"].empty_label, "Все клиенты"
+        )
 
     def test_no_client_param(self):
         self.assertIsNone(FinanceFilterForm(data={}).get_client())

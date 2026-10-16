@@ -33,6 +33,10 @@ PRESETS = [
 
 DEFAULT_PRESET = "year"
 
+# Допустимые годы для своего периода: вне границ shift_year/months упадут или раздуются
+MIN_YEAR = 1900
+MAX_YEAR = 2100
+
 
 def shift_year(d: date, years: int) -> date:
     """Сдвигает дату на `years` лет. 29 февраля в невисокосном году -> 28 февраля."""
@@ -121,6 +125,8 @@ class PeriodForm(forms.Form):
                 return _preset_period(DEFAULT_PRESET, today)
             if date_from > date_to:
                 date_from, date_to = date_to, date_from
+            if date_from.year < MIN_YEAR or date_to.year > MAX_YEAR:
+                return _preset_period(DEFAULT_PRESET, today)
             return Period(date_from, date_to)
         return _preset_period(preset, today)
 
@@ -134,6 +140,7 @@ class FinanceFilterForm(PeriodForm):
         .order_by("name"),
         required=False,
         label="Клиент",
+        empty_label="Все клиенты",
     )
 
     def get_client(self) -> Client | None:
