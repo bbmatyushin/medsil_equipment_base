@@ -1,16 +1,19 @@
-from datetime import date, datetime, timezone as dt_timezone
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.test import SimpleTestCase, TestCase
 
 from analytics.filters import Period
 from analytics.services.finance import (
+    AGING_BUCKETS,
     TOTAL_KEYS,
     _bucket_by_month,
     concluded_by_month,
     contracts_in_period,
+    debt_aging,
     finance_kpis,
     money_flow,
+    status_matrix,
 )
 from analytics.tests.factories import (
     make_client,
@@ -19,7 +22,7 @@ from analytics.tests.factories import (
     make_shipment,
 )
 from business_trip.models import BusinessTrip, BusinessTripContractExpense
-from contracts.models import ContractExpense
+from contracts.models import Contract, ContractExpense
 from users.models import CompanyUser
 
 P = Period(date(2026, 1, 1), date(2026, 12, 31))
@@ -377,3 +380,239 @@ class ConcludedByMonthTests(TestCase):
 
         self.assertEqual(r["amount"], [Decimal("0")] * 12)
         self.assertEqual(r["cumulative"], [Decimal("0")] * 12)
+
+
+TODAY = date(2026, 10, 16)
+
+
+class DebtAgingTests(TestCase):
+    def _aging(self, today=TODAY, client=None):
+        return {b["key"]: b for b in debt_aging(today, client)}
+
+    def test_debt_aging_buckets(self):
+        client = make_client()
+        recent = make_contract(
+            client, "A-1", date(2026, 1, 1), 1000, service_end_date=date(2026, 10, 1)
+        )  # 15 дн.
+        old = make_contract(
+            client, "A-2", date(2026, 1, 1), 2500, service_end_date=date(2026, 6, 1)
+        )  # 137 дн.
+
+        a = self._aging()
+
+        self.assertEqual(a["0_30"]["count"], 1)
+        self.assertEqual(a["0_30"]["amount"], Decimal("1000"))
+        self.assertEqual(a["0_30"]["ids"], [str(recent.pk)])
+        self.assertEqual(a["91_180"]["count"], 1)
+        self.assertEqual(a["91_180"]["amount"], Decimal("2500"))
+        self.assertEqual(a["91_180"]["ids"], [str(old.pk)])
+        for key in ("not_due", "31_90", "180_plus"):
+            self.assertEqual(a[key]["count"], 0, key)
+            self.assertEqual(a[key]["amount"], Decimal("0"), key)
+            self.assertEqual(a[key]["ids"], [], key)
+
+    def test_debt_aging_all_buckets_always_present_in_order(self):
+        result = debt_aging(TODAY)
+
+        self.assertEqual([(b["key"], b["label"]) for b in result], list(AGING_BUCKETS))
+        for bucket in result:
+            self.assertEqual(bucket["count"], 0)
+            self.assertEqual(bucket["amount"], Decimal("0"))
+            self.assertEqual(bucket["ids"], [])
+
+    def test_debt_aging_bucket_boundaries(self):
+        client = make_client()
+        # возраст в днях -> ожидаемая корзина
+        cases = [
+            (-1, "not_due"),
+            (0, "0_30"),
+            (30, "0_30"),
+            (31, "31_90"),
+            (90, "31_90"),
+            (91, "91_180"),
+            (180, "91_180"),
+            (181, "180_plus"),
+        ]
+        by_age = {}
+        for age, _ in cases:
+            by_age[age] = make_contract(
+                client,
+                f"B-{age}",
+                date(2020, 1, 1),
+                100,
+                service_end_date=TODAY - timedelta(days=age),
+            )
+
+        a = self._aging()
+
+        for age, key in cases:
+            self.assertIn(str(by_age[age].pk), a[key]["ids"], f"{age} дн. -> {key}")
+        for bucket in a.values():
+            self.assertEqual(bucket["count"], len(bucket["ids"]))
+        self.assertEqual(sum(b["count"] for b in a.values()), len(cases))
+
+    def test_debt_aging_future_end_date(self):
+        client = make_client()
+        contract = make_contract(
+            client, "F-1", date(2026, 1, 1), 700, service_end_date=date(2026, 12, 31)
+        )
+
+        a = self._aging()
+
+        self.assertEqual(a["not_due"]["count"], 1)
+        self.assertEqual(a["not_due"]["amount"], Decimal("700"))
+        self.assertEqual(a["not_due"]["ids"], [str(contract.pk)])
+        self.assertEqual(sum(b["count"] for b in a.values()), 1)
+
+    def test_debt_aging_falls_back_to_conclusion_date(self):
+        client = make_client()
+        contract = make_contract(
+            client, "C-1", date(2026, 3, 1), 900, service_end_date=None
+        )
+
+        a = self._aging()
+
+        # 2026-03-01 -> 2026-10-16 = 229 дн.
+        self.assertEqual(a["180_plus"]["count"], 1)
+        self.assertEqual(a["180_plus"]["ids"], [str(contract.pk)])
+
+    def test_debt_aging_skips_paid(self):
+        client = make_client()
+        paid = make_contract(
+            client, "P-1", date(2026, 1, 1), 1000, service_end_date=date(2026, 10, 1)
+        )
+        make_payment(paid, date(2026, 10, 5), 1000)
+        debtor = make_contract(
+            client, "P-2", date(2026, 1, 1), 400, service_end_date=date(2026, 10, 1)
+        )
+        make_payment(debtor, date(2026, 10, 5), 100)
+
+        a = self._aging()
+
+        paid.refresh_from_db()
+        self.assertEqual(paid.debt, Decimal("0"))
+        self.assertEqual(a["0_30"]["count"], 1)
+        self.assertEqual(a["0_30"]["ids"], [str(debtor.pk)])
+        # в корзине остаток долга, а не сумма контракта
+        self.assertEqual(a["0_30"]["amount"], Decimal("300"))
+        self.assertEqual(sum(b["count"] for b in a.values()), 1)
+
+    def test_debt_aging_ignores_period_and_sums_amount(self):
+        client = make_client()
+        # контракты заключены в разные годы: период на возраст долга не влияет
+        make_contract(
+            client, "S-1", date(2020, 1, 1), 100, service_end_date=date(2026, 10, 1)
+        )
+        make_contract(
+            client, "S-2", date(2026, 5, 1), 250, service_end_date=date(2026, 9, 20)
+        )
+
+        a = self._aging()
+
+        self.assertEqual(a["0_30"]["count"], 2)
+        self.assertEqual(a["0_30"]["amount"], Decimal("350"))
+        self.assertIsInstance(a["0_30"]["amount"], Decimal)
+
+    def test_debt_aging_client_filter(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        mine = make_contract(
+            alpha, "CF-1", date(2026, 1, 1), 100, service_end_date=date(2026, 10, 1)
+        )
+        make_contract(
+            beta, "CF-2", date(2026, 1, 1), 900, service_end_date=date(2026, 10, 1)
+        )
+
+        only_alpha = self._aging(client=alpha)
+        everyone = self._aging()
+
+        self.assertEqual(only_alpha["0_30"]["ids"], [str(mine.pk)])
+        self.assertEqual(only_alpha["0_30"]["amount"], Decimal("100"))
+        self.assertEqual(sum(b["count"] for b in only_alpha.values()), 1)
+        self.assertEqual(everyone["0_30"]["count"], 2)
+        self.assertEqual(everyone["0_30"]["amount"], Decimal("1000"))
+
+
+class StatusMatrixTests(TestCase):
+    @staticmethod
+    def _cells(matrix):
+        """{(строка, столбец): (count, amount)} для удобных проверок."""
+        return {
+            (row["key"], cell["payment_status"]): (cell["count"], cell["amount"])
+            for row in matrix["rows"]
+            for cell in row["cells"]
+        }
+
+    def test_status_matrix_counts(self):
+        client = make_client()
+        make_contract(
+            client, "M-1", date(2026, 2, 1), 100000, services_provided="fully"
+        )  # fully + no_receipts
+        done = make_contract(client, "M-2", date(2026, 3, 1), 40000)  # not_yet
+        make_payment(done, date(2026, 3, 10), 40000)  # paid
+
+        m = status_matrix(P)
+
+        self.assertEqual(len(m["rows"]), 3)
+        self.assertEqual(len(m["columns"]), 3)
+        for row in m["rows"]:
+            self.assertEqual(len(row["cells"]), 3)
+        cells = self._cells(m)
+        filled = {("fully", "no_receipts"), ("not_yet", "paid")}
+        self.assertEqual(cells[("fully", "no_receipts")], (1, Decimal("100000")))
+        self.assertEqual(cells[("not_yet", "paid")], (1, Decimal("40000")))
+        empty = {key: value for key, value in cells.items() if key not in filled}
+        self.assertEqual(len(empty), 7)
+        for key, value in empty.items():
+            self.assertEqual(value, (0, Decimal("0")), key)
+
+    def test_status_matrix_structure_follows_choices_order(self):
+        m = status_matrix(P)
+
+        self.assertEqual(
+            [(c["key"], c["label"]) for c in m["columns"]],
+            Contract.PAYMENT_STATUS_CHOICES,
+        )
+        self.assertEqual(
+            [(r["key"], r["label"]) for r in m["rows"]],
+            Contract.SERVICES_PROVIDED_CHOICES,
+        )
+        column_keys = [key for key, _ in Contract.PAYMENT_STATUS_CHOICES]
+        for row in m["rows"]:
+            self.assertEqual(
+                [cell["payment_status"] for cell in row["cells"]], column_keys
+            )
+            for cell in row["cells"]:
+                self.assertEqual(cell["count"], 0)
+                self.assertEqual(cell["amount"], Decimal("0"))
+
+    def test_status_matrix_sums_amount_and_counts_in_one_cell(self):
+        client = make_client()
+        make_contract(
+            client, "MS-1", date(2026, 2, 1), 100, services_provided="partially"
+        )
+        make_contract(
+            client, "MS-2", date(2026, 7, 1), 250, services_provided="partially"
+        )
+        part = make_contract(
+            client, "MS-3", date(2026, 8, 1), 1000, services_provided="partially"
+        )
+        make_payment(part, date(2026, 8, 5), 300)  # partial
+
+        cells = self._cells(status_matrix(P))
+
+        self.assertEqual(cells[("partially", "no_receipts")], (2, Decimal("350")))
+        self.assertEqual(cells[("partially", "partial")], (1, Decimal("1000")))
+
+    def test_status_matrix_period_and_client_filter(self):
+        alpha = make_client("Альфа")
+        beta = make_client("Бета")
+        make_contract(alpha, "MF-1", date(2026, 2, 1), 100)
+        make_contract(alpha, "MF-2", date(2025, 12, 31), 7000)  # вне периода
+        make_contract(beta, "MF-3", date(2026, 2, 1), 900)
+
+        everyone = self._cells(status_matrix(P))
+        only_alpha = self._cells(status_matrix(P, client=alpha))
+
+        self.assertEqual(everyone[("not_yet", "no_receipts")], (2, Decimal("1000")))
+        self.assertEqual(only_alpha[("not_yet", "no_receipts")], (1, Decimal("100")))

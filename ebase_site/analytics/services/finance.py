@@ -1,4 +1,5 @@
-"""Расчёты вкладки «Деньги»: плитки, движение денег, заключённые контракты.
+"""Расчёты вкладки «Деньги»: плитки, движение денег, заключённые контракты,
+возраст долга и матрица «оказано × оплачено».
 
 Чистые функции без обращения к request. Группировка по месяцам выполняется
 в Python (`_bucket_by_month`), а не функциями БД: SQLite и PostgreSQL ведут
@@ -24,6 +25,15 @@ TOTAL_KEYS = ("contract_amount", "payment_amount", "expenses_amount", "debt", "p
 
 ZERO = Decimal("0")
 TENTH = Decimal("0.1")
+
+# Корзины возраста долга: (ключ, подпись) в порядке показа
+AGING_BUCKETS = [
+    ("not_due", "Срок не наступил"),
+    ("0_30", "0–30 дн."),
+    ("31_90", "31–90 дн."),
+    ("91_180", "91–180 дн."),
+    ("180_plus", "Более 180 дн."),
+]
 
 
 def _round_tenth(value: Decimal) -> Decimal:
@@ -180,3 +190,83 @@ def concluded_by_month(period: Period, client: Client | None = None) -> dict:
         months,
     )
     return {"months": months, "amount": amount, "cumulative": list(accumulate(amount))}
+
+
+def _aging_key(age_days: int) -> str:
+    """Ключ корзины по возрасту долга в днях (отрицательный — срок не наступил)."""
+    if age_days < 0:
+        return "not_due"
+    if age_days <= 30:
+        return "0_30"
+    if age_days <= 90:
+        return "31_90"
+    if age_days <= 180:
+        return "91_180"
+    return "180_plus"
+
+
+def debt_aging(today: date, client: Client | None = None) -> list[dict]:
+    """Возраст долга на `today` по всем контрактам с долгом; период не учитывается.
+
+    Возраст считается от даты окончания услуг, а если её нет, то от даты
+    заключения. Результат содержит все корзины `AGING_BUCKETS` в их порядке:
+    `{"key", "label", "count", "amount", "ids"}`, где `ids` — `str(pk)` контрактов.
+    """
+    contracts = Contract.objects.filter(debt__gt=0)
+    if client is not None:
+        contracts = contracts.filter(client=client)
+
+    buckets = {
+        key: {"key": key, "label": label, "count": 0, "amount": ZERO, "ids": []}
+        for key, label in AGING_BUCKETS
+    }
+    for pk, debt, end_date, conclusion_date in contracts.values_list(
+        "id", "debt", "service_end_date", "conclusion_date"
+    ):
+        bucket = buckets[_aging_key((today - (end_date or conclusion_date)).days)]
+        bucket["count"] += 1
+        bucket["amount"] += debt
+        bucket["ids"].append(str(pk))
+    return list(buckets.values())
+
+
+def status_matrix(period: Period, client: Client | None = None) -> dict:
+    """Матрица «услуги оказаны × оплата» по контрактам периода.
+
+    Строки — `Contract.SERVICES_PROVIDED_CHOICES`, столбцы —
+    `Contract.PAYMENT_STATUS_CHOICES` в их порядке; сетка всегда полная, пустые
+    ячейки нулевые. `amount` — сумма `contract_amount`.
+    """
+    grouped = (
+        contracts_in_period(period, client)
+        .order_by()
+        .values("services_provided", "payment_status")
+        .annotate(count=Count("id"), amount=Sum("contract_amount"))
+    )
+    found = {(row["services_provided"], row["payment_status"]): row for row in grouped}
+
+    def cell(row_key: str, column_key: str) -> dict:
+        data = found.get((row_key, column_key))
+        return {
+            "payment_status": column_key,
+            "count": data["count"] if data else 0,
+            "amount": (data["amount"] or ZERO) if data else ZERO,
+        }
+
+    return {
+        "columns": [
+            {"key": key, "label": label}
+            for key, label in Contract.PAYMENT_STATUS_CHOICES
+        ],
+        "rows": [
+            {
+                "key": row_key,
+                "label": row_label,
+                "cells": [
+                    cell(row_key, column_key)
+                    for column_key, _ in Contract.PAYMENT_STATUS_CHOICES
+                ],
+            }
+            for row_key, row_label in Contract.SERVICES_PROVIDED_CHOICES
+        ],
+    }
