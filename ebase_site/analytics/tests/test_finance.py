@@ -681,6 +681,23 @@ class TopClientsTests(TestCase):
         self.assertEqual(result["total"], Decimal("500"))
         self.assertEqual(result["clients_for_80"], 1)
 
+    def test_top_clients_excludes_negative_sums(self):
+        paid = make_client("Оплативший")
+        refunded = make_client("Возврат")
+        self._paid(paid, "NEG-1", 800)
+        refund = make_contract(refunded, "NEG-2", date(2026, 3, 1), 9000)
+        make_payment(refund, date(2026, 3, 2), -500)  # возврат: сумма клиента < 0
+
+        result = top_clients(P)
+
+        self.assertEqual([c["name"] for c in result["clients"]], ["Оплативший"])
+        self.assertEqual(
+            [c["cumulative_pct"] for c in result["clients"]], [Decimal("100.0")]
+        )
+        self.assertEqual(result["total"], Decimal("800"))
+        self.assertEqual(result["clients_total"], 1)
+        self.assertEqual(result["clients_for_80"], 1)
+
     def test_top_clients_limit_keeps_totals_over_all_clients(self):
         for name, amount in [("К1", 4000), ("К2", 3000), ("К3", 2000), ("К4", 1000)]:
             self._paid(make_client(name), f"L-{name}", amount)
