@@ -5,6 +5,28 @@ table td {
     max-width: 270px !important;
 }
 
+/* Список ремонтов: узкая колонка «Контракт», длинный номер переносится на
+   следующую строку. Селектор специфичнее общего правила выше. */
+body.app-ebase.model-service #result_list th.column-contract_link,
+body.app-ebase.model-service #result_list td.field-contract_link {
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
+    word-break: break-all;
+}
+
+/* Список ремонтов: колонки «Оборудование для ремонта» и «Подразделение» —
+   в ширину помещаются «Гематологический анализатор» и «Консультативная
+   поликлиника», остальное переносится на новую строку. */
+body.app-ebase.model-service #result_list th.column-equipment_accounting,
+body.app-ebase.model-service #result_list td.field-equipment_accounting,
+body.app-ebase.model-service #result_list th.column-dept_name,
+body.app-ebase.model-service #result_list td.field-dept_name {
+    width: 220px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+}
+
 .nowrap {
     white-space: normal!important;
 }

@@ -7,6 +7,7 @@ from typing import Optional
 from datetime import date
 
 from django.utils.safestring import mark_safe
+from django.utils.formats import date_format
 from django.utils.html import format_html
 from django.db import models, transaction
 from django.db.models import Prefetch, QuerySet, Max, Q, Sum
@@ -471,6 +472,8 @@ class ServiceAdmin(MainModelAdmin):
     # add_form_template = 'ebase/admin/service_change_form.html'
     # autocomplete_fields = ('equipment_accounting',)
     form = ServiceForm
+    JOB_CONTENT_LIST_LIMIT = 100  # сколько символов «Содержания работ» в списке
+    DATE_SHORT_FORMAT = r"j N y\г."  # «8 Окт. 26г.»
     date_hierarchy = "beg_dt"
     filter_horizontal = ("spare_part",)
     inlines = (ServiceAccessoriesInline, ServicePhotosInline)
@@ -478,14 +481,11 @@ class ServiceAdmin(MainModelAdmin):
         "equipment_accounting",
         "dept_name",
         "service_type",
-        "photos",
         "spare_part_used",
         "contract_link",
-        "reason_short",
         "job_content_short",
-        "akt",
-        "beg_dt",
-        "end_dt",
+        "beg_dt_short",
+        "end_dt_short",
     )
     list_select_related = ("equipment_accounting", "service_type", "contract")
     list_filter = ()
@@ -584,16 +584,23 @@ class ServiceAdmin(MainModelAdmin):
     @admin.display(description="Содержание работ")
     def job_content_short(self, obj):
         job_content = obj.job_content
-        content = (
-            "-"
-            if not job_content
-            else job_content if len(job_content) < 50 else f"{job_content[:50]}..."
+        if not job_content:
+            return "-"
+        if len(job_content) <= self.JOB_CONTENT_LIST_LIMIT:
+            return job_content
+        return format_html(
+            "<span title='{}'>{}...</span>",
+            job_content,
+            job_content[: self.JOB_CONTENT_LIST_LIMIT],
         )
-        return (
-            f"{content}"
-            if len(content) < 50
-            else mark_safe(f"<p title='{job_content}'>{content}</p>")
-        )
+
+    @admin.display(description="Дата начала", ordering="beg_dt")
+    def beg_dt_short(self, obj):
+        return date_format(obj.beg_dt, self.DATE_SHORT_FORMAT) if obj.beg_dt else "-"
+
+    @admin.display(description="Дата окончания", ordering="end_dt")
+    def end_dt_short(self, obj):
+        return date_format(obj.end_dt, self.DATE_SHORT_FORMAT) if obj.end_dt else "-"
 
     @admin.display(description="Описание неисправности")
     def description_short(self, obj):

@@ -463,7 +463,7 @@ class Service(EbaseModel):
     equipment_accounting = models.ForeignKey(
         "EquipmentAccounting",
         related_name="service_equipment_accounting",
-        verbose_name="Оборудование для ремонта. ",
+        verbose_name="Оборудование для ремонта",
         null=True,
         blank=False,
         on_delete=models.RESTRICT,
