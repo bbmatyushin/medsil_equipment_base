@@ -963,26 +963,37 @@ class ServiceAdmin(MainModelAdmin):
         elif db_field.name == "replacement_equipment":
             # Ограничиваем queryset для подменного оборудования - только те, которые не связаны с активными сервисами
             # Исключаем подменное оборудование, которое уже связано с сервисами, где ремонт еще не завершен
+            object_id = (
+                request.resolver_match.kwargs.get("object_id")
+                if request.resolver_match
+                else None
+            )
+            # При редактировании текущего сервиса, нужно исключить его из фильтрации
             used_replacement_equipment_ids = (
                 Service.objects.filter(
                     replacement_equipment__isnull=False,
                     end_dt__isnull=True,  # Ремонт еще не завершен
                 )
-                .exclude(
-                    # При редактировании текущего сервиса, нужно исключить его из фильтрации
-                    pk=(
-                        request.resolver_match.kwargs.get("object_id")
-                        if request.resolver_match
-                        else None
-                    )
-                )
+                .exclude(pk=object_id)
                 .values_list("replacement_equipment_id", flat=True)
             )
+            available = ~Q(id__in=used_replacement_equipment_ids)
+            # Прибор редактируемого ремонта оставляем в списке, даже если он
+            # уже выдан в другой (более поздний) незавершённый ремонт
+            current_replacement_equipment_id = (
+                Service.objects.filter(pk=object_id)
+                .values_list("replacement_equipment_id", flat=True)
+                .first()
+                if object_id
+                else None
+            )
+            if current_replacement_equipment_id:
+                available |= Q(pk=current_replacement_equipment_id)
 
             kwargs["queryset"] = (
                 ReplacementEquipment.objects.select_related("equipment", "user")
                 .prefetch_related("accessories")
-                .exclude(id__in=used_replacement_equipment_ids)
+                .filter(available)
             )
         elif db_field.name == "contract":
             kwargs["queryset"] = Contract.objects.all().select_related("client")
@@ -1222,36 +1233,49 @@ class ReplacementEquipmentAdmin(MainModelAdmin):
             .select_related(
                 "equipment",
                 "user",
-                "service_replacement_equipment",
-                "service_replacement_equipment__equipment_accounting",
-                "service_replacement_equipment__equipment_accounting__equipment",
             )
             .prefetch_related(
                 "accessories",
+                # Прибор может выдаваться в несколько ремонтов - последний будет первым
                 Prefetch(
-                    "service_replacement_equipment__equipment_accounting__equipment_acc_department_equipment_accounting",
-                    queryset=EquipmentAccDepartment.objects.select_related(
-                        "department"
-                    ).filter(is_active=True),
+                    "service_replacement_equipment",
+                    queryset=Service.objects.select_related(
+                        "equipment_accounting__equipment"
+                    )
+                    .prefetch_related(
+                        Prefetch(
+                            "equipment_accounting__equipment_acc_department_equipment_accounting",
+                            queryset=EquipmentAccDepartment.objects.select_related(
+                                "department"
+                            ).filter(is_active=True),
+                        )
+                    )
+                    .order_by("-beg_dt", "-create_dt"),
+                    to_attr="services_by_date",
                 ),
             )
         )
 
         return qs
 
+    @staticmethod
+    def _last_service(obj) -> Optional[Service]:
+        """Последний ремонт, в который выдавался подменный прибор"""
+        services = getattr(obj, "services_by_date", None)
+        if services is None:
+            services = obj.service_replacement_equipment.order_by(
+                "-beg_dt", "-create_dt"
+            )[:1]
+        return services[0] if services else None
+
     @admin.display(description="Связанный ремонт")
     def related_service(self, obj):
-        """Отображает информацию о связанном ремонте со ссылкой"""
-        try:
-            service = obj.service_replacement_equipment
-            if service:
-                equipment = service.equipment_accounting
-                url = reverse("admin:ebase_service_change", args=[service.id])
-                return mark_safe(
-                    f'<a href="{url}">{equipment.equipment.short_name}</a>'
-                )
-        except Service.DoesNotExist:
-            pass
+        """Отображает информацию о последнем связанном ремонте со ссылкой"""
+        service = self._last_service(obj)
+        if service:
+            equipment = service.equipment_accounting
+            url = reverse("admin:ebase_service_change", args=[service.id])
+            return mark_safe(f'<a href="{url}">{equipment.equipment.short_name}</a>')
         return "--"
 
     @admin.display(description="Комплектующие")
@@ -1265,24 +1289,21 @@ class ReplacementEquipmentAdmin(MainModelAdmin):
 
     @admin.display(description="Передано")
     def transferred_to(self, obj):
-        # Получаем сервис, где это подменное оборудование используется
-        try:
-            service = obj.service_replacement_equipment
-            # Если галочка "Вернули в офис" НЕ установлена — показываем подразделение
-            if service and not service.returned_to_office:
-                # Получаем активные подразделения для оборудования в сервисе
-                active_departments = (
-                    service.equipment_accounting.equipment_acc_department_equipment_accounting.all()
-                )
-                departments = []
-                for dept in active_departments:
-                    if dept.department:
-                        departments.append(dept.department.name)
+        # Получаем последний сервис, где это подменное оборудование используется
+        service = self._last_service(obj)
+        # Если галочка "Вернули в офис" НЕ установлена — показываем подразделение
+        if service and not service.returned_to_office:
+            # Получаем активные подразделения для оборудования в сервисе
+            active_departments = (
+                service.equipment_accounting.equipment_acc_department_equipment_accounting.all()
+            )
+            departments = []
+            for dept in active_departments:
+                if dept.department:
+                    departments.append(dept.department.name)
 
-                if departments:
-                    return ", ".join(set(departments))  # Убираем дубликаты
-        except Service.DoesNotExist:
-            pass
+            if departments:
+                return ", ".join(set(departments))  # Убираем дубликаты
 
         return "В офисе"
 

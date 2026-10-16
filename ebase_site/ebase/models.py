@@ -431,7 +431,7 @@ class ServiceAccessories(models.Model):
 class Service(EbaseModel):
     """Таблица для учета поступившего на ремонт оборудования."""
 
-    replacement_equipment = models.OneToOneField(
+    replacement_equipment = models.ForeignKey(
         "ReplacementEquipment",
         on_delete=models.SET_NULL,
         null=True,
