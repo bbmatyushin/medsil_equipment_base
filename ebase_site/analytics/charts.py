@@ -75,7 +75,8 @@ def chart_spec(
     - `kind`: "bar" | "line" | "scatter".
     - `datasets`: серии `{"label", "data", "kind"?, "axis"?, "sign_colors"?, "fmt"?}`.
       `kind` серии задаёт смешанный график (линия поверх столбцов),
-      `axis="y2"` — вторая шкала справа, `sign_colors` — окраска столбцов по знаку.
+      `axis="y2"` — вторая шкала справа (только у вертикальных графиков:
+      при `horizontal=True` — ValueError), `sign_colors` — окраска столбцов по знаку.
       `fmt` серии (один из форматов ниже) — формат её значений в подсказке
       и, при `axis="y2"`, правой шкалы. Без `fmt` серия на y2 — проценты
       со шкалой 0–100 %, остальные серии — в формате графика (`fmt`).
@@ -95,6 +96,10 @@ def chart_spec(
     if links is not None and len(links) != len(labels):
         raise ValueError("Число ссылок не совпадает с числом меток")
     series = [_dataset(dataset, kind) for dataset in datasets]
+    if horizontal and any(dataset["axis"] == "y2" for dataset in series):
+        # charts.js рисует правую шкалу только у вертикальных графиков:
+        # у горизонтального серия легла бы на ось значений графика
+        raise ValueError("Правая ось y2 недоступна у горизонтального графика")
     return {
         "kind": kind,
         "labels": labels,

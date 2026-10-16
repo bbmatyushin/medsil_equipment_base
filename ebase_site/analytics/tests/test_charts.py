@@ -75,15 +75,24 @@ class ChartSpecTests(SimpleTestCase):
                 },
                 {"label": "Прибыль", "data": [5, -3], "sign_colors": True},
             ],
-            horizontal=True,
             stacked=True,
         )
         line = spec["datasets"][1]
         self.assertEqual((line["kind"], line["axis"]), ("line", "y2"))
         self.assertEqual(line["data"], [66.67, 100.0])
         self.assertTrue(spec["datasets"][2]["sign_colors"])
-        self.assertTrue(spec["horizontal"])
+        self.assertFalse(spec["horizontal"])
         self.assertTrue(spec["stacked"])
+
+    def test_horizontal_chart(self):
+        spec = chart_spec(
+            "bar",
+            ["Клиент А", "Клиент Б"],
+            [{"label": "Прибыль", "data": [5, -3], "sign_colors": True}],
+            horizontal=True,
+        )
+        self.assertTrue(spec["horizontal"])
+        self.assertEqual(spec["datasets"][0]["axis"], "y")
 
     def test_dataset_fmt(self):
         spec = chart_spec(
@@ -188,6 +197,14 @@ class ChartSpecTests(SimpleTestCase):
             {"datasets": [{"label": "А", "data": [1], "axis": "y3"}]},
             {"datasets": [{"label": "А", "data": [1], "kind": "pie"}]},
             {"links": ["/a/", "/b/"]},
+            # правая ось y2 есть только у вертикальных графиков
+            {
+                "horizontal": True,
+                "datasets": [
+                    {"label": "А", "data": [1]},
+                    {"label": "Доля", "data": [100], "kind": "line", "axis": "y2"},
+                ],
+            },
         ]
         base = {
             "kind": "bar",
