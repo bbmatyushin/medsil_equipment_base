@@ -43,7 +43,8 @@ def create_statistics_group(apps, schema_editor):
     permissions = Permission.objects.filter(
         content_type__app_label="analytics", codename__in=PERMISSION_CODENAMES
     )
-    group.permissions.set(permissions)
+    # add, а не set: права, выданные существующей группе вручную, не стираем
+    group.permissions.add(*permissions)
     group.user_set.add(*User.objects.filter(is_staff=True, is_active=True))
 
 

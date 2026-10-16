@@ -37,3 +37,17 @@ class StatisticsGroupMigrationTests(TestCase):
         self.assertTrue(
             User.objects.get(pk=staff.pk).has_perm("analytics.view_finance")
         )
+
+    def test_existing_group_keeps_its_permissions(self):
+        extra = Permission.objects.filter(content_type__app_label="auth").first()
+        group = Group.objects.create(name="Статистика")
+        group.permissions.add(extra)
+        migration = importlib.import_module(
+            "analytics.migrations.0002_statistics_group"
+        )
+
+        migration.create_statistics_group(django_apps, None)
+
+        # права, выданные группе вручную, не стираются; четыре права вкладок добавлены
+        self.assertEqual(group.permissions.count(), 5)
+        self.assertTrue(group.permissions.filter(pk=extra.pk).exists())
