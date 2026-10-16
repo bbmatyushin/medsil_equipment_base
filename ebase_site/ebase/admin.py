@@ -473,6 +473,7 @@ class ServiceAdmin(MainModelAdmin):
     # autocomplete_fields = ('equipment_accounting',)
     form = ServiceForm
     JOB_CONTENT_LIST_LIMIT = 100  # сколько символов «Содержания работ» в списке
+    SPARE_PART_LIST_LIMIT = 100  # сколько символов «Запчастей» в списке
     DATE_SHORT_FORMAT = r"j N y\г."  # «8 Окт. 26г.»
     date_hierarchy = "beg_dt"
     filter_horizontal = ("spare_part",)
@@ -639,10 +640,13 @@ class ServiceAdmin(MainModelAdmin):
         # Используем предзагруженные данные
         spare_parts_list = [sp.name for sp in obj.spare_part.all()]
         full_text = "; ".join(spare_parts_list) if spare_parts_list else "-"
-        if len(full_text) <= 50:
+        if len(full_text) <= self.SPARE_PART_LIST_LIMIT:
             return full_text
-        short_text = f"{full_text[:50]}..."
-        return mark_safe(f'<span title="{full_text}">{short_text}</span>')
+        return format_html(
+            '<span title="{}">{}...</span>',
+            full_text,
+            full_text[: self.SPARE_PART_LIST_LIMIT],
+        )
 
     # @admin.display(description='Комплектующие')
     # def accessories_used(self, obj):

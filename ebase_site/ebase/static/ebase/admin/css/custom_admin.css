@@ -27,6 +27,14 @@ body.app-ebase.model-service #result_list td.field-dept_name {
     max-width: 220px !important;
 }
 
+/* Список ремонтов: фиксированная ширина колонки «Запчасти». */
+body.app-ebase.model-service #result_list th.column-spare_part_used,
+body.app-ebase.model-service #result_list td.field-spare_part_used {
+    width: 200px !important;
+    min-width: 200px !important;
+    max-width: 200px !important;
+}
+
 .nowrap {
     white-space: normal!important;
 }
