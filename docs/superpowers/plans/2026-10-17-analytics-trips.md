@@ -35,6 +35,8 @@ python manage.py test --settings=ebase_site.test_settings                       
   - `contracts.tests.ContractModelTests.test_payment_status_updates_when_contract_amount_changes`.
 
   Критерий: новых падений нет.
+> **Изменено после реализации (2026-10-17, по просьбе пользователя):** остаются только права существующих вкладок — `view_finance` и `view_trips`. Миграция `0004` удаляет `view_warehouse_trips`, `view_service`, `view_park` вместо переименования; права новых вкладок добавляются вместе с вкладками. Список ниже и тесты задачи 1 описывают первоначальный вариант.
+
 - Права `AnalyticsAccess` после задачи 1 (`codename` → название):
   - `view_finance` → «Аналитика: Финансы»;
   - `view_trips` → «Аналитика: Командировки» (новое);

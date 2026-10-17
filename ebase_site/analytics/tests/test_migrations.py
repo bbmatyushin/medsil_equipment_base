@@ -3,22 +3,36 @@ import importlib
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
 User = get_user_model()
 
 
+# Права до миграции 0004: заготовки под вкладки, которых пока нет
+OLD_UNUSED_PERMISSIONS = {
+    "view_warehouse_trips": "Аналитика: Склад и командировки",
+    "view_service": "Аналитика: Сервис и надёжность",
+    "view_park": "Аналитика: Парк и продажи",
+}
+
+
 def _permissions_before_0004():
-    """Права как до миграции 0004: view_warehouse_trips вместо view_warehouse, без view_trips.
+    """Права как до миграции 0004: четыре права вкладок, без view_trips.
 
     В тестах миграции выключены и права создаются по текущей модели, поэтому
     тестам миграций 0002–0004 прежнее состояние нужно восстановить вручную.
     """
-    analytics = Permission.objects.filter(content_type__app_label="analytics")
-    analytics.filter(codename="view_warehouse").update(
-        codename="view_warehouse_trips", name="Аналитика: Склад и командировки"
+    content_type = ContentType.objects.get(
+        app_label="analytics", model="analyticsaccess"
     )
-    analytics.filter(codename="view_trips").delete()
+    for codename, name in OLD_UNUSED_PERMISSIONS.items():
+        Permission.objects.get_or_create(
+            content_type=content_type, codename=codename, defaults={"name": name}
+        )
+    Permission.objects.filter(
+        content_type__app_label="analytics", codename="view_trips"
+    ).delete()
 
 
 class StatisticsGroupMigrationTests(TestCase):
@@ -30,13 +44,7 @@ class StatisticsGroupMigrationTests(TestCase):
         )
         self.assertEqual(
             codenames,
-            {
-                "view_finance",
-                "view_trips",
-                "view_warehouse",
-                "view_service",
-                "view_park",
-            },
+            {"view_finance", "view_trips"},
         )
 
     def test_group_gets_all_permissions_and_active_staff_only(self):
@@ -142,7 +150,7 @@ class RenameToAnalyticsMigrationTests(TestCase):
 
 
 class TripsTabMigrationTests(TestCase):
-    """Миграция 0004: право view_trips и переименование права склада."""
+    """Миграция 0004: право «Командировки» и удаление прав несуществующих вкладок."""
 
     def setUp(self):
         self.migration = importlib.import_module("analytics.migrations.0004_trips_tab")
@@ -154,21 +162,40 @@ class TripsTabMigrationTests(TestCase):
             content_type__app_label="analytics", codename=codename
         )
 
-    def test_renames_warehouse_permission_and_keeps_grants(self):
-        old = self._perm("view_warehouse_trips")
+    @staticmethod
+    def _names():
+        return dict(
+            Permission.objects.filter(content_type__app_label="analytics").values_list(
+                "codename", "name"
+            )
+        )
+
+    def test_keeps_only_finance_and_trips(self):
+        self.migration.add_trips_tab(django_apps, None)
+
+        self.assertEqual(
+            self._names(),
+            {
+                "view_finance": "Аналитика: Финансы",
+                "view_trips": "Аналитика: Командировки",
+            },
+        )
+
+    def test_removes_unused_permissions_with_their_grants(self):
+        finance = self._perm("view_finance")
         user = User.objects.create_user("staff", password="p", is_staff=True)
-        user.user_permissions.add(old)
+        user.user_permissions.add(finance, self._perm("view_service"))
         group = Group.objects.create(name="Аналитика")
-        group.permissions.add(old)
+        group.permissions.add(finance, self._perm("view_park"))
 
         self.migration.add_trips_tab(django_apps, None)
 
-        renamed = self._perm("view_warehouse")
-        self.assertEqual(renamed.pk, old.pk)
-        self.assertEqual(renamed.name, "Аналитика: Склад")
-        self.assertTrue(group.permissions.filter(pk=old.pk).exists())
-        self.assertTrue(
-            User.objects.get(pk=user.pk).has_perm("analytics.view_warehouse")
+        user = User.objects.get(pk=user.pk)
+        self.assertTrue(user.has_perm("analytics.view_finance"))
+        self.assertFalse(user.has_perm("analytics.view_service"))
+        self.assertEqual(
+            set(group.permissions.values_list("codename", flat=True)),
+            {"view_finance", "view_trips"},
         )
 
     def test_creates_trips_permission_and_grants_group(self):
@@ -186,11 +213,7 @@ class TripsTabMigrationTests(TestCase):
     def test_without_group_creates_permission_only(self):
         self.migration.add_trips_tab(django_apps, None)
 
-        self.assertTrue(
-            Permission.objects.filter(
-                content_type__app_label="analytics", codename="view_trips"
-            ).exists()
-        )
+        self.assertIn("view_trips", self._names())
         self.assertEqual(Group.objects.count(), 0)
 
     def test_is_idempotent(self):
@@ -199,25 +222,23 @@ class TripsTabMigrationTests(TestCase):
         self.migration.add_trips_tab(django_apps, None)
         self.migration.add_trips_tab(django_apps, None)
 
-        self.assertEqual(
-            Permission.objects.filter(
-                content_type__app_label="analytics", codename="view_trips"
-            ).count(),
-            1,
-        )
-        self.assertEqual(self._perm("view_warehouse").name, "Аналитика: Склад")
+        self.assertEqual(set(self._names()), {"view_finance", "view_trips"})
 
-    def test_reverse_restores_previous_state(self):
+    def test_reverse_restores_previous_permissions(self):
         self.migration.add_trips_tab(django_apps, None)
 
         self.migration.remove_trips_tab(django_apps, None)
 
-        restored = self._perm("view_warehouse_trips")
-        self.assertEqual(restored.name, "Аналитика: Склад и командировки")
-        codenames = set(
-            Permission.objects.filter(content_type__app_label="analytics").values_list(
-                "codename", flat=True
-            )
+        self.assertEqual(
+            self._names(),
+            {"view_finance": "Аналитика: Финансы", **OLD_UNUSED_PERMISSIONS},
         )
-        self.assertNotIn("view_trips", codenames)
-        self.assertNotIn("view_warehouse", codenames)
+
+    def test_forward_after_reverse(self):
+        # откат на новом коде, затем повторный прямой проход — лишних прав нет
+        self.migration.add_trips_tab(django_apps, None)
+        self.migration.remove_trips_tab(django_apps, None)
+
+        self.migration.add_trips_tab(django_apps, None)
+
+        self.assertEqual(set(self._names()), {"view_finance", "view_trips"})
