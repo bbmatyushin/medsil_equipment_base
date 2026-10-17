@@ -541,13 +541,13 @@ def service_type_shares(
 
     В отличие от таблицы «По видам работ», стоимость командировки с несколькими
     видами делится между ними поровну (до копеек), поэтому сумма долей равна
-    «Всего потрачено». Без вида — «Вид работ не указан». Если видов больше
-    `MAX_PIE_SLICES`, мелкие сворачиваются в «Прочие виды работ». Доли идут по
-    названию (цвет закреплён за видом, а не за местом по сумме), «Вид работ не
-    указан» и «Прочие» — последними.
+    «Всего потрачено». Без вида — «Вид работ не указан». Порядок долек — как
+    в таблице (по числу поездок, затем по названию); если видов больше
+    `MAX_PIE_SLICES`, идущие в таблице дальше сворачиваются в «Прочие виды работ».
     """
     source = _source(source)
     amounts = {}
+    trips_count = {}
     total = ZERO
     for trip in source.in_period(period, employee):
         cost = trip_total(trip)
@@ -557,23 +557,21 @@ def service_type_shares(
             names = [NO_SERVICE_TYPE_LABEL]
         for name, part in zip(names, split_proportional(cost, [1] * len(names))):
             amounts[name] = amounts.get(name, ZERO) + part
-    named = {name: amount for name, amount in amounts.items() if amount}
-    unspecified = named.pop(NO_SERVICE_TYPE_LABEL, None)
-    room = MAX_PIE_SLICES - (1 if unspecified is not None else 0)
-    others = ZERO
-    if len(named) > room:
-        by_amount = sorted(named.items(), key=lambda item: (-item[1], item[0]))
-        keep = dict(by_amount[: room - 1])
-        others = sum((amount for name, amount in by_amount[room - 1 :]), ZERO)
-        named = keep
-    slices = [
-        {"label": name, "amount": amount}
-        for name, amount in sorted(named.items(), key=lambda item: item[0].lower())
-    ]
-    if unspecified is not None:
-        slices.append({"label": NO_SERVICE_TYPE_LABEL, "amount": unspecified})
-    if others:
-        slices.append({"label": OTHER_SERVICE_TYPES_LABEL, "amount": others})
+            trips_count[name] = trips_count.get(name, 0) + 1
+    # тот же порядок, что у строк by_service_type
+    order = sorted(amounts, key=lambda name: (-trips_count[name], name))
+    if len(order) > MAX_PIE_SLICES:
+        kept, rest = order[: MAX_PIE_SLICES - 1], order[MAX_PIE_SLICES - 1 :]
+    else:
+        kept, rest = order, []
+    slices = [{"label": name, "amount": amounts[name]} for name in kept]
+    if rest:
+        slices.append(
+            {
+                "label": OTHER_SERVICE_TYPES_LABEL,
+                "amount": sum((amounts[name] for name in rest), ZERO),
+            }
+        )
     return {"total": total, "slices": slices}
 
 

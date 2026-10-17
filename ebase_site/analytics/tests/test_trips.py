@@ -652,25 +652,26 @@ class ServiceTypeSharesTests(TestCase):
         self.assertEqual(result["total"], trips_kpis(YEAR_2026)["current"]["total"])
         self.assertEqual(sum(slices.values()), result["total"])
 
-    def test_order_by_name_with_unspecified_last(self):
+    def test_order_matches_table(self):
         self._trip(1, 900, [])
         self._trip(2, 5000, ["ремонт"])
         self._trip(3, 1000, ["Монтаж"])
+        self._trip(4, 2000, ["Монтаж"])
 
         labels = [item["label"] for item in service_type_shares(YEAR_2026)["slices"]]
 
-        self.assertEqual(labels, ["Монтаж", "ремонт", "Вид работ не указан"])
+        self.assertEqual(labels, [row["label"] for row in by_service_type(YEAR_2026)])
+        self.assertEqual(labels, ["Монтаж", "Вид работ не указан", "ремонт"])
 
-    def test_collapse_to_six_slices(self):
+    def test_collapse_to_six_slices_in_table_order(self):
         for day, name in enumerate(["А", "Б", "В", "Г", "Д", "Е", "Ж"], start=1):
             self._trip(day, 1000 + day * 100, [name])
 
         result = service_type_shares(YEAR_2026)
 
         labels = [item["label"] for item in result["slices"]]
-        self.assertEqual(labels, ["В", "Г", "Д", "Е", "Ж", "Прочие виды работ"])
-        others = result["slices"][-1]["amount"]
-        self.assertEqual(others, D("1100") + D("1200"))
+        self.assertEqual(labels, ["А", "Б", "В", "Г", "Д", "Прочие виды работ"])
+        self.assertEqual(result["slices"][-1]["amount"], D("1600") + D("1700"))
         self.assertEqual(sum(i["amount"] for i in result["slices"]), result["total"])
 
     def test_empty(self):

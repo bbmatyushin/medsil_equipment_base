@@ -413,10 +413,11 @@
 
     function buildLegend(spec, theme) {
         if (spec.kind === "doughnut") {
-            // Ключ на каждую дольку (стандартные подписи Chart.js для кольца)
+            // Ключ на каждую дольку (стандартные подписи Chart.js для кольца), справа
+            // от кольца, в порядке долек; на узком экране — под кольцом
             return {
                 display: true,
-                position: "bottom",
+                position: window.matchMedia("(max-width: 767px)").matches ? "bottom" : "right",
                 labels: { color: theme.text, usePointStyle: true, pointStyle: "rect" },
             };
         }
