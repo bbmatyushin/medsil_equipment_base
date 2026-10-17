@@ -765,7 +765,7 @@ def clients_trips_vs_payments(
 
     Затраты относятся к клиенту по пунктам командировки (`trip_shares`); оплаты —
     по датам оплат периода, фильтр сотрудника на них не действует. У корзин без
-    клиента оплат нет (None).
+    клиента оплат нет (None). `per_1000` — ₽ выездов на 1000 ₽ оплат.
     """
     source = _source(source)
     buckets = {}
@@ -794,7 +794,7 @@ def clients_trips_vs_payments(
                 "name": item["name"],
                 "trips_amount": item["amount"],
                 "payments": paid,
-                "per_100": _ratio(item["amount"] * 100, paid) if paid else None,
+                "per_1000": _ratio(item["amount"] * 1000, paid) if paid else None,
             }
         )
     return rows[:limit]

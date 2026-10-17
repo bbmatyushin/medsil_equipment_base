@@ -817,7 +817,7 @@ class MoneyTests(TestCase):
         self.assertEqual([row["number"] for row in rows], ["К-1"])
         self.assertEqual(rows[0]["trips_amount"], D("6100"))
 
-    def test_clients_per_100(self):
+    def test_clients_per_1000(self):
         make_payment(self.contract, date(2026, 2, 1), 100000)
         make_payment(self.contract, date(2025, 2, 1), 7777)
         self._trip(date(2026, 3, 1), 2, 3600)
@@ -827,7 +827,7 @@ class MoneyTests(TestCase):
         row = next(row for row in rows if row["name"] == "Альфа")
         self.assertEqual(row["trips_amount"], D("5000"))
         self.assertEqual(row["payments"], D("100000"))
-        self.assertEqual(row["per_100"], D("5.00"))
+        self.assertEqual(row["per_1000"], D("50.00"))
 
     def test_clients_without_payments(self):
         self._trip(date(2026, 3, 1), 2, 3600)
@@ -836,9 +836,9 @@ class MoneyTests(TestCase):
         rows = {row["name"]: row for row in clients_trips_vs_payments(YEAR_2026)}
 
         self.assertEqual(rows["Альфа"]["payments"], D("0"))
-        self.assertIsNone(rows["Альфа"]["per_100"])
+        self.assertIsNone(rows["Альфа"]["per_1000"])
         self.assertIsNone(rows["Клиент не указан"]["payments"])
-        self.assertIsNone(rows["Клиент не указан"]["per_100"])
+        self.assertIsNone(rows["Клиент не указан"]["per_1000"])
 
 
 class ControlTests(TestCase):

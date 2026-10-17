@@ -288,7 +288,7 @@
                             <th scope="col">Клиент</th>
                             <th scope="col" class="num">Выезды</th>
                             <th scope="col" class="num">Оплаты</th>
-                            <th scope="col" class="num">₽ выездов на 100 ₽ оплат</th>
+                            <th scope="col" class="num">₽ выездов на 1000 ₽ оплат</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -297,7 +297,7 @@
                                 <td>{{ row.name }}</td>
                                 <td class="num">{{ row.trips_amount|money }}</td>
                                 <td class="num">{{ row.payments|money }}</td>
-                                <td class="num">{{ row.per_100|money }}</td>
+                                <td class="num">{{ row.per_1000|money }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>

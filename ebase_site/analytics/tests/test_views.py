@@ -1220,3 +1220,10 @@ class TripsPageTests(TestCase):
 
         self.assertNotContains(response, "Не разнесены на контракты")
         self.assertNotIn("unallocated", response.context)
+
+    def test_trips_clients_column_per_1000(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+        self.assertContains(response, "₽ выездов на 1000 ₽ оплат")
+        self.assertNotContains(response, "на 100 ₽ оплат")
