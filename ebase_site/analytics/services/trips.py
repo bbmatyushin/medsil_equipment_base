@@ -83,8 +83,20 @@ def split_proportional(total: Decimal, weights: list[int]) -> list[Decimal]:
 
 
 def destination_days(dest: BusinessTripDestination) -> int:
-    """Дни пребывания в пункте (граничные даты включаются)."""
-    return (dest.end_dt - dest.beg_dt).days + 1
+    """Дни пребывания в пункте (граничные даты включаются), не меньше одного.
+
+    Пункт с датой выбытия раньше даты прибытия (админка такое не пропускает,
+    но запись могла прийти из shell или импорта) считается одним днём: иначе
+    деление по дням упало бы на нулевом весе.
+    """
+    return max((dest.end_dt - dest.beg_dt).days + 1, 1)
+
+
+def _destination_dates(dest: BusinessTripDestination) -> set[date]:
+    """Календарные дни пункта; при перепутанных датах — один день прибытия."""
+    return {
+        dest.beg_dt + timedelta(days=offset) for offset in range(destination_days(dest))
+    }
 
 
 def trip_total(trip: BusinessTrip) -> Decimal:
@@ -329,10 +341,15 @@ def _direction_buckets(trips: list[BusinessTrip], group: str) -> dict[str, dict]
     for trip in trips:
         destinations = list(trip.destinations.all())
         touched = []
+        # дни направления в командировке — объединение дат его пунктов: две
+        # больницы одного города в одни и те же дни — это те же дни пребывания
+        dates_by_key = {}
         for dest in destinations:
             item = bucket(dest)
-            item["days"] += destination_days(dest)
+            dates_by_key.setdefault(item["key"], set()).update(_destination_dates(dest))
             touched.append(item)
+        for key, dates in dates_by_key.items():
+            buckets[key]["days"] += len(dates)
         if not destinations:
             item = bucket(None)
             item["days"] += trip.days_count or 0
@@ -883,7 +900,9 @@ def expensive_trips(
     overall = []
     for trip in trips_until(today):
         per_day = _per_day_without_allowance(trip)
-        if per_day is None:
+        # поездки без затрат (ещё не внесены или только суточные) тянули бы
+        # медиану к нулю — в базу сравнения они не входят
+        if not per_day:
             continue
         overall.append(per_day)
         region = _main_region(trip)

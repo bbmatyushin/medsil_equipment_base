@@ -995,3 +995,73 @@ class ControlTests(TestCase):
         row = expensive_trips(YEAR_2026, TODAY)[0]
 
         self.assertEqual(row["per_day"], D("2000.00"))
+
+
+class ReviewFixTests(TestCase):
+    """Исправления по итогам ревью ветки."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+        cls.kazan2 = make_department("Поликлиника Казани")
+        cls.chelny = make_department(
+            "Больница Челнов", city=make_city("Набережные Челны", "Татарстан")
+        )
+
+    def test_norms_count_overlapping_destinations_once(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 10),
+            date(2026, 3, 12),
+            destinations=[
+                (self.kazan, date(2026, 3, 10), date(2026, 3, 12)),
+                (self.kazan2, date(2026, 3, 10), date(2026, 3, 12)),
+            ],
+            expenses=[("Гостиница", date(2026, 3, 10), 3000)],
+        )
+        row = direction_norms(TODAY)["rows"][0]
+        self.assertEqual(row["avg_days"], D("3.0"))
+        self.assertEqual(row["per_day"], D("1700.00"))
+        self.assertEqual(directions(YEAR_2026)[0]["days"], 3)
+
+    def test_expensive_ignores_trips_without_expenses_in_baseline(self):
+        # поездок без затрат больше половины: с ними медиана была бы нулевой
+        for day in (1, 3, 5, 7, 9):
+            make_trip(
+                self.employee,
+                date(2026, 2, day),
+                date(2026, 2, day),
+                destinations=[(self.chelny, date(2026, 2, day), date(2026, 2, day))],
+            )
+        for day in (12, 16, 20):
+            make_trip(
+                self.employee,
+                date(2026, 2, day),
+                date(2026, 2, day),
+                destinations=[(self.chelny, date(2026, 2, day), date(2026, 2, day))],
+                expenses=[("Такси", date(2026, 2, day), 1000)],
+            )
+        make_trip(
+            self.employee,
+            date(2026, 6, 1),
+            date(2026, 6, 1),
+            destinations=[(self.kazan, date(2026, 6, 1), date(2026, 6, 1))],
+            expenses=[("Такси", date(2026, 6, 1), 3000)],
+        )
+        rows = expensive_trips(YEAR_2026, TODAY)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["baseline"], D("1000.00"))
+        self.assertEqual(rows[0]["ratio"], D("3.0"))
+
+    def test_destination_with_inverted_dates_does_not_crash(self):
+        trip = make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            destinations=[(self.kazan, date(2026, 3, 2), date(2026, 3, 1))],
+            expenses=[("Такси", date(2026, 2, 28), 500)],
+        )
+        loaded = _loaded(trip)
+        self.assertEqual(sum(s.amount for s in trip_shares(loaded)), trip_total(loaded))
+        self.assertEqual(direction_norms(TODAY)["rows"][0]["trips"], 1)
