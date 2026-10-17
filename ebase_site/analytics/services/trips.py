@@ -6,6 +6,7 @@
 и группировка — в Python, как в `services/finance.py`.
 """
 
+import statistics
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
@@ -36,6 +37,12 @@ OTHER_KINDS_LABEL = "Прочие виды"
 NO_SERVICE_TYPE_LABEL = "Вид работ не указан"
 
 DAYS_IN_YEAR = 365
+
+# Пороги блока «Экономия и контроль»
+REPEAT_WINDOW_DAYS = 30  # повторный выезд в то же подразделение
+MERGE_WINDOW_DAYS = 14  # разрыв между поездками в один регион
+EXPENSIVE_RATIO = Decimal("1.5")  # во сколько раз дороже медианы
+MIN_TRIPS_FOR_REGION_MEDIAN = 3  # меньше поездок — сравнение с общей медианой
 # Средняя длина месяца для подписи «оценка по N мес.»
 DAYS_IN_MONTH = Decimal("30.4")
 
@@ -733,3 +740,186 @@ def unallocated_trips(period: Period, employee=None) -> dict:
         "rows": rows,
         "ids": [str(row["id"]) for row in rows],
     }
+
+
+# --- Экономия и контроль ---------------------------------------------------------
+
+
+def _trip_brief(trip: BusinessTrip) -> dict:
+    """Командировка для строк таблиц: номер, сотрудник, даты, стоимость."""
+    return {
+        "id": trip.pk,
+        "doc_number": trip.doc_number,
+        "employee": employee_name(trip.employee),
+        "beg": trip.beg_dt,
+        "end": trip.end_dt,
+        "amount": trip_total(trip),
+    }
+
+
+def repeat_visits(period: Period, employee=None) -> list[dict]:
+    """Повторные выезды: то же подразделение не позже чем через 30 дней.
+
+    Для каждого пункта командировок периода ищется ближайший предыдущий пункт
+    того же подразделения в другой командировке (любого сотрудника, за всю
+    историю), закончившийся не раньше чем за `REPEAT_WINDOW_DAYS` дней до начала.
+    """
+    trips = trips_in_period(period, employee)
+    department_ids = {
+        dest.department_id for trip in trips for dest in trip.destinations.all()
+    }
+    history = {}
+    for row in BusinessTripDestination.objects.filter(
+        department_id__in=department_ids
+    ).values("department_id", "business_trip_id", "beg_dt", "end_dt"):
+        history.setdefault(row["department_id"], []).append(row)
+    rows = []
+    for trip in trips:
+        for dest in _sorted_destinations(trip):
+            previous = [
+                item
+                for item in history.get(dest.department_id, [])
+                if item["business_trip_id"] != trip.pk
+                and item["end_dt"] < dest.beg_dt
+                and (dest.beg_dt - item["end_dt"]).days <= REPEAT_WINDOW_DAYS
+            ]
+            if not previous:
+                continue
+            last = max(previous, key=lambda item: item["end_dt"])
+            department = dest.department
+            rows.append(
+                {
+                    "department": department.name,
+                    "client": (
+                        department.client.name if department.client else NO_CLIENT_LABEL
+                    ),
+                    "city": department.city.name if department.city else NO_CITY_LABEL,
+                    "previous_trip_id": last["business_trip_id"],
+                    "previous_beg": last["beg_dt"],
+                    "previous_end": last["end_dt"],
+                    "trip_id": trip.pk,
+                    "beg": dest.beg_dt,
+                    "end": dest.end_dt,
+                    "gap": (dest.beg_dt - last["end_dt"]).days,
+                    "service_types": ", ".join(
+                        service_type.name for service_type in trip.service_type.all()
+                    ),
+                    "amount": trip_total(trip),
+                }
+            )
+    return sorted(rows, key=lambda row: row["beg"], reverse=True)
+
+
+def _region_keys(trip: BusinessTrip) -> dict[str, str]:
+    """Регионы пунктов командировки: {ключ: подпись}, без пустых корзин."""
+    keys = {}
+    for dest in trip.destinations.all():
+        key, label = direction_of(dest, "region")
+        if key not in ("none", "no_city"):
+            keys[key] = label
+    return keys
+
+
+def merge_candidates(period: Period, employee=None) -> list[dict]:
+    """Пары командировок в один регион с разрывом 1–14 дней: можно было объединить.
+
+    Пересекающиеся по датам командировки (поехали параллельно) не считаются.
+    """
+    trips = sorted(trips_in_period(period, employee), key=lambda t: t.beg_dt)
+    regions = {trip.pk: _region_keys(trip) for trip in trips}
+    rows = []
+    for index, first in enumerate(trips):
+        for second in trips[index + 1 :]:
+            if first.end_dt >= second.beg_dt:
+                continue
+            gap = (second.beg_dt - first.end_dt).days
+            if gap > MERGE_WINDOW_DAYS:
+                continue
+            common = [
+                label
+                for key, label in regions[first.pk].items()
+                if key in regions[second.pk]
+            ]
+            if not common:
+                continue
+            first_brief, second_brief = _trip_brief(first), _trip_brief(second)
+            rows.append(
+                {
+                    "region": ", ".join(sorted(common)),
+                    "first": first_brief,
+                    "second": second_brief,
+                    "gap": gap,
+                    "amount": first_brief["amount"] + second_brief["amount"],
+                }
+            )
+    return sorted(rows, key=lambda row: (row["gap"], row["first"]["beg"]))
+
+
+def _per_day_without_allowance(trip: BusinessTrip) -> Decimal | None:
+    """Затраты командировки в день без суточных (суточные у всех одинаковы)."""
+    expenses = sum((expense.amount for expense in trip.expenses.all()), ZERO)
+    return _ratio(expenses, trip.days_count)
+
+
+def _main_region(trip: BusinessTrip) -> tuple[str, str] | None:
+    """Регион пункта с наибольшим числом дней (при равенстве — более раннего)."""
+    destinations = _sorted_destinations(trip)
+    if not destinations:
+        return None
+    return direction_of(max(destinations, key=destination_days), "region")
+
+
+def expensive_trips(
+    period: Period, today: date, employee=None, limit: int = 10
+) -> list[dict]:
+    """Командировки периода, заметно дороже обычной цены дня в их регионе.
+
+    ₽ в день — затраты без суточных. База — медиана по основному региону
+    командировки за всю историю (всех сотрудников), если там не меньше
+    `MIN_TRIPS_FOR_REGION_MEDIAN` поездок, иначе общая медиана. Выводятся
+    командировки от `EXPENSIVE_RATIO` медианы, по убыванию отношения.
+    """
+    by_region = {}
+    overall = []
+    for trip in trips_until(today):
+        per_day = _per_day_without_allowance(trip)
+        if per_day is None:
+            continue
+        overall.append(per_day)
+        region = _main_region(trip)
+        if region is not None:
+            by_region.setdefault(region[0], []).append(per_day)
+    if not overall:
+        return []
+    overall_median = statistics.median(overall)
+    rows = []
+    for trip in trips_in_period(period, employee):
+        per_day = _per_day_without_allowance(trip)
+        if not per_day:
+            continue
+        region = _main_region(trip)
+        values = by_region.get(region[0], []) if region else []
+        if len(values) >= MIN_TRIPS_FOR_REGION_MEDIAN:
+            baseline, kind = statistics.median(values), "region"
+        else:
+            baseline, kind = overall_median, "all"
+        ratio = _ratio(per_day, baseline, TENTH)
+        if ratio is None or ratio < EXPENSIVE_RATIO:
+            continue
+        brief = _trip_brief(trip)
+        rows.append(
+            {
+                "id": brief["id"],
+                "doc_number": brief["doc_number"],
+                "employee": brief["employee"],
+                "beg": brief["beg"],
+                "end": brief["end"],
+                "region": region[1] if region else NO_DESTINATIONS_LABEL,
+                "per_day": per_day,
+                "baseline": _ratio(baseline, 1),
+                "baseline_kind": kind,
+                "ratio": ratio,
+            }
+        )
+    rows.sort(key=lambda row: -row["ratio"])
+    return rows[:limit]

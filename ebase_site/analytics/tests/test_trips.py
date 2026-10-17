@@ -18,7 +18,10 @@ from analytics.services.trips import (
     cost_structure,
     costs_by_month,
     direction_of,
+    expensive_trips,
     load_trips,
+    merge_candidates,
+    repeat_visits,
     unallocated_trips,
     split_proportional,
     trip_shares,
@@ -852,3 +855,143 @@ class MoneyTests(TestCase):
         self.assertEqual(rows[bare.pk]["employee"], "Иванов Иван Иванович")
         self.assertEqual(result["total"], D("1000") + D("1200"))
         self.assertEqual(set(result["ids"]), {str(bare.pk), str(mismatched.pk)})
+
+
+class ControlTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.other = make_employee("petrov", "Петров", "Пётр", "Петрович")
+        cls.alpha = make_client("Альфа")
+        cls.kazan = make_department("Больница Казани", client=cls.alpha)
+        cls.chelny = make_department(
+            "Больница Челнов", city=make_city("Набережные Челны", "Татарстан")
+        )
+        cls.samara = make_department(
+            "Больница Самары", city=make_city("Самара", "Самарская область")
+        )
+
+    def _trip(self, department, beg, end, expense=0, employee=None, **kwargs):
+        return make_trip(
+            employee or self.employee,
+            beg,
+            end,
+            destinations=[(department, beg, end)],
+            expenses=[("Такси", beg, expense)] if expense else [],
+            **kwargs,
+        )
+
+    def test_repeat_visit_within_30_days(self):
+        first = self._trip(self.kazan, date(2026, 2, 27), date(2026, 3, 1))
+        second = self._trip(
+            self.kazan,
+            date(2026, 3, 31),
+            date(2026, 4, 1),
+            employee=self.other,
+            service_types=["ремонт"],
+        )
+
+        rows = repeat_visits(YEAR_2026)
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["gap"], 30)
+        self.assertEqual(row["trip_id"], second.pk)
+        self.assertEqual(row["previous_trip_id"], first.pk)
+        self.assertEqual(row["department"], "Больница Казани")
+        self.assertEqual(row["client"], "Альфа")
+        self.assertEqual(row["city"], "Казань")
+        self.assertEqual(row["service_types"], "ремонт")
+        self.assertEqual(row["amount"], D("1400"))
+
+    def test_repeat_visit_31_days_is_not_repeat(self):
+        self._trip(self.kazan, date(2026, 2, 27), date(2026, 3, 1))
+        self._trip(self.kazan, date(2026, 4, 1), date(2026, 4, 2))
+        self.assertEqual(repeat_visits(YEAR_2026), [])
+
+    def test_repeat_ignores_same_trip(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 5),
+            destinations=[
+                (self.kazan, date(2026, 3, 1), date(2026, 3, 1)),
+                (self.chelny, date(2026, 3, 2), date(2026, 3, 3)),
+                (self.kazan, date(2026, 3, 5), date(2026, 3, 5)),
+            ],
+        )
+        self.assertEqual(repeat_visits(YEAR_2026), [])
+
+    def test_repeat_previous_may_be_before_period(self):
+        self._trip(self.kazan, date(2025, 12, 18), date(2025, 12, 20))
+        self._trip(self.kazan, date(2026, 1, 10), date(2026, 1, 11))
+
+        rows = repeat_visits(YEAR_2026)
+
+        self.assertEqual([row["gap"] for row in rows], [21])
+        self.assertEqual(rows[0]["previous_end"], date(2025, 12, 20))
+
+    def test_merge_candidates_gap(self):
+        first = self._trip(self.kazan, date(2026, 3, 1), date(2026, 3, 1))
+        second = self._trip(
+            self.chelny, date(2026, 3, 15), date(2026, 3, 16), employee=self.other
+        )
+
+        rows = merge_candidates(YEAR_2026)
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["gap"], 14)
+        self.assertEqual(row["region"], "Татарстан")
+        self.assertEqual(row["first"]["id"], first.pk)
+        self.assertEqual(row["second"]["id"], second.pk)
+        self.assertEqual(row["second"]["employee"], "Петров Пётр Петрович")
+        self.assertEqual(row["amount"], D("700") + D("1400"))
+
+    def test_merge_candidates_15_days_overlap_and_other_region(self):
+        self._trip(self.kazan, date(2026, 3, 1), date(2026, 3, 1))
+        self._trip(self.chelny, date(2026, 3, 16), date(2026, 3, 17))
+        self._trip(self.kazan, date(2026, 5, 1), date(2026, 5, 5))
+        self._trip(self.chelny, date(2026, 5, 3), date(2026, 5, 4), employee=self.other)
+        self._trip(self.samara, date(2026, 7, 1), date(2026, 7, 1))
+        self._trip(self.kazan, date(2026, 7, 3), date(2026, 7, 3))
+
+        self.assertEqual(merge_candidates(YEAR_2026), [])
+
+    def _region_baseline(self):
+        for day in (1, 5, 9):
+            self._trip(self.chelny, date(2026, 2, day), date(2026, 2, day), 1000)
+
+    def test_expensive_trip_against_region_median(self):
+        self._region_baseline()
+        expensive = self._trip(self.kazan, date(2026, 6, 1), date(2026, 6, 1), 2000)
+        self._trip(self.kazan, date(2026, 6, 10), date(2026, 6, 10), 1400)
+
+        rows = expensive_trips(YEAR_2026, TODAY)
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["id"], expensive.pk)
+        self.assertEqual(row["ratio"], D("2.0"))
+        self.assertEqual(row["baseline_kind"], "region")
+        self.assertEqual(row["baseline"], D("1000.00"))
+        self.assertEqual(row["per_day"], D("2000.00"))
+        self.assertEqual(row["region"], "Татарстан")
+
+    def test_expensive_trip_falls_back_to_overall_median(self):
+        self._region_baseline()
+        self._trip(self.samara, date(2026, 6, 1), date(2026, 6, 1), 3000)
+
+        rows = expensive_trips(YEAR_2026, TODAY)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["baseline_kind"], "all")
+        self.assertEqual(rows[0]["ratio"], D("3.0"))
+
+    def test_expensive_per_day_excludes_allowance(self):
+        self._region_baseline()
+        self._trip(self.kazan, date(2026, 6, 1), date(2026, 6, 2), 4000)
+
+        row = expensive_trips(YEAR_2026, TODAY)[0]
+
+        self.assertEqual(row["per_day"], D("2000.00"))

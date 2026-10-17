@@ -104,6 +104,18 @@ def _with_trip_links(rows: list[dict]) -> list[dict]:
     return [{**row, "url": change_url(TRIPS, row["id"])} for row in rows]
 
 
+def _with_pair_links(rows: list[dict]) -> list[dict]:
+    """Пары «можно было объединить» со ссылками на карточки обеих командировок."""
+    return [
+        {
+            **row,
+            "first_url": change_url(TRIPS, row["first"]["id"]),
+            "second_url": change_url(TRIPS, row["second"]["id"]),
+        }
+        for row in rows
+    ]
+
+
 def _with_receipt_links(rows: list[dict]) -> list[dict]:
     """Строки подотчёта со ссылкой на поступления ДС сотрудника."""
     return [
@@ -246,6 +258,18 @@ class TripsView(AnalyticsTabView):
             unallocated=unallocated,
             unallocated_url=_ids_link(unallocated["ids"]),
             max_link_ids=MAX_LINK_IDS,
+            repeats=[
+                {
+                    **row,
+                    "url": change_url(TRIPS, row["trip_id"]),
+                    "previous_url": change_url(TRIPS, row["previous_trip_id"]),
+                }
+                for row in trips.repeat_visits(period, employee)
+            ],
+            merges=_with_pair_links(trips.merge_candidates(period, employee)),
+            expensive=_with_trip_links(trips.expensive_trips(period, today, employee)),
+            repeat_window_days=trips.REPEAT_WINDOW_DAYS,
+            merge_window_days=trips.MERGE_WINDOW_DAYS,
             directions_height=_horizontal_chart_height(len(top)),
             directions_limit=TOP_DIRECTIONS,
             annual=trips.annual_by_direction(today, employee, group),

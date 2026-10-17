@@ -360,4 +360,112 @@
         {% endif %}
     </section>
 </div>
+
+<h2 class="an-section-title">Экономия и контроль</h2>
+<div class="an-charts">
+    <section class="an-card an-card--wide">
+        <h2>Повторные выезды</h2>
+        <p class="an-card-note">То же подразделение через {{ repeat_window_days }} дней или раньше: возможно, проблему не решили с первого раза. Прошлый выезд ищется за всю историю. Клик по датам — карточка командировки.</p>
+        {% if repeats %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Подразделение</th>
+                            <th scope="col">Клиент</th>
+                            <th scope="col">Город</th>
+                            <th scope="col">Прошлый выезд</th>
+                            <th scope="col">Повторный</th>
+                            <th scope="col" class="num">Через, дн.</th>
+                            <th scope="col">Виды работ</th>
+                            <th scope="col" class="num">Стоимость повторного</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in repeats %}
+                            <tr>
+                                <td>{{ row.department }}</td>
+                                <td>{{ row.client }}</td>
+                                <td>{{ row.city }}</td>
+                                <td><a href="{{ row.previous_url }}">{{ row.previous_beg|date:"d.m.Y" }} — {{ row.previous_end|date:"d.m.Y" }}</a></td>
+                                <td><a href="{{ row.url }}">{{ row.beg|date:"d.m.Y" }} — {{ row.end|date:"d.m.Y" }}</a></td>
+                                <td class="num">{{ row.gap }}</td>
+                                <td>{{ row.service_types|default:"—" }}</td>
+                                <td class="num">{{ row.amount|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Можно было объединить</h2>
+        <p class="an-card-note">Командировки периода в один регион с разрывом до {{ merge_window_days }} дней (поездки с пересекающимися датами не учитываются).</p>
+        {% if merges %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Регион</th>
+                            <th scope="col">Первая</th>
+                            <th scope="col">Вторая</th>
+                            <th scope="col" class="num">Разрыв, дн.</th>
+                            <th scope="col" class="num">Стоимость обеих</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in merges %}
+                            <tr>
+                                <td>{{ row.region }}</td>
+                                <td><a href="{{ row.first_url }}">{{ row.first.beg|date:"d.m" }} — {{ row.first.end|date:"d.m.Y" }}</a><div class="an-note">{{ row.first.employee }}</div></td>
+                                <td><a href="{{ row.second_url }}">{{ row.second.beg|date:"d.m" }} — {{ row.second.end|date:"d.m.Y" }}</a><div class="an-note">{{ row.second.employee }}</div></td>
+                                <td class="num">{{ row.gap }}</td>
+                                <td class="num">{{ row.amount|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Необычно дорогие поездки</h2>
+        <p class="an-card-note">₽ в день без суточных против медианы основного региона поездки за всю историю (при меньше чем 3 поездках в регионе — общей медианы); показаны от 1,5×.</p>
+        {% if expensive %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Командировка</th>
+                            <th scope="col">Регион</th>
+                            <th scope="col" class="num">₽ в день</th>
+                            <th scope="col" class="num">Обычно</th>
+                            <th scope="col" class="num">Во сколько раз</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in expensive %}
+                            <tr>
+                                <td><a href="{{ row.url }}">№{{ row.doc_number|default:"—" }}, {{ row.beg|date:"d.m.Y" }}</a><div class="an-note">{{ row.employee }}</div></td>
+                                <td>{{ row.region }}</td>
+                                <td class="num">{{ row.per_day|money }}</td>
+                                <td class="num">{{ row.baseline|money }}{% if row.baseline_kind == "all" %}<div class="an-note">общая медиана</div>{% endif %}</td>
+                                <td class="num"><strong>×{{ row.ratio|number }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}
