@@ -19,6 +19,7 @@ class Tab:
 # Следующие этапы дописывают сюда свои вкладки
 TABS = [
     Tab("finance", "Финансы", "analytics.view_finance", "analytics:finance"),
+    Tab("trips", "Командировки", "analytics.view_trips", "analytics:trips"),
 ]
 
 

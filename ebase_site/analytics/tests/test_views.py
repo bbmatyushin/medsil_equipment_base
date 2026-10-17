@@ -133,6 +133,48 @@ class AnalyticsViewsTests(TestCase):
         )
         self.assertEqual(visible_tabs(self.staff), [])
 
+    def _trips_staff(self):
+        user = User.objects.create_user("trips_staff", password="pass", is_staff=True)
+        user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="analytics", codename="view_trips"
+            )
+        )
+        return user
+
+    def test_superuser_sees_trips_tab(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("analytics:trips"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Командировки")
+
+    def test_staff_without_trips_permission_gets_403(self):
+        self.client.force_login(self.finance_staff)
+        response = self.client.get(reverse("analytics:trips"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_index_redirects_to_trips_when_only_trips_permitted(self):
+        self.client.force_login(self._trips_staff())
+        response = self.client.get(reverse("analytics:index"))
+        self.assertRedirects(response, reverse("analytics:trips"))
+        self.assertEqual(reverse("analytics:trips"), "/admin/analytics/trips/")
+
+    def test_sidebar_lists_trips_tab_with_permission(self):
+        self.client.force_login(self._trips_staff())
+        response = self.client.get(reverse("admin:index"))
+        app = next(
+            app
+            for app in response.context["available_apps"]
+            if app["app_label"] == "analytics"
+        )
+        self.assertEqual(
+            [(model["name"], model["admin_url"]) for model in app["models"]],
+            [("Командировки", reverse("analytics:trips"))],
+        )
+
+    def test_trips_tab_follows_finance_in_tabs(self):
+        self.assertEqual([tab.key for tab in TABS][:2], ["finance", "trips"])
+
     def test_tab_is_frozen_dataclass(self):
         tab = Tab("finance", "Финансы", "analytics.view_finance", "analytics:finance")
         with self.assertRaises(Exception):
