@@ -1,6 +1,4 @@
-"""Страницы раздела «Статистика» внутри админки."""
-
-from dataclasses import dataclass
+"""Страницы раздела «Аналитика» внутри админки."""
 
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
@@ -13,28 +11,8 @@ from clients.models import Client
 from .charts import chart_spec
 from .filters import FinanceFilterForm, Period, PeriodForm, month_label
 from .links import change_url, changelist_url
+from .navigation import TABS, visible_tabs
 from .services import finance
-
-
-@dataclass(frozen=True)
-class Tab:
-    """Вкладка раздела: ключ, заголовок, право доступа и имя URL."""
-
-    key: str
-    title: str
-    perm: str
-    url_name: str
-
-
-# Следующие этапы дописывают сюда свои вкладки
-TABS = [
-    Tab("finance", "Деньги", "analytics.view_finance", "analytics:finance"),
-]
-
-
-def visible_tabs(user) -> list[Tab]:
-    """Вкладки, на которые у пользователя есть право."""
-    return [tab for tab in TABS if user.has_perm(tab.perm)]
 
 
 def index(request):
@@ -71,12 +49,12 @@ class AnalyticsTabView(TemplateView):
             period=period,
             previous_period=period.previous_year(),
             today=today,
-            title=f"Статистика — {self.tab.title}",
+            title=f"Аналитика — {self.tab.title}",
         )
         return context
 
 
-# --- Вкладка «Деньги» ----------------------------------------------------------
+# --- Вкладка «Финансы» --------------------------------------------------------
 
 # Список контрактов в админке: сюда ведут клики по виджетам
 CONTRACTS = "contracts_contract"
@@ -202,7 +180,7 @@ def _finance_charts(
     profit_rows: list[dict],
     points: list[dict],
 ) -> dict:
-    """Спецификации графиков вкладки «Деньги»."""
+    """Спецификации графиков вкладки «Финансы»."""
     months = [month_label(month) for month in flow["months"]]
     concluded_months = [month_label(month) for month in concluded["months"]]
     clients = top["clients"]
@@ -292,7 +270,7 @@ def _finance_charts(
 
 
 class FinanceView(AnalyticsTabView):
-    """Вкладка «Деньги»."""
+    """Вкладка «Финансы»."""
 
     tab_key = "finance"
     form_class = FinanceFilterForm

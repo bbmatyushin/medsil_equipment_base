@@ -14,9 +14,4 @@
 {% endif %}
 {% endblock %}
 
-{% block userlinks %}
-{% if perms.analytics %}<a href="{% url 'analytics:index' %}">Статистика</a> / {% endif %}
-{{ block.super }}
-{% endblock %}
-
 {% block nav-global %}{% endblock %}

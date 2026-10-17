@@ -1,4 +1,4 @@
-"""Период и формы фильтров раздела «Статистика»."""
+"""Период и формы фильтров раздела «Аналитика»."""
 
 import calendar
 from dataclasses import dataclass
@@ -137,7 +137,7 @@ class PeriodForm(forms.Form):
 
 
 class FinanceFilterForm(PeriodForm):
-    """Фильтры вкладки «Деньги»: период + клиент (только клиенты с контрактами)."""
+    """Фильтры вкладки «Финансы»: период + клиент (только клиенты с контрактами)."""
 
     client = forms.ModelChoiceField(
         Client.objects.filter(contract_client__isnull=False)

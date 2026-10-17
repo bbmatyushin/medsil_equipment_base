@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 from unittest import mock
@@ -16,7 +17,8 @@ from analytics.tests.factories import (
     make_payment,
     make_shipment,
 )
-from analytics.views import MAX_LINK_IDS, TABS, Tab, _pareto_caption, visible_tabs
+from analytics.navigation import TABS, Tab, visible_tabs
+from analytics.views import MAX_LINK_IDS, _pareto_caption
 from clients.models import Client
 from contracts.admin import format_money
 from contracts.models import Contract, ContractExpense
@@ -28,7 +30,7 @@ TODAY = date(2026, 10, 16)
 
 
 def _fixed_today():
-    """Подменяет «сегодня» страницы статистики."""
+    """Подменяет «сегодня» страницы аналитики."""
     return mock.patch("django.utils.timezone.localdate", return_value=TODAY)
 
 
@@ -52,7 +54,7 @@ class AnalyticsViewsTests(TestCase):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("analytics:finance"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Деньги")
+        self.assertContains(response, "Финансы")
 
     def test_staff_without_permission_gets_403_on_tab(self):
         self.client.force_login(self.staff)
@@ -80,16 +82,49 @@ class AnalyticsViewsTests(TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertIn("/admin/login/", response["Location"])
 
-    def test_header_link_shown_with_permission(self):
+    def test_sidebar_lists_analytics_tabs_with_permission(self):
         self.client.force_login(self.finance_staff)
         response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, reverse("analytics:index"))
+        apps = [
+            app
+            for app in response.context["available_apps"]
+            if app["app_label"] == "analytics"
+        ]
+        self.assertEqual(len(apps), 1)
+        app = apps[0]
+        self.assertEqual(app["name"], "Аналитика")
+        self.assertEqual(app["app_url"], reverse("analytics:index"))
+        self.assertEqual(
+            [(model["name"], model["admin_url"]) for model in app["models"]],
+            [("Финансы", reverse("analytics:finance"))],
+        )
+        # тот же раздел — в списке на главной странице: на телефоне боковая панель скрыта
+        self.assertIn(app, response.context["app_list"])
+        self.assertContains(response, '<a href="%s"' % reverse("analytics:finance"))
 
-    def test_header_link_hidden_without_permission(self):
+    def test_sidebar_hides_analytics_without_permission(self):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("admin:index"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, reverse("analytics:index"))
+        self.assertNotIn(
+            "analytics",
+            [app["app_label"] for app in response.context["available_apps"]],
+        )
+        self.assertNotContains(response, reverse("analytics:finance"))
+
+    def test_header_has_no_analytics_link(self):
+        self.client.force_login(self.finance_staff)
+        response = self.client.get(reverse("admin:index"))
+        user_tools = re.search(
+            r'<div id="user-tools">(.*?)</div>', response.content.decode(), re.S
+        ).group(1)
+        self.assertNotIn(reverse("analytics:index"), user_tools)
+        self.assertNotIn("Аналитика", user_tools)
+
+    def test_tab_page_highlights_tab_in_sidebar(self):
+        self.client.force_login(self.finance_staff)
+        response = self.client.get(reverse("analytics:finance"))
+        self.assertContains(response, '<tr class="model-finance current-model">')
 
     def test_visible_tabs_follow_permissions(self):
         self.assertEqual(visible_tabs(self.superuser), TABS)
@@ -99,17 +134,17 @@ class AnalyticsViewsTests(TestCase):
         self.assertEqual(visible_tabs(self.staff), [])
 
     def test_tab_is_frozen_dataclass(self):
-        tab = Tab("finance", "Деньги", "analytics.view_finance", "analytics:finance")
+        tab = Tab("finance", "Финансы", "analytics.view_finance", "analytics:finance")
         with self.assertRaises(Exception):
             tab.key = "other"
 
     def test_page_renders_breadcrumbs_and_tab_link(self):
         self.client.force_login(self.finance_staff)
         response = self.client.get(reverse("analytics:finance"))
-        self.assertContains(response, "<title>Статистика — Деньги")
+        self.assertContains(response, "<title>Аналитика — Финансы")
         self.assertContains(response, '<a href="%s"' % reverse("analytics:finance"))
         self.assertEqual(response.context["active_tab"].key, "finance")
-        self.assertEqual(response.context["title"], "Статистика — Деньги")
+        self.assertEqual(response.context["title"], "Аналитика — Финансы")
 
     def test_page_shows_resolved_period_and_comparison(self):
         self.client.force_login(self.finance_staff)
@@ -193,7 +228,7 @@ def _paid_contract(client, number, conclusion, amount, **fields):
 
 
 class FinancePageTests(TestCase):
-    """Вкладка «Деньги»: виджеты, подписи и ссылки в списки админки."""
+    """Вкладка «Финансы»: виджеты, подписи и ссылки в списки админки."""
 
     @classmethod
     def setUpTestData(cls):

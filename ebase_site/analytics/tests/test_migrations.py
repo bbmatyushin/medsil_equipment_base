@@ -51,3 +51,69 @@ class StatisticsGroupMigrationTests(TestCase):
         # права, выданные группе вручную, не стираются; четыре права вкладок добавлены
         self.assertEqual(group.permissions.count(), 5)
         self.assertTrue(group.permissions.filter(pk=extra.pk).exists())
+
+
+class RenameToAnalyticsMigrationTests(TestCase):
+    """Миграция 0003: «Статистика» → «Аналитика», «Деньги» → «Финансы»."""
+
+    OLD_NAMES = {
+        "view_finance": "Статистика: Деньги",
+        "view_warehouse_trips": "Статистика: Склад и командировки",
+        "view_service": "Статистика: Сервис и надёжность",
+        "view_park": "Статистика: Парк и продажи",
+    }
+    NEW_NAMES = {
+        "view_finance": "Аналитика: Финансы",
+        "view_warehouse_trips": "Аналитика: Склад и командировки",
+        "view_service": "Аналитика: Сервис и надёжность",
+        "view_park": "Аналитика: Парк и продажи",
+    }
+
+    def setUp(self):
+        self.migration = importlib.import_module(
+            "analytics.migrations.0003_rename_to_analytics"
+        )
+        # состояние после 0002: старые названия прав и группа «Статистика»
+        for codename, name in self.OLD_NAMES.items():
+            Permission.objects.filter(
+                content_type__app_label="analytics", codename=codename
+            ).update(name=name)
+
+    def _names(self):
+        return dict(
+            Permission.objects.filter(content_type__app_label="analytics").values_list(
+                "codename", "name"
+            )
+        )
+
+    def test_renames_permissions_and_group(self):
+        group = Group.objects.create(name="Статистика")
+        staff = User.objects.create_user("staff", password="p", is_staff=True)
+        group.user_set.add(staff)
+
+        self.migration.rename_to_analytics(django_apps, None)
+
+        self.assertEqual(self._names(), self.NEW_NAMES)
+        group.refresh_from_db()
+        self.assertEqual(group.name, "Аналитика")
+        self.assertEqual(list(group.user_set.all()), [staff])
+
+    def test_existing_analytics_group_is_not_touched(self):
+        Group.objects.create(name="Аналитика")
+        Group.objects.create(name="Статистика")
+
+        self.migration.rename_to_analytics(django_apps, None)
+
+        self.assertEqual(
+            sorted(Group.objects.values_list("name", flat=True)),
+            ["Аналитика", "Статистика"],
+        )
+
+    def test_reverse_restores_old_names(self):
+        Group.objects.create(name="Статистика")
+        self.migration.rename_to_analytics(django_apps, None)
+
+        self.migration.rename_to_statistics(django_apps, None)
+
+        self.assertEqual(self._names(), self.OLD_NAMES)
+        self.assertTrue(Group.objects.filter(name="Статистика").exists())

@@ -1,10 +1,10 @@
 from django.db import models
 
-STATISTICS_GROUP_NAME = "Статистика"
+ANALYTICS_GROUP_NAME = "Аналитика"
 
 
 class AnalyticsAccess(models.Model):
-    """Модель-носитель прав доступа к вкладкам раздела «Статистика».
+    """Модель-носитель прав доступа к вкладкам раздела «Аналитика».
 
     Таблицы в БД нет (`managed = False`): модель нужна только затем, чтобы
     Django создал для неё `ContentType` и четыре права по вкладкам.
@@ -14,10 +14,10 @@ class AnalyticsAccess(models.Model):
         managed = False
         default_permissions = ()
         permissions = (
-            ("view_finance", "Статистика: Деньги"),
-            ("view_warehouse_trips", "Статистика: Склад и командировки"),
-            ("view_service", "Статистика: Сервис и надёжность"),
-            ("view_park", "Статистика: Парк и продажи"),
+            ("view_finance", "Аналитика: Финансы"),
+            ("view_warehouse_trips", "Аналитика: Склад и командировки"),
+            ("view_service", "Аналитика: Сервис и надёжность"),
+            ("view_park", "Аналитика: Парк и продажи"),
         )
-        verbose_name = "Доступ к статистике"
-        verbose_name_plural = "Доступ к статистике"
+        verbose_name = "Доступ к аналитике"
+        verbose_name_plural = "Доступ к аналитике"

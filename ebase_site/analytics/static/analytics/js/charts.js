@@ -1,5 +1,5 @@
 /*
- * Раздел «Статистика»: графики Chart.js 4 и мелкое поведение формы фильтров.
+ * Раздел «Аналитика»: графики Chart.js 4 и мелкое поведение формы фильтров.
  * Обычный скрипт без сборки и модулей; подключается после chart.umd.min.js.
  *
  * Шаблон analytics/includes/chart.html выводит спецификацию графика
@@ -340,7 +340,7 @@
         try {
             return JSON.parse(script.textContent);
         } catch (error) {
-            console.error("Статистика: не удалось прочитать данные графика", error);
+            console.error("Аналитика: не удалось прочитать данные графика", error);
             return null;
         }
     }
@@ -364,7 +364,7 @@
                 charts.push(new Chart(canvas, buildConfig(spec, theme, animate)));
             } catch (error) {
                 // Ошибка одного графика не мешает остальным
-                console.error("Статистика: не удалось построить график", error);
+                console.error("Аналитика: не удалось построить график", error);
             }
         });
     }
