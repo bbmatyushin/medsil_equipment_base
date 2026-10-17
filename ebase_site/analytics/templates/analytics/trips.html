@@ -151,8 +151,11 @@
     <section class="an-card an-card--wide">
         <h2>Дни в разъездах</h2>
         <p class="an-card-note">Командировки периода по сотрудникам. Клик — командировки сотрудника.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height only %}
         {% if employee_days %}
+            <div class="an-split an-split--even">
+            <div>
+                {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height only %}
+            </div>
             <div class="an-table-wrap">
                 <table class="an-table">
                     <thead>
@@ -177,6 +180,9 @@
                     </tbody>
                 </table>
             </div>
+            </div>
+        {% else %}
+        {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height only %}
         {% endif %}
     </section>
 

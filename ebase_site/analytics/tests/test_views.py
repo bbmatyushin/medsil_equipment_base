@@ -1247,3 +1247,17 @@ class TripsPageTests(TestCase):
         self.assertLess(
             card.index("<table"), card.index('data-chart="chart-trips-service-types"')
         )
+
+    def test_trips_employee_days_table_right_of_chart(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+
+        html = response.content.decode()
+        card = html[html.index("<h2>Дни в разъездах</h2>") :]
+        card = card[: card.index("</section>")]
+        self.assertIn('class="an-split', card)
+        # диаграмма слева, таблица справа
+        self.assertLess(
+            card.index('data-chart="chart-trips-employee-days"'), card.index("<table")
+        )

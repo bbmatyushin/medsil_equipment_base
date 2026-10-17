@@ -447,6 +447,11 @@ html[data-theme="dark"] {
     align-items: start;
 }
 
+/* Две равные колонки (график слева, таблица справа — «Дни в разъездах») */
+.an-split--even {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 @media (max-width: 767px) {
     .an-split {
         grid-template-columns: minmax(0, 1fr);
