@@ -260,4 +260,104 @@
         {% endif %}
     </section>
 </div>
+
+<h2 class="an-section-title">Командировки и деньги</h2>
+<div class="an-charts">
+    <section class="an-card an-card--wide">
+        <h2>Контракты: доля командировок</h2>
+        <p class="an-card-note">Контракты, по которым были командировки в периоде; «на командировки» — за всё время контракта. Наверху — контракты, где поездки съедают наибольшую долю суммы. Клик — карточка контракта.</p>
+        {% if contracts %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Контракт</th>
+                            <th scope="col">Клиент</th>
+                            <th scope="col" class="num">Сумма контракта</th>
+                            <th scope="col" class="num">На командировки</th>
+                            <th scope="col" class="num">Доля</th>
+                            <th scope="col" class="num">Прибыль</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in contracts %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.number }}</a></td>
+                                <td>{{ row.client }}</td>
+                                <td class="num">{{ row.contract_amount|money }}</td>
+                                <td class="num">{{ row.trips_amount|money }}</td>
+                                <td class="num"><strong>{{ row.share_pct|pct }}</strong></td>
+                                <td class="num">{{ row.profit|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Клиенты: выезды и оплаты</h2>
+        <p class="an-card-note">Затраты отнесены к клиенту по пунктам командировки; оплаты — по датам оплат периода, фильтр сотрудника на них не действует.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.clients chart_id="chart-trips-clients" title="Затраты на выезды по клиентам" height=clients_height %}
+        {% if clients %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Клиент</th>
+                            <th scope="col" class="num">Выезды</th>
+                            <th scope="col" class="num">Оплаты</th>
+                            <th scope="col" class="num">₽ выездов на 100 ₽ оплат</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in clients %}
+                            <tr>
+                                <td>{{ row.name }}</td>
+                                <td class="num">{{ row.trips_amount|money }}</td>
+                                <td class="num">{{ row.payments|money }}</td>
+                                <td class="num">{{ row.per_100|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Не разнесены на контракты</h2>
+        <p class="an-card-note">Командировки периода без долей по контрактам: контракт не выбран или его клиента нет в пунктах командировки.</p>
+        {% if unallocated.rows %}
+            <p class="an-total">Всего: <strong>{{ unallocated.total|money }}</strong>{% if unallocated_url %} · <a href="{{ unallocated_url }}">открыть списком</a>{% else %} <span class="an-note">(больше {{ max_link_ids }} командировок — без ссылки списком)</span>{% endif %}</p>
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">№</th>
+                            <th scope="col">Сотрудник</th>
+                            <th scope="col">Даты</th>
+                            <th scope="col" class="num">Сумма</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in unallocated.rows %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.doc_number|default:"—" }}</a></td>
+                                <td>{{ row.employee }}{% if row.has_contracts %}<div class="an-note">контракт выбран, но его клиента нет в пунктах</div>{% endif %}</td>
+                                <td>{{ row.beg_dt|date:"d.m.Y" }} — {{ row.end_dt|date:"d.m.Y" }}</td>
+                                <td class="num">{{ row.amount|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

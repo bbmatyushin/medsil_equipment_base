@@ -4,9 +4,14 @@ import math
 
 from .charts import chart_spec
 from .filters import Period, TripsFilterForm, month_label
-from .links import changelist_url
+from .links import change_url, changelist_url
 from .services import trips
-from .views import MAX_LINK_IDS, AnalyticsTabView, _horizontal_chart_height
+from .views import (
+    CONTRACTS,
+    MAX_LINK_IDS,
+    AnalyticsTabView,
+    _horizontal_chart_height,
+)
 
 # Списки в админке: сюда ведут клики по виджетам
 TRIPS = "business_trip_businesstrip"
@@ -94,6 +99,11 @@ def _with_load_shades(load: dict) -> dict:
     return load
 
 
+def _with_trip_links(rows: list[dict]) -> list[dict]:
+    """Строки командировок со ссылкой на карточку командировки."""
+    return [{**row, "url": change_url(TRIPS, row["id"])} for row in rows]
+
+
 def _with_receipt_links(rows: list[dict]) -> list[dict]:
     """Строки подотчёта со ссылкой на поступления ДС сотрудника."""
     return [
@@ -123,6 +133,7 @@ def _trips_charts(
     top: list[dict],
     days: list[dict],
     balance: list[dict],
+    clients: list[dict],
 ) -> dict:
     """Спецификации графиков вкладки «Командировки»."""
     return {
@@ -169,6 +180,17 @@ def _trips_charts(
             horizontal=True,
             links=[row["url"] for row in balance],
         ),
+        "clients": chart_spec(
+            "bar",
+            [row["name"] for row in clients],
+            [
+                {
+                    "label": "Затраты на выезды",
+                    "data": [row["trips_amount"] for row in clients],
+                }
+            ],
+            horizontal=True,
+        ),
     }
 
 
@@ -192,6 +214,9 @@ class TripsView(AnalyticsTabView):
         top = trips.directions(period, employee, group)[:TOP_DIRECTIONS]
         days = _with_employee_links(trips.employee_days(period, employee), period)
         accountable = _with_receipt_links(trips.accountable(period, today, employee))
+        clients = trips.clients_trips_vs_payments(period, employee)
+        unallocated = trips.unallocated_trips(period, employee)
+        unallocated["rows"] = _with_trip_links(unallocated["rows"])
         context.update(
             employee=employee,
             group=group,
@@ -205,12 +230,22 @@ class TripsView(AnalyticsTabView):
                 top=top,
                 days=days,
                 balance=accountable,
+                clients=clients,
             ),
             employee_days=days,
             employee_days_height=_horizontal_chart_height(len(days)),
             load=_with_load_shades(trips.employee_month_load(period, employee)),
             accountable=accountable,
             balance_height=_horizontal_chart_height(len(accountable)),
+            contracts=[
+                {**row, "url": change_url(CONTRACTS, row["id"])}
+                for row in trips.contract_trip_shares(period, employee)
+            ],
+            clients=clients,
+            clients_height=_horizontal_chart_height(len(clients)),
+            unallocated=unallocated,
+            unallocated_url=_ids_link(unallocated["ids"]),
+            max_link_ids=MAX_LINK_IDS,
             directions_height=_horizontal_chart_height(len(top)),
             directions_limit=TOP_DIRECTIONS,
             annual=trips.annual_by_direction(today, employee, group),

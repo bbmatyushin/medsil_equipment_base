@@ -835,6 +835,7 @@ TRIPS_CHART_KEYS = {
     "directions",
     "employee_days",
     "balance",
+    "clients",
 }
 
 
@@ -1015,3 +1016,23 @@ class TripsPageTests(TestCase):
             rows["Петров Пётр Петрович"]["cells"][0], {"days": 0, "shade": 0}
         )
         self.assertContains(response, "an-tone-load")
+
+    def test_trips_contract_rows_link_to_contract(self):
+        alpha = make_client("Альфа")
+        department = make_department("Больница Альфы", client=alpha)
+        contract = make_contract(alpha, "К-1", date(2026, 1, 10), 100000)
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            destinations=[(department, date(2026, 3, 1), date(2026, 3, 2))],
+            contracts=[contract],
+        )
+
+        response = self._get()
+
+        row = response.context["contracts"][0]
+        self.assertEqual(
+            row["url"], reverse("admin:contracts_contract_change", args=[contract.pk])
+        )
+        self.assertIsNone(response.context["unallocated_url"])

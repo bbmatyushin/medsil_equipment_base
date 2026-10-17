@@ -10,11 +10,17 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
-from django.db.models import Min, QuerySet
+from django.db.models import Min, QuerySet, Sum
 
 from analytics.filters import Period
 from analytics.services.finance import _bucket_by_month, _delta_pct
-from business_trip.models import BusinessTrip, BusinessTripDestination, MoneyReceipt
+from business_trip.models import (
+    BusinessTrip,
+    BusinessTripContractExpense,
+    BusinessTripDestination,
+    MoneyReceipt,
+)
+from contracts.models import Contract, Payment
 from business_trip.xlsx_report import EXCLUDED_EXPENSE_TYPE_NAME, employee_fio
 
 ZERO = Decimal("0")
@@ -600,3 +606,130 @@ def accountable(period: Period, today: date, employee=None) -> list[dict]:
         if row["received"] or row["spent"] or row["balance"]
     ]
     return sorted(result, key=lambda row: row["name"])
+
+
+# --- Командировки и деньги ----------------------------------------------------------
+
+
+def contract_trip_shares(period: Period, employee=None, limit: int = 15) -> list[dict]:
+    """Контракты, по которым были командировки периода: доля командировок в сумме.
+
+    «На командировки» — все доли контракта за всё время (экономика контракта
+    целиком), выборка — по командировкам периода. По убыванию доли.
+    """
+    trip_ids = [trip.pk for trip in trips_in_period(period, employee)]
+    contract_ids = set(
+        BusinessTripContractExpense.objects.filter(
+            business_trip_id__in=trip_ids
+        ).values_list("contract_id", flat=True)
+    )
+    totals = dict(
+        BusinessTripContractExpense.objects.filter(contract_id__in=contract_ids)
+        .values("contract_id")
+        .annotate(total=Sum("amount"))
+        .values_list("contract_id", "total")
+    )
+    rows = []
+    for contract in Contract.objects.filter(pk__in=contract_ids).select_related(
+        "client"
+    ):
+        trips_amount = totals.get(contract.pk) or ZERO
+        rows.append(
+            {
+                "id": contract.pk,
+                "number": contract.contract_number,
+                "client": contract.client.name if contract.client else NO_CLIENT_LABEL,
+                "contract_amount": contract.contract_amount,
+                "trips_amount": trips_amount,
+                "share_pct": _ratio(
+                    trips_amount * 100, contract.contract_amount, TENTH
+                ),
+                "profit": contract.profit,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["share_pct"] is None,
+            -(row["share_pct"] or ZERO),
+            -row["trips_amount"],
+        )
+    )
+    return rows[:limit]
+
+
+def clients_trips_vs_payments(
+    period: Period, employee=None, limit: int = 15
+) -> list[dict]:
+    """Затраты на выезды к клиенту и его оплаты за период.
+
+    Затраты относятся к клиенту по пунктам командировки (`trip_shares`); оплаты —
+    по датам оплат периода, фильтр сотрудника на них не действует. У корзин без
+    клиента оплат нет (None).
+    """
+    buckets = {}
+    for trip in trips_in_period(period, employee):
+        for share in trip_shares(trip):
+            key, name = client_of(share.destination)
+            item = buckets.setdefault(key, {"key": key, "name": name, "amount": ZERO})
+            item["amount"] += share.amount
+    payments = dict(
+        Payment.objects.filter(date__range=(period.date_from, period.date_to))
+        .values("contract__client_id")
+        .annotate(total=Sum("amount"))
+        .values_list("contract__client_id", "total")
+    )
+    rows = []
+    for item in sorted(buckets.values(), key=lambda i: (-i["amount"], i["name"])):
+        is_client = item["key"] not in ("none", "no_client")
+        paid = None
+        if is_client:
+            paid = next(
+                (
+                    total
+                    for client_id, total in payments.items()
+                    if str(client_id) == item["key"]
+                ),
+                ZERO,
+            )
+        rows.append(
+            {
+                "key": item["key"],
+                "name": item["name"],
+                "trips_amount": item["amount"],
+                "payments": paid,
+                "per_100": _ratio(item["amount"] * 100, paid) if paid else None,
+            }
+        )
+    return rows[:limit]
+
+
+def unallocated_trips(period: Period, employee=None) -> dict:
+    """Командировки периода, стоимость которых не разнесена на контракты.
+
+    `has_contracts` — контракты выбраны, но их клиентов нет в пунктах
+    командировки, поэтому долей нет.
+    """
+    trips = trips_in_period(period, employee)
+    allocated = set(
+        BusinessTripContractExpense.objects.filter(
+            business_trip_id__in=[trip.pk for trip in trips]
+        ).values_list("business_trip_id", flat=True)
+    )
+    rows = [
+        {
+            "id": trip.pk,
+            "doc_number": trip.doc_number,
+            "employee": employee_name(trip.employee),
+            "beg_dt": trip.beg_dt,
+            "end_dt": trip.end_dt,
+            "amount": trip_total(trip),
+            "has_contracts": bool(trip.contract.all()),
+        }
+        for trip in sorted(trips, key=lambda t: (t.beg_dt, t.doc_number or 0))
+        if trip.pk not in allocated
+    ]
+    return {
+        "total": sum((row["amount"] for row in rows), ZERO),
+        "rows": rows,
+        "ids": [str(row["id"]) for row in rows],
+    }

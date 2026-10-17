@@ -7,6 +7,8 @@ from analytics.filters import Period
 from analytics.services.trips import (
     accountable,
     annual_by_direction,
+    clients_trips_vs_payments,
+    contract_trip_shares,
     employee_days,
     employee_month_load,
     by_service_type,
@@ -17,6 +19,7 @@ from analytics.services.trips import (
     costs_by_month,
     direction_of,
     load_trips,
+    unallocated_trips,
     split_proportional,
     trip_shares,
     trip_total,
@@ -25,8 +28,10 @@ from analytics.services.trips import (
 from analytics.tests.factories import (
     make_city,
     make_client,
+    make_contract,
     make_department,
     make_employee,
+    make_payment,
     make_receipt,
     make_trip,
 )
@@ -761,3 +766,89 @@ class AccountableTests(TestCase):
         self.assertEqual(numbers("D", 7, 18), row["received"])
         self.assertEqual(numbers("G", 7, 44) + numbers("D", 24, 34), row["spent"])
         self.assertEqual(row["spent"], D("3000") + D("456.78") + 3 * 700)
+
+
+class MoneyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.alpha = make_client("Альфа")
+        cls.alpha_dept = make_department("Больница Альфы", client=cls.alpha)
+        cls.contract = make_contract(cls.alpha, "К-1", date(2026, 1, 10), 100000)
+
+    def _trip(self, beg, days, expense, contracts=(), department=None):
+        end = beg + timedelta(days=days - 1)
+        return make_trip(
+            self.employee,
+            beg,
+            end,
+            destinations=[(department or self.alpha_dept, beg, end)],
+            expenses=[("Такси", beg, expense)],
+            contracts=contracts,
+        )
+
+    def test_contract_share_pct(self):
+        self._trip(date(2026, 3, 1), 3, 3000, contracts=[self.contract])
+
+        rows = contract_trip_shares(YEAR_2026)
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["id"], self.contract.pk)
+        self.assertEqual(row["number"], "К-1")
+        self.assertEqual(row["client"], "Альфа")
+        self.assertEqual(row["contract_amount"], D("100000"))
+        self.assertEqual(row["trips_amount"], D("5100"))
+        self.assertEqual(row["share_pct"], D("5.1"))
+
+    def test_contract_trips_amount_includes_all_trips(self):
+        self._trip(date(2025, 12, 1), 1, 300, contracts=[self.contract])
+        self._trip(date(2026, 3, 1), 3, 3000, contracts=[self.contract])
+        other = make_contract(self.alpha, "К-2", date(2025, 1, 10), 50000)
+        self._trip(date(2025, 6, 1), 1, 300, contracts=[other])
+
+        rows = contract_trip_shares(YEAR_2026)
+
+        self.assertEqual([row["number"] for row in rows], ["К-1"])
+        self.assertEqual(rows[0]["trips_amount"], D("6100"))
+
+    def test_clients_per_100(self):
+        make_payment(self.contract, date(2026, 2, 1), 100000)
+        make_payment(self.contract, date(2025, 2, 1), 7777)
+        self._trip(date(2026, 3, 1), 2, 3600)
+
+        rows = clients_trips_vs_payments(YEAR_2026)
+
+        row = next(row for row in rows if row["name"] == "Альфа")
+        self.assertEqual(row["trips_amount"], D("5000"))
+        self.assertEqual(row["payments"], D("100000"))
+        self.assertEqual(row["per_100"], D("5.00"))
+
+    def test_clients_without_payments(self):
+        self._trip(date(2026, 3, 1), 2, 3600)
+        self._trip(date(2026, 4, 1), 1, 100, department=make_department("Ничья"))
+
+        rows = {row["name"]: row for row in clients_trips_vs_payments(YEAR_2026)}
+
+        self.assertEqual(rows["Альфа"]["payments"], D("0"))
+        self.assertIsNone(rows["Альфа"]["per_100"])
+        self.assertIsNone(rows["Клиент не указан"]["payments"])
+        self.assertIsNone(rows["Клиент не указан"]["per_100"])
+
+    def test_unallocated_trips(self):
+        bare = self._trip(date(2026, 3, 1), 1, 300)
+        beta_contract = make_contract(
+            make_client("Бета"), "Б-1", date(2026, 1, 1), 1000
+        )
+        mismatched = self._trip(date(2026, 4, 1), 1, 500, contracts=[beta_contract])
+        self._trip(date(2026, 5, 1), 1, 100, contracts=[self.contract])
+
+        result = unallocated_trips(YEAR_2026)
+
+        rows = {row["id"]: row for row in result["rows"]}
+        self.assertEqual(set(rows), {bare.pk, mismatched.pk})
+        self.assertFalse(rows[bare.pk]["has_contracts"])
+        self.assertTrue(rows[mismatched.pk]["has_contracts"])
+        self.assertEqual(rows[bare.pk]["employee"], "Иванов Иван Иванович")
+        self.assertEqual(result["total"], D("1000") + D("1200"))
+        self.assertEqual(set(result["ids"]), {str(bare.pk), str(mismatched.pk)})
