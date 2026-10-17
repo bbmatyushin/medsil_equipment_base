@@ -45,8 +45,13 @@ def _trips_tiles(kpis: dict) -> list[dict]:
 
 
 def _employee_param(employee) -> str | None:
-    """Значение GET-параметра `employee` для ссылок в списки; None — без него."""
-    return str(employee.pk) if employee is not None else None
+    """Значение GET-параметра `employee` для ссылок в списки; None — без него.
+
+    `employee` — сотрудник или его pk.
+    """
+    if employee is None:
+        return None
+    return str(getattr(employee, "pk", employee))
 
 
 def _trips_list_url(period: Period, employee, **params) -> str:
@@ -125,18 +130,7 @@ def _with_receipt_links(rows: list[dict]) -> list[dict]:
 
 def _with_employee_links(rows: list[dict], period: Period) -> list[dict]:
     """Строки «Дни в разъездах» со ссылкой на командировки сотрудника за период."""
-    return [
-        {
-            **row,
-            "url": changelist_url(
-                TRIPS,
-                beg_dt__gte=period.date_from.isoformat(),
-                beg_dt__lte=period.date_to.isoformat(),
-                employee=row["id"],
-            ),
-        }
-        for row in rows
-    ]
+    return [{**row, "url": _trips_list_url(period, row["id"])} for row in rows]
 
 
 def _trips_charts(

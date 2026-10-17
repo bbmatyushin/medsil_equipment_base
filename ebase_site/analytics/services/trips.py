@@ -696,25 +696,20 @@ def clients_trips_vs_payments(
             key, name = client_of(share.destination)
             item = buckets.setdefault(key, {"key": key, "name": name, "amount": ZERO})
             item["amount"] += share.amount
-    payments = dict(
-        Payment.objects.filter(date__range=(period.date_from, period.date_to))
+    # ключи — строки, как ключи корзин из `client_of`
+    payments = {
+        str(client_id): total
+        for client_id, total in Payment.objects.filter(
+            date__range=(period.date_from, period.date_to)
+        )
         .values("contract__client_id")
         .annotate(total=Sum("amount"))
         .values_list("contract__client_id", "total")
-    )
+    }
     rows = []
     for item in sorted(buckets.values(), key=lambda i: (-i["amount"], i["name"])):
         is_client = item["key"] not in ("none", "no_client")
-        paid = None
-        if is_client:
-            paid = next(
-                (
-                    total
-                    for client_id, total in payments.items()
-                    if str(client_id) == item["key"]
-                ),
-                ZERO,
-            )
+        paid = payments.get(item["key"], ZERO) if is_client else None
         rows.append(
             {
                 "key": item["key"],
@@ -837,10 +832,11 @@ def _region_keys(trip: BusinessTrip) -> dict[str, str]:
     return keys
 
 
-def merge_candidates(period: Period, employee=None) -> list[dict]:
+def merge_candidates(period: Period, employee=None, limit: int = 15) -> list[dict]:
     """Пары командировок в один регион с разрывом 1–14 дней: можно было объединить.
 
     Пересекающиеся по датам командировки (поехали параллельно) не считаются.
+    Выводятся `limit` пар с наименьшим разрывом.
     """
     trips = sorted(trips_in_period(period, employee), key=lambda t: t.beg_dt)
     regions = {trip.pk: _region_keys(trip) for trip in trips}
@@ -851,7 +847,8 @@ def merge_candidates(period: Period, employee=None) -> list[dict]:
                 continue
             gap = (second.beg_dt - first.end_dt).days
             if gap > MERGE_WINDOW_DAYS:
-                continue
+                # командировки отсортированы по выезду: дальше разрыв только больше
+                break
             common = [
                 label
                 for key, label in regions[first.pk].items()
@@ -869,13 +866,21 @@ def merge_candidates(period: Period, employee=None) -> list[dict]:
                     "amount": first_brief["amount"] + second_brief["amount"],
                 }
             )
-    return sorted(rows, key=lambda row: (row["gap"], row["first"]["beg"]))
+    rows.sort(key=lambda row: (row["gap"], row["first"]["beg"]))
+    return rows[:limit]
 
 
 def _per_day_without_allowance(trip: BusinessTrip) -> Decimal | None:
     """Затраты командировки в день без суточных (суточные у всех одинаковы)."""
     expenses = sum((expense.amount for expense in trip.expenses.all()), ZERO)
     return _ratio(expenses, trip.days_count)
+
+
+def _baseline_key(region: tuple[str, str] | None) -> str | None:
+    """Ключ региональной медианы; у поездок без города региона нет — общая медиана."""
+    if region is None or region[0] == "no_city":
+        return None
+    return region[0]
 
 
 def _main_region(trip: BusinessTrip) -> tuple[str, str] | None:
@@ -905,9 +910,9 @@ def expensive_trips(
         if not per_day:
             continue
         overall.append(per_day)
-        region = _main_region(trip)
-        if region is not None:
-            by_region.setdefault(region[0], []).append(per_day)
+        key = _baseline_key(_main_region(trip))
+        if key is not None:
+            by_region.setdefault(key, []).append(per_day)
     if not overall:
         return []
     overall_median = statistics.median(overall)
@@ -917,14 +922,15 @@ def expensive_trips(
         if not per_day:
             continue
         region = _main_region(trip)
-        values = by_region.get(region[0], []) if region else []
+        values = by_region.get(_baseline_key(region), [])
         if len(values) >= MIN_TRIPS_FOR_REGION_MEDIAN:
             baseline, kind = statistics.median(values), "region"
         else:
             baseline, kind = overall_median, "all"
-        ratio = _ratio(per_day, baseline, TENTH)
-        if ratio is None or ratio < EXPENSIVE_RATIO:
+        # порог сравнивается с точным отношением, округление — только для вывода
+        if not baseline or per_day / baseline < EXPENSIVE_RATIO:
             continue
+        ratio = _ratio(per_day, baseline, TENTH)
         brief = _trip_brief(trip)
         rows.append(
             {

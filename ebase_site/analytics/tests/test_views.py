@@ -1150,3 +1150,16 @@ class TripsPageTests(TestCase):
             [row["name"] for row in response.context["employee_days"]],
             ["Петров Пётр Петрович"],
         )
+
+    def test_trips_employee_row_links_to_trips_of_employee(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+        self._trip(self.other, date(2026, 3, 5), date(2026, 3, 6))
+
+        response = self._get()
+
+        rows = {row["name"]: row for row in response.context["employee_days"]}
+        changelist = self.client.get(rows["Петров Пётр Петрович"]["url"])
+        self.assertEqual(changelist.context["cl"].result_count, 1)
+        self.assertEqual(
+            self._filter_spec(changelist, "employee").value(), str(self.other.pk)
+        )

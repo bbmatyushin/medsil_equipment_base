@@ -1065,3 +1065,42 @@ class ReviewFixTests(TestCase):
         loaded = _loaded(trip)
         self.assertEqual(sum(s.amount for s in trip_shares(loaded)), trip_total(loaded))
         self.assertEqual(direction_norms(TODAY)["rows"][0]["trips"], 1)
+
+    def _one_day(self, department, day, expense):
+        return make_trip(
+            self.employee,
+            day,
+            day,
+            destinations=[(department, day, day)],
+            expenses=[("Такси", day, expense)],
+        )
+
+    def test_expensive_threshold_uses_unrounded_ratio(self):
+        for day in (1, 5, 9):
+            self._one_day(self.chelny, date(2026, 2, day), 1000)
+        # 1,45 при округлении до десятых дало бы 1,5 и попало бы в список
+        self._one_day(self.chelny, date(2026, 6, 1), 1450)
+        self.assertEqual(expensive_trips(YEAR_2026, TODAY), [])
+
+    def test_expensive_trips_without_city_use_overall_median(self):
+        no_city = make_department("Без города", city=None)
+        for day in (1, 5, 9):
+            self._one_day(no_city, date(2025, 2, day), 3000)
+        for day in (1, 5, 9, 13):
+            self._one_day(self.chelny, date(2025, 3, day), 1000)
+        candidate = self._one_day(no_city, date(2026, 6, 1), 3000)
+
+        rows = expensive_trips(YEAR_2026, TODAY)
+
+        self.assertEqual([row["id"] for row in rows], [candidate.pk])
+        self.assertEqual(rows[0]["baseline_kind"], "all")
+        self.assertEqual(rows[0]["baseline"], D("2000.00"))
+        self.assertEqual(rows[0]["region"], "Город не указан")
+
+    def test_merge_candidates_limit(self):
+        for day in (1, 10, 19):
+            self._one_day(self.chelny, date(2026, 3, day), 100)
+        self.assertEqual(len(merge_candidates(YEAR_2026)), 2)
+        rows = merge_candidates(YEAR_2026, limit=1)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["first"]["beg"], date(2026, 3, 1))
