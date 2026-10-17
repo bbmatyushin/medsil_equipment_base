@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
@@ -881,6 +881,10 @@ class TripsPageTests(TestCase):
     def test_trips_page_empty_db(self):
         response = self._get()
 
+        self.assertEqual(set(response.context["charts"]), TRIPS_CHART_KEYS)
+        self.assertNotContains(response, "Оценка по данным с")
+        self.assertEqual(response.context["annual"]["rows"], [])
+
         self.assertContains(response, "Нет данных")
         charts = response.context["charts"]
         self.assertTrue(TRIPS_CHART_KEYS <= set(charts))
@@ -1036,3 +1040,113 @@ class TripsPageTests(TestCase):
             row["url"], reverse("admin:contracts_contract_change", args=[contract.pk])
         )
         self.assertIsNone(response.context["unallocated_url"])
+
+    def _populate(self):
+        """Три сотрудника, шесть командировок в двух регионах, поступления, контракт."""
+        third = make_employee("sidorov", "Сидоров", "Сидор", "Сидорович")
+        alpha = make_client("Альфа")
+        kazan = make_department("Больница Альфы", client=alpha)
+        samara = make_department(
+            "Больница Самары", city=make_city("Самара", "Самарская область")
+        )
+        contract = make_contract(alpha, "К-77", date(2026, 1, 10), 200000)
+        make_payment(contract, date(2026, 2, 1), 150000)
+        plan = [
+            (self.employee, kazan, date(2026, 2, 2), 3, 5000, [contract]),
+            (self.employee, samara, date(2026, 3, 10), 2, 3000, []),
+            (self.other, kazan, date(2026, 2, 20), 2, 2500, [contract]),
+            (self.other, samara, date(2026, 6, 1), 4, 9000, []),
+            (third, kazan, date(2026, 6, 5), 1, 800, []),
+            (third, samara, date(2026, 6, 20), 2, 1200, []),
+        ]
+        for employee, department, beg, days, expense, contracts in plan:
+            end = beg + timedelta(days=days - 1)
+            make_trip(
+                employee,
+                beg,
+                end,
+                destinations=[(department, beg, end)],
+                expenses=[("Гостиница", beg, expense)],
+                service_types=["ТО"],
+                contracts=contracts,
+            )
+        make_receipt(self.employee, date(2026, 2, 1), 20000)
+        make_receipt(self.other, date(2026, 2, 15), 10000)
+
+    def test_trips_page_with_data(self):
+        self._populate()
+
+        response = self._get()
+
+        charts = response.context["charts"]
+        self.assertEqual(set(charts), TRIPS_CHART_KEYS)
+        for key, spec in charts.items():
+            self.assertFalse(spec["empty"], key)
+        # 21 500 затрат + 14 дней суточных
+        self.assertContains(response, '<p class="an-tile-value">31 300,00 ₽</p>')
+        self.assertContains(response, '<p class="an-tile-value">6</p>')
+        self.assertContains(response, "Оценка по данным с 02.02.2026")
+        self.assertContains(response, "К-77")
+        self.assertContains(response, "Сидоров Сидор Сидорович")
+        for title in (
+            "Обзор",
+            "Направления",
+            "Сотрудники",
+            "Командировки и деньги",
+            "Экономия и контроль",
+        ):
+            self.assertContains(response, f'<h2 class="an-section-title">{title}</h2>')
+        self.assertTrue(response.context["repeats"])
+        self.assertNotContains(response, "None")
+
+    def test_trips_page_with_incomplete_directory(self):
+        no_city = make_department("Без города", city=None)
+        no_region = make_department(
+            "Без региона", city=make_city("Набережные Челны", None)
+        )
+        for department, day in ((no_city, 1), (no_region, 5), (self.kazan, 9)):
+            make_trip(
+                self.employee,
+                date(2026, 3, day),
+                date(2026, 3, day + 1),
+                destinations=[(department, date(2026, 3, day), date(2026, 3, day + 1))],
+                expenses=[("Такси", date(2026, 3, day), 100)],
+            )
+        make_trip(self.employee, date(2026, 4, 1), date(2026, 4, 2))
+
+        response = self._get({"group": "region"})
+
+        self.assertContains(response, "Город не указан")
+        self.assertContains(response, "Набережные Челны (регион не указан)")
+        self.assertContains(response, "Пункты не указаны")
+        self.assertContains(response, "Клиент не указан")
+
+    def test_trips_page_bad_params(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 2))
+
+        response = self._get(
+            {
+                "employee": "bad",
+                "group": "foo",
+                "preset": "zzz",
+                "date_from": "31.31.2026",
+            }
+        )
+
+        self.assertIsNone(response.context["employee"])
+        self.assertEqual(response.context["group"], "city")
+        self.assertEqual(response.context["period"].date_from, date(2026, 1, 1))
+
+    def test_trips_employee_filter_applies(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 2))
+        self._trip(self.other, date(2026, 3, 5), date(2026, 3, 7))
+
+        response = self._get({"employee": str(self.other.pk)})
+
+        tiles = {tile["label"]: tile for tile in response.context["tiles"]}
+        self.assertEqual(tiles["Командировок"]["value"], 1)
+        self.assertEqual(tiles["Человеко-дней"]["value"], 3)
+        self.assertEqual(
+            [row["name"] for row in response.context["employee_days"]],
+            ["Петров Пётр Петрович"],
+        )

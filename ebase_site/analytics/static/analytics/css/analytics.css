@@ -195,6 +195,27 @@ html[data-theme="dark"] {
 }
 
 /* Ссылка «Открыть в реестре» под плитками */
+/* Заголовок группы карточек («Обзор», «Направления»…) на вкладке «Командировки».
+   Сбрасываем фон и отступы, которые админка задаёт заголовкам h2 */
+.analytics h2.an-section-title {
+    margin: 24px 0 12px;
+    padding: 0;
+    background: none;
+    color: var(--an-ink);
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.analytics h2.an-section-title:first-of-type {
+    margin-top: 8px;
+}
+
+/* Итог над таблицей карточки («Всего: …») */
+.an-total {
+    margin: 0 0 8px;
+    color: var(--an-ink);
+}
+
 .an-registry-link {
     margin: 0 0 16px;
     color: var(--an-text);
