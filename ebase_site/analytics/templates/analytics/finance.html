@@ -87,7 +87,7 @@
                         <tr>
                             <th scope="row">{{ row.label|capfirst }}</th>
                             {% for cell in row.cells %}
-                                <td class="num">
+                                <td class="num an-tone-{{ cell.tone }}" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">
                                     {% if cell.count %}
                                         <a href="{{ cell.url }}">{{ cell.count }}<span class="an-matrix-amount">{{ cell.amount|money }}</span></a>
                                     {% else %}
@@ -100,6 +100,11 @@
                 </tbody>
             </table>
         </div>
+        <p class="an-card-note">Цвет ячейки: <span class="an-swatch an-tone-risk"></span> услуги оказаны, но оплачены не полностью, <span class="an-swatch an-tone-ok"></span> оплачено, <span class="an-swatch an-tone-progress"></span> работа и оплаты в процессе. Чем больше сумма, тем насыщеннее цвет.</p>
+
+        <h3 class="an-subtitle">Получено и долг по стадиям работ</h3>
+        <p class="an-card-note">Оплаты и остаток долга по тем же контрактам. Клик по полосе — должники этой стадии.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.stage_money chart_id="chart-stage-money" title="Получено и долг по стадиям работ" height=220 %}
     </section>
 
     <section class="an-card an-card--wide">

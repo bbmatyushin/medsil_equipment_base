@@ -1,9 +1,12 @@
 """Страницы раздела «Аналитика» внутри админки."""
 
+import math
+
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.utils import timezone
+from django.utils.text import capfirst
 from django.views.generic import TemplateView
 
 from clients.models import Client
@@ -145,6 +148,59 @@ def _with_matrix_links(matrix: dict, period: Period, client: Client | None) -> d
     return matrix
 
 
+def _matrix_tone(services_provided: str, payment_status: str) -> str:
+    """Смысл ячейки «оказано × оплачено» для её цвета.
+
+    `risk` — услуги оказаны полностью, а оплачены не полностью;
+    `ok` — оплачено; `progress` — остальное (работа и оплаты в процессе).
+    """
+    if payment_status == "paid":
+        return "ok"
+    if services_provided == "fully":
+        return "risk"
+    return "progress"
+
+
+def _with_matrix_shades(matrix: dict) -> dict:
+    """Тон и насыщенность ячеек матрицы для подкраски таблицы.
+
+    Насыщенность (0–1) — корень доли суммы ячейки от крупнейшей ячейки того же
+    тона: крупные контракты «в процессе» не глушат красные ячейки, а мелкие
+    суммы не пропадают на фоне крупных. Пустые ячейки — 0.
+    """
+    for row in matrix["rows"]:
+        for cell in row["cells"]:
+            cell["tone"] = _matrix_tone(row["key"], cell["payment_status"])
+    cells = [cell for row in matrix["rows"] for cell in row["cells"]]
+    top = {}
+    for cell in cells:
+        top[cell["tone"]] = max(top.get(cell["tone"], 0), cell["amount"])
+    for cell in cells:
+        tone_top = top[cell["tone"]]
+        share = cell["amount"] / tone_top if cell["count"] and tone_top > 0 else 0
+        cell["shade"] = round(math.sqrt(max(share, 0)), 2)
+    return matrix
+
+
+def _stage_links(stages: list[dict], period: Period, client: Client | None) -> list:
+    """Ссылки полос «Получено и долг»: должники этой стадии за тот же период."""
+    return [
+        (
+            changelist_url(
+                CONTRACTS,
+                services_provided=stage["key"],
+                debt__gt=0,
+                conclusion_date__gte=period.date_from.isoformat(),
+                conclusion_date__lte=period.date_to.isoformat(),
+                client=_client_param(client),
+            )
+            if stage["debt"] > 0
+            else None
+        )
+        for stage in stages
+    ]
+
+
 def _registry_url(period: Period, client: Client | None) -> str:
     """Реестр контрактов с теми же фильтрами, что у плиток: сверка с «Итого» списка."""
     return changelist_url(
@@ -200,6 +256,8 @@ def _finance_charts(
     top: dict,
     profit_rows: list[dict],
     points: list[dict],
+    stages: list[dict],
+    stage_links: list,
 ) -> dict:
     """Спецификации графиков вкладки «Финансы»."""
     months = [month_label(month) for month in flow["months"]]
@@ -272,6 +330,27 @@ def _finance_charts(
             ],
             horizontal=True,
         ),
+        "stage_money": chart_spec(
+            "bar",
+            [capfirst(stage["label"]) for stage in stages],
+            [
+                {
+                    "label": "Получено",
+                    "data": [stage["paid"] for stage in stages],
+                    "color": "positive",
+                },
+                {
+                    "label": "Долг",
+                    "data": [stage["debt"] for stage in stages],
+                    "color": "negative",
+                },
+            ],
+            fmt="money_short",
+            horizontal=True,
+            stacked=True,
+            links=stage_links,
+            value_labels=True,
+        ),
         "scatter": chart_spec(
             "scatter",
             [],
@@ -307,6 +386,7 @@ class FinanceView(AnalyticsTabView):
         profitability = finance.client_profitability(period)
         # сверху вниз по убыванию прибыли: лучшие, затем убыточные, худший — последним
         profit_rows = profitability["best"] + profitability["losers"][::-1]
+        stages = finance.stage_money(period, client)
 
         context.update(
             client=client,
@@ -320,9 +400,13 @@ class FinanceView(AnalyticsTabView):
                 top=top,
                 profit_rows=profit_rows,
                 points=finance.contracts_scatter(period, client),
+                stages=stages,
+                stage_links=_stage_links(stages, period, client),
             ),
-            matrix=_with_matrix_links(
-                finance.status_matrix(period, client), period, client
+            matrix=_with_matrix_shades(
+                _with_matrix_links(
+                    finance.status_matrix(period, client), period, client
+                )
             ),
             aging=aging,
             max_link_ids=MAX_LINK_IDS,

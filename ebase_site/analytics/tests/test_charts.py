@@ -50,6 +50,7 @@ class ChartSpecTests(SimpleTestCase):
                 "horizontal",
                 "stacked",
                 "links",
+                "value_labels",
                 "empty",
             },
         )
@@ -64,6 +65,7 @@ class ChartSpecTests(SimpleTestCase):
                 "axis": "y",
                 "sign_colors": False,
                 "fmt": None,
+                "color": None,
             },
         )
 
@@ -188,6 +190,33 @@ class ChartSpecTests(SimpleTestCase):
             fmt="percent",
         )
         self.assertEqual(spec["datasets"][0]["data"][0]["r"], 14.1)
+
+    def test_dataset_color_and_value_labels(self):
+        spec = chart_spec(
+            "bar",
+            ["полностью"],
+            [
+                {"label": "Получено", "data": [300], "color": "positive"},
+                {"label": "Долг", "data": [700], "color": "negative"},
+            ],
+            fmt="money_short",
+            horizontal=True,
+            stacked=True,
+            value_labels=True,
+        )
+        self.assertEqual(
+            [dataset["color"] for dataset in spec["datasets"]],
+            ["positive", "negative"],
+        )
+        self.assertEqual(spec["format"], "money_short")
+        self.assertIs(spec["value_labels"], True)
+
+    def test_dataset_color_defaults_and_validation(self):
+        spec = chart_spec("bar", ["a"], [{"label": "Сумма", "data": [1]}])
+        self.assertIsNone(spec["datasets"][0]["color"])
+        self.assertIs(spec["value_labels"], False)
+        with self.assertRaises(ValueError):
+            chart_spec("bar", ["a"], [{"label": "Сумма", "data": [1], "color": "pink"}])
 
     def test_scatter_without_points_is_empty(self):
         spec = chart_spec("scatter", [], [{"label": "Контракты", "data": []}])

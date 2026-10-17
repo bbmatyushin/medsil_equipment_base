@@ -274,6 +274,40 @@ def status_matrix(period: Period, client: Client | None = None) -> dict:
     }
 
 
+def stage_money(period: Period, client: Client | None = None) -> list[dict]:
+    """Получено и долг по контрактам периода в разрезе «Услуги оказаны?».
+
+    Строки — `Contract.SERVICES_PROVIDED_CHOICES` в их порядке, всегда все три:
+    `{"key", "label", "count", "paid", "debt"}`. `paid` — сумма оплат, `debt` —
+    сумма положительных долгов (переплата по одному контракту не уменьшает
+    долг по другим).
+    """
+    grouped = (
+        contracts_in_period(period, client)
+        .order_by()
+        .values("services_provided")
+        .annotate(
+            count=Count("id"),
+            paid=Sum("payment_amount"),
+            debt=Sum("debt", filter=Q(debt__gt=0)),
+        )
+    )
+    found = {row["services_provided"]: row for row in grouped}
+    rows = []
+    for key, label in Contract.SERVICES_PROVIDED_CHOICES:
+        data = found.get(key, {})
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "count": data.get("count", 0),
+                "paid": data.get("paid") or ZERO,
+                "debt": data.get("debt") or ZERO,
+            }
+        )
+    return rows
+
+
 def _sum_by_client(period: Period, field: str) -> list[tuple[str, str, Decimal]]:
     """Сумма поля контрактов периода по клиентам без нулевых итогов.
 

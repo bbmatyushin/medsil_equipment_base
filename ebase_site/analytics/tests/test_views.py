@@ -217,6 +217,7 @@ CHART_KEYS = {
     "top_clients",
     "profitability",
     "scatter",
+    "stage_money",
 }
 
 
@@ -632,6 +633,85 @@ class FinancePageTests(TestCase):
             [(100.0, 20.0), (-50.0, 15.3), (10.0, 9.1)],
         )
         self.assertContains(response, "убыточные — красные")
+
+    def test_finance_stage_money_chart(self):
+        client = make_client("Стадии")
+        done = make_contract(
+            client, "S-1", date(2026, 3, 1), 1000, services_provided="fully"
+        )
+        make_payment(done, date(2026, 3, 5), 300)
+        paid = _paid_contract(
+            client, "S-2", date(2026, 4, 1), 500, services_provided="fully"
+        )
+
+        response = self._get()
+
+        spec = response.context["charts"]["stage_money"]
+        self.assertEqual(spec["labels"], ["Ещё нет", "Частично", "Полностью"])
+        self.assertEqual(
+            [(d["label"], d["color"], d["data"]) for d in spec["datasets"]],
+            [
+                ("Получено", "positive", [0.0, 0.0, 800.0]),
+                ("Долг", "negative", [0.0, 0.0, 700.0]),
+            ],
+        )
+        self.assertIs(spec["horizontal"], True)
+        self.assertIs(spec["stacked"], True)
+        self.assertIs(spec["value_labels"], True)
+        self.assertEqual(spec["format"], "money_short")
+        # клик по полосе — должники этой стадии за тот же период
+        query = parse_qs(urlsplit(spec["links"][2]).query)
+        self.assertEqual(query["services_provided"], ["fully"])
+        self.assertEqual(query["debt__gt"], ["0"])
+        self.assertEqual(query["conclusion_date__gte"], ["2026-01-01"])
+        self.assertEqual(query["conclusion_date__lte"], ["2026-12-31"])
+        changelist = self.client.get(spec["links"][2])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertNotIn("e=1", changelist.request["QUERY_STRING"])
+        self.assertContains(changelist, done.contract_number)
+        self.assertNotContains(changelist, paid.contract_number)
+
+    def test_finance_matrix_cells_are_shaded_by_meaning_and_amount(self):
+        client = make_client("Тона")
+        make_contract(client, "T-1", date(2026, 3, 1), 900, services_provided="fully")
+        partly_paid = make_contract(
+            client, "T-2", date(2026, 3, 1), 400, services_provided="fully"
+        )
+        make_payment(partly_paid, date(2026, 3, 2), 100)
+        _paid_contract(client, "T-3", date(2026, 3, 1), 100, services_provided="fully")
+        make_contract(
+            client, "T-4", date(2026, 3, 1), 5000, services_provided="partially"
+        )
+
+        response = self._get()
+
+        matrix = response.context["matrix"]
+        shades = {
+            (row, column): (cell["tone"], cell["shade"])
+            for row, column in (
+                ("fully", "no_receipts"),
+                ("fully", "partial"),
+                ("fully", "paid"),
+                ("partially", "no_receipts"),
+                ("not_yet", "partial"),
+            )
+            for cell in [self._cell(matrix, row, column)]
+        }
+        # насыщенность — внутри своего цвета: крупная «в процессе» не глушит красные
+        self.assertEqual(
+            shades,
+            {
+                ("fully", "no_receipts"): ("risk", 1.0),
+                # √(400/900) ≈ 0,67
+                ("fully", "partial"): ("risk", 0.67),
+                ("fully", "paid"): ("ok", 1.0),
+                ("partially", "no_receipts"): ("progress", 1.0),
+                ("not_yet", "partial"): ("progress", 0.0),
+            },
+        )
+        self.assertContains(
+            response, '<td class="num an-tone-risk" style="--an-shade: 0.67">'
+        )
 
     def test_finance_profitability_losers_at_bottom(self):
         names = ["Альфа", "Бета", "Гамма", "Дельта"]

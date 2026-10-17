@@ -16,6 +16,7 @@ from analytics.services.finance import (
     finance_kpis,
     money_flow,
     payment_discipline,
+    stage_money,
     status_matrix,
     top_clients,
 )
@@ -627,6 +628,54 @@ def make_expense(contract, cost):
     return ContractExpense.objects.create(
         contract=contract, expense_type="other", quantity=1, cost=cost
     )
+
+
+class StageMoneyTests(TestCase):
+    """Получено и долг по стадиям «Услуги оказаны?»."""
+
+    def test_paid_and_debt_by_services_stage(self):
+        client = make_client("Стадии")
+        done = make_contract(
+            client, "S-1", date(2026, 3, 1), 1000, services_provided="fully"
+        )
+        make_payment(done, date(2026, 3, 5), 300)
+        make_contract(client, "S-2", date(2026, 4, 1), 500, services_provided="fully")
+        overpaid = make_contract(
+            client, "S-3", date(2026, 5, 1), 200, services_provided="partially"
+        )
+        make_payment(overpaid, date(2026, 5, 2), 250)  # долг −50 в «Долг» не входит
+        make_contract(client, "S-4", date(2025, 5, 1), 999, services_provided="fully")
+
+        rows = stage_money(P)
+
+        self.assertEqual(
+            [row["key"] for row in rows], ["not_yet", "partially", "fully"]
+        )
+        by_key = {row["key"]: row for row in rows}
+        self.assertEqual(by_key["fully"]["count"], 2)
+        self.assertEqual(by_key["fully"]["paid"], Decimal("300"))
+        self.assertEqual(by_key["fully"]["debt"], Decimal("1200"))
+        self.assertEqual(by_key["partially"]["paid"], Decimal("250"))
+        self.assertEqual(by_key["partially"]["debt"], Decimal("0"))
+        self.assertEqual(
+            by_key["not_yet"],
+            {
+                "key": "not_yet",
+                "label": "ещё нет",
+                "count": 0,
+                "paid": Decimal("0"),
+                "debt": Decimal("0"),
+            },
+        )
+
+    def test_client_filter(self):
+        alpha, beta = make_client("Альфа"), make_client("Бета")
+        make_contract(alpha, "A-1", date(2026, 3, 1), 100, services_provided="fully")
+        make_contract(beta, "B-1", date(2026, 3, 1), 900, services_provided="fully")
+
+        rows = {row["key"]: row for row in stage_money(P, alpha)}
+
+        self.assertEqual(rows["fully"]["debt"], Decimal("100"))
 
 
 class TopClientsTests(TestCase):

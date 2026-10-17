@@ -34,12 +34,15 @@
         if (fmt === "count") {
             return INTEGER.format(value);
         }
+        if (fmt === "money_short") {
+            return COMPACT.format(value) + " ₽";
+        }
         return INTEGER.format(value) + " ₽";
     }
 
     // Подпись деления оси: крупные суммы сокращаются («1,5 млн ₽»), иначе ось съедает график
     function formatTick(value, fmt) {
-        if (fmt === "money") {
+        if (fmt === "money" || fmt === "money_short") {
             return COMPACT.format(value) + " ₽";
         }
         return formatValue(value, fmt);
@@ -103,8 +106,9 @@
     }
 
     function buildDataset(spec, dataset, index, theme) {
-        // Цвета серий идут строго по порядку палитры (view не отдаёт больше 6 серий)
-        const color = theme.series[index % theme.series.length];
+        // Цвета серий идут строго по порядку палитры (view не отдаёт больше 6 серий),
+        // смысловой цвет серии (dataset.color: positive / negative) — вместо очередного
+        const color = dataset.color ? theme[dataset.color] : theme.series[index % theme.series.length];
         const result = {
             label: dataset.label,
             data: dataset.data.slice(),
@@ -243,6 +247,84 @@
         return "rgba(" + (n >> 16) + ", " + ((n >> 8) & 255) + ", " + (n & 255) + ", " + alpha + ")";
     }
 
+    // Цвет текста поверх заливки: тёмный или белый — какой контрастнее (WCAG)
+    function textOn(color) {
+        const match = /^#([0-9a-f]{6})$/i.exec(color);
+        if (!match) {
+            return "#ffffff";
+        }
+        const n = parseInt(match[1], 16);
+        const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((channel) => {
+            const c = channel / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05) ? "#0b0b0b" : "#ffffff";
+    }
+
+    // Подписи значений столбцов (spec.value_labels): в формате оси, сокращённо.
+    // Помещается в столбец — внутри, контрастным цветом. У горизонтальных графиков
+    // не поместившиеся подписи идут справа от конца полосы цветом своей серии;
+    // у вертикальных не пишутся — значение остаётся в подсказке.
+    const valueLabels = {
+        id: "anValueLabels",
+        afterDatasetsDraw(chart, args, options) {
+            if (!options.enabled) {
+                return;
+            }
+            const ctx = chart.ctx;
+            const horizontal = chart.options.indexAxis === "y";
+            const ends = new Map(); // индекс полосы -> {end, y}: правый край всей полосы
+            const outside = new Map(); // индекс полосы -> [{text, color}] — не поместились
+            ctx.save();
+            ctx.font = "600 12px " + Chart.defaults.font.family;
+            ctx.textBaseline = "middle";
+            ctx.textAlign = "center";
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                const meta = chart.getDatasetMeta(datasetIndex);
+                if (meta.hidden || meta.type !== "bar") {
+                    return;
+                }
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value) {
+                        return;
+                    }
+                    const { x, y, base } = bar.getProps(["x", "y", "base"], true);
+                    if (horizontal) {
+                        const row = ends.get(index) || { end: -Infinity, y: y };
+                        row.end = Math.max(row.end, x, base);
+                        ends.set(index, row);
+                    }
+                    const text = options.format(value);
+                    const color = keyColor(dataset, index);
+                    const room = horizontal ? Math.abs(x - base) : Math.abs(y - base);
+                    if (ctx.measureText(text).width + 8 <= room) {
+                        ctx.fillStyle = textOn(color);
+                        ctx.fillText(text, horizontal ? (x + base) / 2 : x, horizontal ? y : (y + base) / 2);
+                    } else if (horizontal) {
+                        outside.set(index, (outside.get(index) || []).concat({ text: text, color: color }));
+                    }
+                });
+            });
+            ctx.textAlign = "left";
+            outside.forEach((labels, index) => {
+                const row = ends.get(index);
+                let left = row.end + 6;
+                labels.forEach((label) => {
+                    const width = ctx.measureText(label.text).width;
+                    if (left + width > chart.chartArea.right) {
+                        return;
+                    }
+                    ctx.fillStyle = label.color;
+                    ctx.fillText(label.text, left, row.y);
+                    left += width + 10;
+                });
+            });
+            ctx.restore();
+        },
+    };
+
     // Цвет ключа серии в подсказке (у столбцов «по знаку» — свой у каждого столбца)
     function keyColor(dataset, index) {
         const color = dataset.backgroundColor;
@@ -326,6 +408,10 @@
                 plugins: {
                     legend: buildLegend(spec, theme),
                     tooltip: buildTooltip(spec, theme),
+                    anValueLabels: {
+                        enabled: Boolean(spec.value_labels),
+                        format: (value) => formatTick(value, spec.format),
+                    },
                 },
                 onClick: (event, elements) => {
                     const url = firstLink(spec, elements);
@@ -341,6 +427,7 @@
         if (!animate) {
             config.options.animation = false;
         }
+        config.plugins = [valueLabels];
         return config;
     }
 

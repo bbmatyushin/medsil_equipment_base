@@ -336,6 +336,56 @@ html[data-theme="dark"] {
     font-size: 0.75rem;
 }
 
+/*
+ * Подкраска ячеек матрицы: тон — смысл ячейки (класс an-tone-*, считает view),
+ * насыщенность — сумма (--an-shade, 0–1, корень доли от крупнейшей ячейки того же тона).
+ * Предел заливки (--an-tone-max) не выше 45 % поверх фона карточки, чтобы текст
+ * и ссылки читались; серый «в процессе» бледнее: внимание — на красные ячейки.
+ */
+.an-tone-risk {
+    --an-tone: var(--an-negative);
+    --an-tone-max: 45%;
+}
+
+.an-tone-ok {
+    --an-tone: var(--an-positive);
+    --an-tone-max: 35%;
+}
+
+.an-tone-progress {
+    --an-tone: var(--an-text);
+    --an-tone-max: 18%;
+}
+
+.an-matrix td[class*="an-tone-"] {
+    background: color-mix(
+        in srgb,
+        var(--an-tone) calc(var(--an-shade, 0) * var(--an-tone-max)),
+        var(--an-surface)
+    );
+}
+
+/* Образец цвета в пояснении под матрицей */
+.an-swatch {
+    display: inline-block;
+    width: 0.75em;
+    height: 0.75em;
+    border-radius: 2px;
+    vertical-align: -0.05em;
+    background: color-mix(in srgb, var(--an-tone) var(--an-tone-max), var(--an-surface));
+}
+
+/* Подзаголовок второго блока в той же карточке (график под матрицей) */
+.an-card h3.an-subtitle {
+    margin: 16px 0 4px;
+    padding: 0;
+    background: none;
+    color: var(--an-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: none;
+}
+
 /* таблица под графиком в той же карточке («Возраст долга») */
 .an-card .an-chart + .an-table-wrap {
     margin-top: 12px;

@@ -9,8 +9,10 @@ View собирает спецификацию через `chart_spec()`, шаб
 import math
 
 KINDS = ("bar", "line", "scatter")
-FORMATS = ("money", "count", "percent")
+FORMATS = ("money", "money_short", "count", "percent")
 AXES = ("y", "y2")
+# Смысловые цвета серии вместо очередного цвета палитры
+COLORS = ("positive", "negative")
 
 # Радиус пузырька scatter, px
 BUBBLE_MIN_RADIUS = 4
@@ -65,6 +67,9 @@ def _dataset(dataset: dict, chart_kind: str) -> dict:
         raise ValueError(f"Неизвестная ось серии: {axis!r}")
     if fmt is not None and fmt not in FORMATS:
         raise ValueError(f"Неизвестный формат серии: {fmt!r}")
+    color = dataset.get("color")
+    if color is not None and color not in COLORS:
+        raise ValueError(f"Неизвестный цвет серии: {color!r}")
     convert = _point if kind == "scatter" else to_float
     return {
         "label": str(dataset.get("label", "")),
@@ -73,6 +78,7 @@ def _dataset(dataset: dict, chart_kind: str) -> dict:
         "axis": axis,
         "sign_colors": bool(dataset.get("sign_colors", False)),
         "fmt": fmt,
+        "color": color,
     }
 
 
@@ -95,11 +101,13 @@ def chart_spec(
     horizontal: bool = False,
     stacked: bool = False,
     links: list[str | None] | None = None,
+    value_labels: bool = False,
 ) -> dict:
     """JSON-совместимая спецификация графика.
 
     - `kind`: "bar" | "line" | "scatter".
-    - `datasets`: серии `{"label", "data", "kind"?, "axis"?, "sign_colors"?, "fmt"?}`.
+    - `datasets`: серии
+      `{"label", "data", "kind"?, "axis"?, "sign_colors"?, "fmt"?, "color"?}`.
       `kind` серии задаёт смешанный график (линия поверх столбцов),
       `axis="y2"` — вторая шкала справа (только у вертикальных графиков:
       при `horizontal=True` — ValueError), `sign_colors` — окраска столбцов по знаку.
@@ -109,10 +117,13 @@ def chart_spec(
       Пример: «Накопительно» поверх столбцов — `axis="y2", fmt="money"`
       (правая шкала денег подстраивается под данные и не сплющивает столбцы).
       У scatter `data` — точки `{"x", "y", "label", "url", "r"?}`; `sign_colors`
-      у scatter красит точки по знаку `y`.
-    - `fmt`: формат значений ("money" | "count" | "percent"); у scatter — ось Y.
+      у scatter красит точки по знаку `y`. `color` ("positive" | "negative") —
+      смысловой цвет серии вместо очередного цвета палитры.
+    - `fmt`: формат значений ("money" | "money_short" | "count" | "percent");
+      у scatter — ось Y. "money_short" — деньги сокращённо («342 тыс. ₽») и в подсказке.
     - `x_fmt`: формат оси X у scatter (по умолчанию деньги), у остальных не используется.
     - `links[i]`: куда ведёт клик по i-й метке (None — никуда).
+    - `value_labels`: подписать значения внутри столбцов (если помещаются).
     """
     if kind not in KINDS:
         raise ValueError(f"Неизвестный тип графика: {kind!r}")
@@ -136,5 +147,6 @@ def chart_spec(
         "horizontal": horizontal,
         "stacked": stacked,
         "links": list(links or []),
+        "value_labels": value_labels,
         "empty": _is_empty(kind, labels, series),
     }
