@@ -156,7 +156,10 @@ def _trips_charts(
             "bar",
             [row["label"] for row in structure],
             [{"label": "Сумма", "data": [row["amount"] for row in structure]}],
+            # сумма на полосе: внутри — белым, не помещается — справа цветом полосы
+            fmt="money_short",
             horizontal=True,
+            value_labels=True,
         ),
         "directions": chart_spec(
             "bar",

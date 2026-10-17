@@ -40,7 +40,7 @@ DAYS_IN_YEAR = 365
 
 # Пороги блока «Экономия и контроль»
 REPEAT_WINDOW_DAYS = 30  # повторный выезд в то же подразделение
-MERGE_WINDOW_DAYS = 14  # разрыв между поездками в один регион
+MERGE_WINDOW_DAYS = 5  # разрыв между поездками в один регион
 EXPENSIVE_RATIO = Decimal("1.5")  # во сколько раз дороже медианы
 MIN_TRIPS_FOR_REGION_MEDIAN = 3  # меньше поездок — сравнение с общей медианой
 # Средняя длина месяца для подписи «оценка по N мес.»
@@ -853,11 +853,13 @@ def _trip_brief(trip: BusinessTrip) -> dict:
 def repeat_visits(
     period: Period, employee=None, source: TripSet | None = None
 ) -> list[dict]:
-    """Повторные выезды: то же подразделение не позже чем через 30 дней.
+    """Повторные выезды: то же подразделение по тому же контракту не позже чем через 30 дней.
 
     Для каждого пункта командировок периода ищется ближайший предыдущий пункт
     того же подразделения в другой командировке (любого сотрудника, за всю
     историю), закончившийся не раньше чем за `REPEAT_WINDOW_DAYS` дней до начала.
+    Повтор — только если у обеих командировок есть общий контракт: поездки по
+    разным контрактам или без контракта повторными не считаются.
     """
     source = _source(source)
     trips = source.in_period(period, employee)
@@ -873,10 +875,14 @@ def repeat_visits(
                         "business_trip_id": other.pk,
                         "beg_dt": dest.beg_dt,
                         "end_dt": dest.end_dt,
+                        "contracts": {c.pk: c for c in other.contract.all()},
                     }
                 )
     rows = []
     for trip in trips:
+        contract_ids = {contract.pk for contract in trip.contract.all()}
+        if not contract_ids:
+            continue
         for dest in _sorted_destinations(trip):
             previous = [
                 item
@@ -884,10 +890,15 @@ def repeat_visits(
                 if item["business_trip_id"] != trip.pk
                 and item["end_dt"] < dest.beg_dt
                 and (dest.beg_dt - item["end_dt"]).days <= REPEAT_WINDOW_DAYS
+                and contract_ids & item["contracts"].keys()
             ]
             if not previous:
                 continue
             last = max(previous, key=lambda item: item["end_dt"])
+            common = sorted(
+                last["contracts"][pk].contract_number
+                for pk in contract_ids & last["contracts"].keys()
+            )
             department = dest.department
             rows.append(
                 {
@@ -906,6 +917,7 @@ def repeat_visits(
                     "service_types": ", ".join(
                         service_type.name for service_type in trip.service_type.all()
                     ),
+                    "contracts": ", ".join(common),
                     "amount": trip_total(trip),
                 }
             )

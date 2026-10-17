@@ -28,30 +28,8 @@
 
     <section class="an-card">
         <h2>Структура затрат</h2>
-        <p class="an-card-note">Затраты командировок периода по видам и суточные.</p>
+        <p class="an-card-note">Затраты командировок периода по видам и суточные; сумма — на полосе.</p>
         {% include "analytics/includes/chart.html" with spec=charts.structure chart_id="chart-trips-structure" title="Структура затрат на командировки" only %}
-        {% if structure %}
-            <div class="an-table-wrap">
-                <table class="an-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Вид затрат</th>
-                            <th scope="col" class="num">Сумма</th>
-                            <th scope="col" class="num">Доля</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in structure %}
-                            <tr>
-                                <td>{{ row.label }}</td>
-                                <td class="num">{{ row.amount|money }}</td>
-                                <td class="num">{{ row.share_pct|pct }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% endif %}
     </section>
 </div>
 
@@ -365,7 +343,7 @@
 <div class="an-charts">
     <section class="an-card an-card--wide">
         <h2>Повторные выезды</h2>
-        <p class="an-card-note">То же подразделение через {{ repeat_window_days }} дней или раньше: возможно, проблему не решили с первого раза. Прошлый выезд ищется за всю историю. Клик по датам — карточка командировки.</p>
+        <p class="an-card-note">То же подразделение по тому же контракту через {{ repeat_window_days }} дней или раньше. Поездки по разным контрактам или без контракта не считаются. Прошлый выезд ищется за всю историю. Клик по датам — карточка командировки.</p>
         {% if repeats %}
             <div class="an-table-wrap">
                 <table class="an-table">
@@ -374,6 +352,7 @@
                             <th scope="col">Подразделение</th>
                             <th scope="col">Клиент</th>
                             <th scope="col">Город</th>
+                            <th scope="col">Контракт</th>
                             <th scope="col">Прошлый выезд</th>
                             <th scope="col">Повторный</th>
                             <th scope="col" class="num">Через, дн.</th>
@@ -387,6 +366,7 @@
                                 <td>{{ row.department }}</td>
                                 <td>{{ row.client }}</td>
                                 <td>{{ row.city }}</td>
+                                <td>{{ row.contracts }}</td>
                                 <td><a href="{{ row.previous_url }}">{{ row.previous_beg|date:"d.m.Y" }} — {{ row.previous_end|date:"d.m.Y" }}</a></td>
                                 <td><a href="{{ row.url }}">{{ row.beg|date:"d.m.Y" }} — {{ row.end|date:"d.m.Y" }}</a></td>
                                 <td class="num">{{ row.gap }}</td>
@@ -402,27 +382,28 @@
         {% endif %}
     </section>
 
-    <section class="an-card an-card--wide">
-        <h2>Можно было объединить</h2>
-        <p class="an-card-note">Командировки периода в один регион с разрывом до {{ merge_window_days }} дней (поездки с пересекающимися датами не учитываются).</p>
+    <section class="an-card">
+        <h2>Оптимизация командировок</h2>
+        <p class="an-card-note">Командировки периода в один регион с разрывом до {{ merge_window_days }} дней: их можно было объединить. Поездки с пересекающимися датами не учитываются.</p>
         {% if merges %}
             <div class="an-table-wrap">
                 <table class="an-table">
                     <thead>
                         <tr>
                             <th scope="col">Регион</th>
-                            <th scope="col">Первая</th>
-                            <th scope="col">Вторая</th>
+                            <th scope="col">Поездки</th>
                             <th scope="col" class="num">Разрыв, дн.</th>
-                            <th scope="col" class="num">Стоимость обеих</th>
+                            <th scope="col" class="num">Сумма</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in merges %}
                             <tr>
                                 <td>{{ row.region }}</td>
-                                <td><a href="{{ row.first_url }}">{{ row.first.beg|date:"d.m" }} — {{ row.first.end|date:"d.m.Y" }}</a><div class="an-note">{{ row.first.employee }}</div></td>
-                                <td><a href="{{ row.second_url }}">{{ row.second.beg|date:"d.m" }} — {{ row.second.end|date:"d.m.Y" }}</a><div class="an-note">{{ row.second.employee }}</div></td>
+                                <td>
+                                    <a href="{{ row.first_url }}">{{ row.first.beg|date:"d.m" }} — {{ row.first.end|date:"d.m.Y" }}</a> <span class="an-note">{{ row.first.employee }}</span><br>
+                                    <a href="{{ row.second_url }}">{{ row.second.beg|date:"d.m" }} — {{ row.second.end|date:"d.m.Y" }}</a> <span class="an-note">{{ row.second.employee }}</span>
+                                </td>
                                 <td class="num">{{ row.gap }}</td>
                                 <td class="num">{{ row.amount|money }}</td>
                             </tr>
@@ -435,8 +416,8 @@
         {% endif %}
     </section>
 
-    <section class="an-card an-card--wide">
-        <h2>Необычно дорогие поездки</h2>
+    <section class="an-card">
+        <h2>Наиболее затратные поездки</h2>
         <p class="an-card-note">₽ в день без суточных против медианы основного региона поездки за всю историю (при меньше чем 3 поездках в регионе — общей медианы); показаны от 1,5×.</p>
         {% if expensive %}
             <div class="an-table-wrap">
@@ -446,8 +427,7 @@
                             <th scope="col">Командировка</th>
                             <th scope="col">Регион</th>
                             <th scope="col" class="num">₽ в день</th>
-                            <th scope="col" class="num">Обычно</th>
-                            <th scope="col" class="num">Во сколько раз</th>
+                            <th scope="col" class="num">Раз</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -455,8 +435,7 @@
                             <tr>
                                 <td><a href="{{ row.url }}">№{{ row.doc_number|default:"—" }}, {{ row.beg|date:"d.m.Y" }}</a><div class="an-note">{{ row.employee }}</div></td>
                                 <td>{{ row.region }}</td>
-                                <td class="num">{{ row.per_day|money }}</td>
-                                <td class="num">{{ row.baseline|money }}{% if row.baseline_kind == "all" %}<div class="an-note">общая медиана</div>{% endif %}</td>
+                                <td class="num">{{ row.per_day|money }}<div class="an-note">обычно {{ row.baseline|money }}</div>{% if row.baseline_kind == "all" %}<div class="an-note">общая медиана</div>{% endif %}</td>
                                 <td class="num"><strong>×{{ row.ratio|number }}</strong></td>
                             </tr>
                         {% endfor %}

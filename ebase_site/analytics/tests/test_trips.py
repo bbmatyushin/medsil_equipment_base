@@ -873,6 +873,8 @@ class ControlTests(TestCase):
         cls.samara = make_department(
             "Больница Самары", city=make_city("Самара", "Самарская область")
         )
+        cls.contract = make_contract(cls.alpha, "К-1", date(2025, 1, 10), 100000)
+        cls.contract2 = make_contract(cls.alpha, "К-2", date(2025, 1, 10), 50000)
 
     def _trip(self, department, beg, end, expense=0, employee=None, **kwargs):
         return make_trip(
@@ -885,13 +887,19 @@ class ControlTests(TestCase):
         )
 
     def test_repeat_visit_within_30_days(self):
-        first = self._trip(self.kazan, date(2026, 2, 27), date(2026, 3, 1))
+        first = self._trip(
+            self.kazan,
+            date(2026, 2, 27),
+            date(2026, 3, 1),
+            contracts=[self.contract, self.contract2],
+        )
         second = self._trip(
             self.kazan,
             date(2026, 3, 31),
             date(2026, 4, 1),
             employee=self.other,
             service_types=["ремонт"],
+            contracts=[self.contract],
         )
 
         rows = repeat_visits(YEAR_2026)
@@ -905,11 +913,46 @@ class ControlTests(TestCase):
         self.assertEqual(row["client"], "Альфа")
         self.assertEqual(row["city"], "Казань")
         self.assertEqual(row["service_types"], "ремонт")
+        self.assertEqual(row["contracts"], "К-1")
         self.assertEqual(row["amount"], D("1400"))
 
+    def test_repeat_needs_common_contract(self):
+        # по разным контрактам, одна без контракта, обе без контракта — не повтор
+        self._trip(
+            self.kazan, date(2026, 3, 1), date(2026, 3, 1), contracts=[self.contract]
+        )
+        self._trip(
+            self.kazan, date(2026, 3, 5), date(2026, 3, 5), contracts=[self.contract2]
+        )
+        self._trip(self.kazan, date(2026, 3, 10), date(2026, 3, 10))
+        self._trip(self.kazan, date(2026, 3, 15), date(2026, 3, 15))
+        self.assertEqual(repeat_visits(YEAR_2026), [])
+
+    def test_repeat_takes_nearest_visit_with_common_contract(self):
+        first = self._trip(
+            self.kazan, date(2026, 3, 1), date(2026, 3, 1), contracts=[self.contract]
+        )
+        self._trip(
+            self.kazan, date(2026, 3, 5), date(2026, 3, 5), contracts=[self.contract2]
+        )
+        third = self._trip(
+            self.kazan, date(2026, 3, 10), date(2026, 3, 10), contracts=[self.contract]
+        )
+
+        rows = repeat_visits(YEAR_2026)
+
+        self.assertEqual(
+            [(row["trip_id"], row["previous_trip_id"], row["gap"]) for row in rows],
+            [(third.pk, first.pk, 9)],
+        )
+
     def test_repeat_visit_31_days_is_not_repeat(self):
-        self._trip(self.kazan, date(2026, 2, 27), date(2026, 3, 1))
-        self._trip(self.kazan, date(2026, 4, 1), date(2026, 4, 2))
+        self._trip(
+            self.kazan, date(2026, 2, 27), date(2026, 3, 1), contracts=[self.contract]
+        )
+        self._trip(
+            self.kazan, date(2026, 4, 1), date(2026, 4, 2), contracts=[self.contract]
+        )
         self.assertEqual(repeat_visits(YEAR_2026), [])
 
     def test_repeat_ignores_same_trip(self):
@@ -922,12 +965,20 @@ class ControlTests(TestCase):
                 (self.chelny, date(2026, 3, 2), date(2026, 3, 3)),
                 (self.kazan, date(2026, 3, 5), date(2026, 3, 5)),
             ],
+            contracts=[self.contract],
         )
         self.assertEqual(repeat_visits(YEAR_2026), [])
 
     def test_repeat_previous_may_be_before_period(self):
-        self._trip(self.kazan, date(2025, 12, 18), date(2025, 12, 20))
-        self._trip(self.kazan, date(2026, 1, 10), date(2026, 1, 11))
+        self._trip(
+            self.kazan,
+            date(2025, 12, 18),
+            date(2025, 12, 20),
+            contracts=[self.contract],
+        )
+        self._trip(
+            self.kazan, date(2026, 1, 10), date(2026, 1, 11), contracts=[self.contract]
+        )
 
         rows = repeat_visits(YEAR_2026)
 
@@ -937,23 +988,23 @@ class ControlTests(TestCase):
     def test_merge_candidates_gap(self):
         first = self._trip(self.kazan, date(2026, 3, 1), date(2026, 3, 1))
         second = self._trip(
-            self.chelny, date(2026, 3, 15), date(2026, 3, 16), employee=self.other
+            self.chelny, date(2026, 3, 6), date(2026, 3, 7), employee=self.other
         )
 
         rows = merge_candidates(YEAR_2026)
 
         self.assertEqual(len(rows), 1)
         row = rows[0]
-        self.assertEqual(row["gap"], 14)
+        self.assertEqual(row["gap"], 5)
         self.assertEqual(row["region"], "Татарстан")
         self.assertEqual(row["first"]["id"], first.pk)
         self.assertEqual(row["second"]["id"], second.pk)
         self.assertEqual(row["second"]["employee"], "Петров Пётр Петрович")
         self.assertEqual(row["amount"], D("700") + D("1400"))
 
-    def test_merge_candidates_15_days_overlap_and_other_region(self):
+    def test_merge_candidates_6_days_overlap_and_other_region(self):
         self._trip(self.kazan, date(2026, 3, 1), date(2026, 3, 1))
-        self._trip(self.chelny, date(2026, 3, 16), date(2026, 3, 17))
+        self._trip(self.chelny, date(2026, 3, 7), date(2026, 3, 8))
         self._trip(self.kazan, date(2026, 5, 1), date(2026, 5, 5))
         self._trip(self.chelny, date(2026, 5, 3), date(2026, 5, 4), employee=self.other)
         self._trip(self.samara, date(2026, 7, 1), date(2026, 7, 1))
@@ -1101,7 +1152,7 @@ class ReviewFixTests(TestCase):
         self.assertEqual(rows[0]["region"], "Город не указан")
 
     def test_merge_candidates_limit(self):
-        for day in (1, 10, 19):
+        for day in (1, 5, 9):
             self._one_day(self.chelny, date(2026, 3, day), 100)
         self.assertEqual(len(merge_candidates(YEAR_2026)), 2)
         rows = merge_candidates(YEAR_2026, limit=1)

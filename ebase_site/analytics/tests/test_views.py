@@ -1183,3 +1183,32 @@ class TripsPageTests(TestCase):
 
         self.assertLessEqual(before, 30)
         self.assertEqual(before, after)
+
+    def test_trips_structure_chart_has_value_labels_without_table(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+
+        spec = response.context["charts"]["structure"]
+        self.assertTrue(spec["value_labels"])
+        self.assertEqual(spec["format"], "money_short")
+        self.assertNotContains(response, '<th scope="col">Вид затрат</th>')
+
+    def test_trips_control_cards_titles_and_layout(self):
+        response = self._get()
+        html = response.content.decode()
+
+        self.assertNotContains(response, "возможно, проблему не решили")
+        self.assertNotContains(response, "Можно было объединить")
+        self.assertNotContains(response, "Необычно дорогие")
+        self.assertContains(response, "в один регион с разрывом до 5 дней")
+        # обе карточки — половинной ширины, «Оптимизация» слева, «Затратные» справа
+        optimization = re.search(
+            r'<section class="([^"]+)">\s*<h2>Оптимизация командировок</h2>', html
+        )
+        costly = re.search(
+            r'<section class="([^"]+)">\s*<h2>Наиболее затратные поездки</h2>', html
+        )
+        self.assertEqual(optimization.group(1), "an-card")
+        self.assertEqual(costly.group(1), "an-card")
+        self.assertLess(optimization.start(), costly.start())
