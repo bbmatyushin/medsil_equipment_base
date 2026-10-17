@@ -230,8 +230,6 @@ class TripsView(AnalyticsTabView):
             trips.accountable(period, today, employee, source=source)
         )
         clients = trips.clients_trips_vs_payments(period, employee, source=source)
-        unallocated = trips.unallocated_trips(period, employee, source=source)
-        unallocated["rows"] = _with_trip_links(unallocated["rows"])
         context.update(
             employee=employee,
             group=group,
@@ -260,9 +258,6 @@ class TripsView(AnalyticsTabView):
             ],
             clients=clients,
             clients_height=_horizontal_chart_height(len(clients)),
-            unallocated=unallocated,
-            unallocated_url=_ids_link(unallocated["ids"]),
-            max_link_ids=MAX_LINK_IDS,
             repeats=[
                 {
                     **row,

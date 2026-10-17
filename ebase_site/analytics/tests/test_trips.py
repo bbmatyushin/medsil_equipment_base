@@ -23,7 +23,6 @@ from analytics.services.trips import (
     load_trips,
     merge_candidates,
     repeat_visits,
-    unallocated_trips,
     split_proportional,
     trip_shares,
     trip_total,
@@ -840,24 +839,6 @@ class MoneyTests(TestCase):
         self.assertIsNone(rows["Альфа"]["per_100"])
         self.assertIsNone(rows["Клиент не указан"]["payments"])
         self.assertIsNone(rows["Клиент не указан"]["per_100"])
-
-    def test_unallocated_trips(self):
-        bare = self._trip(date(2026, 3, 1), 1, 300)
-        beta_contract = make_contract(
-            make_client("Бета"), "Б-1", date(2026, 1, 1), 1000
-        )
-        mismatched = self._trip(date(2026, 4, 1), 1, 500, contracts=[beta_contract])
-        self._trip(date(2026, 5, 1), 1, 100, contracts=[self.contract])
-
-        result = unallocated_trips(YEAR_2026)
-
-        rows = {row["id"]: row for row in result["rows"]}
-        self.assertEqual(set(rows), {bare.pk, mismatched.pk})
-        self.assertFalse(rows[bare.pk]["has_contracts"])
-        self.assertTrue(rows[mismatched.pk]["has_contracts"])
-        self.assertEqual(rows[bare.pk]["employee"], "Иванов Иван Иванович")
-        self.assertEqual(result["total"], D("1000") + D("1200"))
-        self.assertEqual(set(result["ids"]), {str(bare.pk), str(mismatched.pk)})
 
 
 class ControlTests(TestCase):

@@ -209,12 +209,6 @@ html[data-theme="dark"] {
     margin-top: 8px;
 }
 
-/* Итог над таблицей карточки («Всего: …») */
-.an-total {
-    margin: 0 0 8px;
-    color: var(--an-ink);
-}
-
 /* Ссылка «Открыть в реестре» под плитками */
 .an-registry-link {
     margin: 0 0 16px;

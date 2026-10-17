@@ -800,41 +800,6 @@ def clients_trips_vs_payments(
     return rows[:limit]
 
 
-def unallocated_trips(
-    period: Period, employee=None, source: TripSet | None = None
-) -> dict:
-    """Командировки периода, стоимость которых не разнесена на контракты.
-
-    `has_contracts` — контракты выбраны, но их клиентов нет в пунктах
-    командировки, поэтому долей нет.
-    """
-    source = _source(source)
-    trips = source.in_period(period, employee)
-    allocated = set(
-        BusinessTripContractExpense.objects.filter(
-            business_trip_id__in=[trip.pk for trip in trips]
-        ).values_list("business_trip_id", flat=True)
-    )
-    rows = [
-        {
-            "id": trip.pk,
-            "doc_number": trip.doc_number,
-            "employee": employee_name(trip.employee),
-            "beg_dt": trip.beg_dt,
-            "end_dt": trip.end_dt,
-            "amount": trip_total(trip),
-            "has_contracts": bool(trip.contract.all()),
-        }
-        for trip in sorted(trips, key=lambda t: (t.beg_dt, t.doc_number or 0))
-        if trip.pk not in allocated
-    ]
-    return {
-        "total": sum((row["amount"] for row in rows), ZERO),
-        "rows": rows,
-        "ids": [str(row["id"]) for row in rows],
-    }
-
-
 # --- Экономия и контроль ---------------------------------------------------------
 
 

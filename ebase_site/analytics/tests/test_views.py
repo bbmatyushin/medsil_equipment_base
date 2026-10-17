@@ -1039,7 +1039,6 @@ class TripsPageTests(TestCase):
         self.assertEqual(
             row["url"], reverse("admin:contracts_contract_change", args=[contract.pk])
         )
-        self.assertIsNone(response.context["unallocated_url"])
 
     def _populate(self):
         """Три сотрудника, шесть командировок в двух регионах, поступления, контракт."""
@@ -1212,3 +1211,12 @@ class TripsPageTests(TestCase):
         self.assertEqual(optimization.group(1), "an-card")
         self.assertEqual(costly.group(1), "an-card")
         self.assertLess(optimization.start(), costly.start())
+
+    def test_trips_page_has_no_unallocated_card(self):
+        """Командировка без контракта — норма, отдельной карточки под неё нет."""
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+
+        self.assertNotContains(response, "Не разнесены на контракты")
+        self.assertNotIn("unallocated", response.context)

@@ -305,38 +305,6 @@
             </div>
         {% endif %}
     </section>
-
-    <section class="an-card an-card--wide">
-        <h2>Не разнесены на контракты</h2>
-        <p class="an-card-note">Командировки периода без долей по контрактам: контракт не выбран или его клиента нет в пунктах командировки.</p>
-        {% if unallocated.rows %}
-            <p class="an-total">Всего: <strong>{{ unallocated.total|money }}</strong>{% if unallocated_url %} · <a href="{{ unallocated_url }}">открыть списком</a>{% else %} <span class="an-note">(больше {{ max_link_ids }} командировок — без ссылки списком)</span>{% endif %}</p>
-            <div class="an-table-wrap">
-                <table class="an-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">№</th>
-                            <th scope="col">Сотрудник</th>
-                            <th scope="col">Даты</th>
-                            <th scope="col" class="num">Сумма</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in unallocated.rows %}
-                            <tr>
-                                <td><a href="{{ row.url }}">{{ row.doc_number|default:"—" }}</a></td>
-                                <td>{{ row.employee }}{% if row.has_contracts %}<div class="an-note">контракт выбран, но его клиента нет в пунктах</div>{% endif %}</td>
-                                <td>{{ row.beg_dt|date:"d.m.Y" }} — {{ row.end_dt|date:"d.m.Y" }}</td>
-                                <td class="num">{{ row.amount|money }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <p class="an-chart-empty">Нет данных за выбранный период</p>
-        {% endif %}
-    </section>
 </div>
 
 <h2 class="an-section-title">Экономия и контроль</h2>
