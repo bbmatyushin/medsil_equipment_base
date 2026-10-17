@@ -23,13 +23,13 @@
     <section class="an-card">
         <h2>Затраты по месяцам</h2>
         <p class="an-card-note">Все затраты и суточные командировки относятся к месяцу её начала, как в отчёте по ДС.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.by_month chart_id="chart-trips-by-month" title="Затраты на командировки по месяцам" %}
+        {% include "analytics/includes/chart.html" with spec=charts.by_month chart_id="chart-trips-by-month" title="Затраты на командировки по месяцам" only %}
     </section>
 
     <section class="an-card">
         <h2>Структура затрат</h2>
         <p class="an-card-note">Затраты командировок периода по видам и суточные.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.structure chart_id="chart-trips-structure" title="Структура затрат на командировки" %}
+        {% include "analytics/includes/chart.html" with spec=charts.structure chart_id="chart-trips-structure" title="Структура затрат на командировки" only %}
         {% if structure %}
             <div class="an-table-wrap">
                 <table class="an-table">
@@ -60,7 +60,7 @@
     <section class="an-card">
         <h2>Направления за период</h2>
         <p class="an-card-note">Затраты и суточные по {% if group == "region" %}регионам{% else %}городам{% endif %} пунктов, {{ directions_limit }} крупнейших. Затраты в датах пункта относятся к нему, остальные (например, билеты до выезда) и суточные делятся по дням пунктов. Клик — командировки направления.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.directions chart_id="chart-trips-directions" title="Затраты по направлениям" height=directions_height %}
+        {% include "analytics/includes/chart.html" with spec=charts.directions chart_id="chart-trips-directions" title="Затраты по направлениям" height=directions_height only %}
     </section>
 
     <section class="an-card">
@@ -168,7 +168,7 @@
     <section class="an-card an-card--wide">
         <h2>Дни в разъездах</h2>
         <p class="an-card-note">Командировки периода по сотрудникам. Клик — командировки сотрудника.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height %}
+        {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height only %}
         {% if employee_days %}
             <div class="an-table-wrap">
                 <table class="an-table">
@@ -200,7 +200,7 @@
     <section class="an-card an-card--wide">
         <h2>Подотчёт</h2>
         <p class="an-card-note">Остаток = получено − (затраты без «Я.командировки» + суточные), накопительно на сегодня, период на остаток не влияет. Плюс — деньги у сотрудника, минус — компания должна сотруднику. Клик — поступления ДС сотрудника.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.balance chart_id="chart-trips-balance" title="Остаток подотчёта на сегодня" height=balance_height empty_text="Нет данных" %}
+        {% include "analytics/includes/chart.html" with spec=charts.balance chart_id="chart-trips-balance" title="Остаток подотчёта на сегодня" height=balance_height empty_text="Нет данных" only %}
         {% if accountable %}
             <div class="an-table-wrap">
                 <table class="an-table">
@@ -301,7 +301,7 @@
     <section class="an-card an-card--wide">
         <h2>Клиенты: выезды и оплаты</h2>
         <p class="an-card-note">Затраты отнесены к клиенту по пунктам командировки; оплаты — по датам оплат периода, фильтр сотрудника на них не действует.</p>
-        {% include "analytics/includes/chart.html" with spec=charts.clients chart_id="chart-trips-clients" title="Затраты на выезды по клиентам" height=clients_height %}
+        {% include "analytics/includes/chart.html" with spec=charts.clients chart_id="chart-trips-clients" title="Затраты на выезды по клиентам" height=clients_height only %}
         {% if clients %}
             <div class="an-table-wrap">
                 <table class="an-table">

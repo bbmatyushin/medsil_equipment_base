@@ -1163,3 +1163,23 @@ class TripsPageTests(TestCase):
         self.assertEqual(
             self._filter_spec(changelist, "employee").value(), str(self.other.pk)
         )
+
+    def test_trips_page_query_count_is_small_and_constant(self):
+        """Командировки загружаются один раз на запрос, а не в каждом виджете."""
+        self._populate()
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def count():
+            with _fixed_today(), CaptureQueriesContext(connection) as ctx:
+                response = self.client.get(reverse("analytics:trips"))
+            self.assertEqual(response.status_code, 200)
+            return len(ctx.captured_queries)
+
+        before = count()
+        for day in (1, 8, 15):
+            self._trip(self.other, date(2026, 9, day), date(2026, 9, day + 2))
+        after = count()
+
+        self.assertLessEqual(before, 30)
+        self.assertEqual(before, after)

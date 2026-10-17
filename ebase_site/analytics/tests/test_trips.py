@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from analytics.filters import Period
 from analytics.services.trips import (
+    TripSet,
     accountable,
     annual_by_direction,
     clients_trips_vs_payments,
@@ -26,7 +27,9 @@ from analytics.services.trips import (
     split_proportional,
     trip_shares,
     trip_total,
+    trips_in_period,
     trips_kpis,
+    trips_until,
 )
 from analytics.tests.factories import (
     make_city,
@@ -1104,3 +1107,60 @@ class ReviewFixTests(TestCase):
         rows = merge_candidates(YEAR_2026, limit=1)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["first"]["beg"], date(2026, 3, 1))
+
+
+class TripSetTests(TestCase):
+    """Набор командировок, загруженный один раз, отбирает то же, что запросы в БД."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.other = make_employee("petrov", "Петров", "Пётр", "Петрович")
+        for employee, beg, end in [
+            (cls.employee, date(2025, 12, 30), date(2026, 1, 2)),  # на стыке
+            (cls.employee, date(2026, 1, 1), date(2026, 1, 1)),  # граница
+            (cls.other, date(2026, 12, 31), date(2027, 1, 3)),  # граница, будущая
+            (cls.other, date(2026, 10, 16), date(2026, 10, 17)),  # «сегодня»
+            (cls.employee, date(2026, 10, 17), date(2026, 10, 18)),  # завтра
+            (cls.other, date(2025, 6, 1), date(2025, 6, 2)),
+        ]:
+            make_trip(employee, beg, end)
+
+    @staticmethod
+    def _ids(trips):
+        return sorted(str(trip.pk) for trip in trips)
+
+    def test_filters_match_database_queries(self):
+        source = TripSet.load()
+        for employee in (None, self.employee, self.other):
+            with self.subTest(employee=employee):
+                self.assertEqual(
+                    self._ids(source.in_period(YEAR_2026, employee)),
+                    self._ids(trips_in_period(YEAR_2026, employee)),
+                )
+                self.assertEqual(
+                    self._ids(source.until(TODAY, employee)),
+                    self._ids(trips_until(TODAY, employee)),
+                )
+                overlapping = BusinessTrip.objects.filter(
+                    beg_dt__lte=YEAR_2026.date_to, end_dt__gte=YEAR_2026.date_from
+                )
+                if employee is not None:
+                    overlapping = overlapping.filter(employee=employee)
+                self.assertEqual(
+                    self._ids(source.overlapping(YEAR_2026, employee)),
+                    self._ids(overlapping),
+                )
+
+    def test_first_start_ignores_future_trips(self):
+        source = TripSet.load()
+        self.assertEqual(source.first_start(TODAY), date(2025, 6, 1))
+        self.assertIsNone(TripSet([]).first_start(TODAY))
+
+    def test_load_makes_no_queries_after_loading(self):
+        source = TripSet.load()
+        with self.assertNumQueries(0):
+            for trip in source.in_period(YEAR_2026):
+                trip_shares(trip)
+                list(trip.service_type.all())
+                list(trip.contract.all())

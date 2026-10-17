@@ -214,14 +214,20 @@ class TripsView(AnalyticsTabView):
         group = self.form.get_group()
 
         today = context["today"]
+        # командировки загружаются один раз на всю страницу, виджеты отбирают из набора
+        source = trips.TripSet.load()
 
-        kpis = trips.trips_kpis(period, employee)
-        structure = trips.cost_structure(period, employee)
-        top = trips.directions(period, employee, group)[:TOP_DIRECTIONS]
-        days = _with_employee_links(trips.employee_days(period, employee), period)
-        accountable = _with_receipt_links(trips.accountable(period, today, employee))
-        clients = trips.clients_trips_vs_payments(period, employee)
-        unallocated = trips.unallocated_trips(period, employee)
+        kpis = trips.trips_kpis(period, employee, source=source)
+        structure = trips.cost_structure(period, employee, source=source)
+        top = trips.directions(period, employee, group, source=source)[:TOP_DIRECTIONS]
+        days = _with_employee_links(
+            trips.employee_days(period, employee, source=source), period
+        )
+        accountable = _with_receipt_links(
+            trips.accountable(period, today, employee, source=source)
+        )
+        clients = trips.clients_trips_vs_payments(period, employee, source=source)
+        unallocated = trips.unallocated_trips(period, employee, source=source)
         unallocated["rows"] = _with_trip_links(unallocated["rows"])
         context.update(
             employee=employee,
@@ -231,7 +237,7 @@ class TripsView(AnalyticsTabView):
             trips_list_url=_trips_list_url(period, employee),
             structure=structure,
             charts=_trips_charts(
-                by_month=trips.costs_by_month(period, employee),
+                by_month=trips.costs_by_month(period, employee, source=source),
                 structure=structure,
                 top=top,
                 days=days,
@@ -240,12 +246,14 @@ class TripsView(AnalyticsTabView):
             ),
             employee_days=days,
             employee_days_height=_horizontal_chart_height(len(days)),
-            load=_with_load_shades(trips.employee_month_load(period, employee)),
+            load=_with_load_shades(
+                trips.employee_month_load(period, employee, source=source)
+            ),
             accountable=accountable,
             balance_height=_horizontal_chart_height(len(accountable)),
             contracts=[
                 {**row, "url": change_url(CONTRACTS, row["id"])}
-                for row in trips.contract_trip_shares(period, employee)
+                for row in trips.contract_trip_shares(period, employee, source=source)
             ],
             clients=clients,
             clients_height=_horizontal_chart_height(len(clients)),
@@ -258,18 +266,22 @@ class TripsView(AnalyticsTabView):
                     "url": change_url(TRIPS, row["trip_id"]),
                     "previous_url": change_url(TRIPS, row["previous_trip_id"]),
                 }
-                for row in trips.repeat_visits(period, employee)
+                for row in trips.repeat_visits(period, employee, source=source)
             ],
-            merges=_with_pair_links(trips.merge_candidates(period, employee)),
-            expensive=_with_trip_links(trips.expensive_trips(period, today, employee)),
+            merges=_with_pair_links(
+                trips.merge_candidates(period, employee, source=source)
+            ),
+            expensive=_with_trip_links(
+                trips.expensive_trips(period, today, employee, source=source)
+            ),
             repeat_window_days=trips.REPEAT_WINDOW_DAYS,
             merge_window_days=trips.MERGE_WINDOW_DAYS,
             directions_height=_horizontal_chart_height(len(top)),
             directions_limit=TOP_DIRECTIONS,
-            annual=trips.annual_by_direction(today, employee, group),
-            norms=trips.direction_norms(today, employee, group),
+            annual=trips.annual_by_direction(today, employee, group, source=source),
+            norms=trips.direction_norms(today, employee, group, source=source),
             service_types=_service_type_links(
-                trips.by_service_type(period, employee), period, employee
+                trips.by_service_type(period, employee, source=source), period, employee
             ),
         )
         return context

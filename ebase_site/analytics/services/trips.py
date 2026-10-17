@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
-from django.db.models import Min, QuerySet, Sum
+from django.db.models import QuerySet, Sum
 
 from analytics.filters import Period
 from analytics.services.finance import _bucket_by_month, _delta_pct
@@ -200,6 +200,57 @@ def trips_until(today: date, employee=None) -> list[BusinessTrip]:
     return load_trips(_filtered(queryset, employee))
 
 
+class TripSet:
+    """Командировки, загруженные один раз на запрос страницы; выборки — в Python.
+
+    Виджеты вкладки принимают набор необязательным параметром `source`: так
+    страница делает одну загрузку вместо отдельной в каждом виджете. Без набора
+    виджет загружает командировки сам.
+    """
+
+    def __init__(self, trips: list[BusinessTrip]):
+        self.trips = trips
+
+    @classmethod
+    def load(cls) -> "TripSet":
+        """Все командировки со связанными данными."""
+        return cls(load_trips(BusinessTrip.objects.all()))
+
+    def _of(self, employee) -> list[BusinessTrip]:
+        if employee is None:
+            return self.trips
+        return [trip for trip in self.trips if trip.employee_id == employee.pk]
+
+    def in_period(self, period: Period, employee=None) -> list[BusinessTrip]:
+        """Как `trips_in_period`: выезд в периоде, границы включительно."""
+        return [
+            trip
+            for trip in self._of(employee)
+            if period.date_from <= trip.beg_dt <= period.date_to
+        ]
+
+    def until(self, today: date, employee=None) -> list[BusinessTrip]:
+        """Как `trips_until`: выезд не позже `today`."""
+        return [trip for trip in self._of(employee) if trip.beg_dt <= today]
+
+    def overlapping(self, period: Period, employee=None) -> list[BusinessTrip]:
+        """Командировки, пересекающие период (в том числе начавшиеся раньше)."""
+        return [
+            trip
+            for trip in self._of(employee)
+            if trip.beg_dt <= period.date_to and trip.end_dt >= period.date_from
+        ]
+
+    def first_start(self, today: date) -> date | None:
+        """Самая ранняя дата выезда во всей базе не позже `today`."""
+        return min((trip.beg_dt for trip in self.until(today)), default=None)
+
+
+def _source(source: TripSet | None) -> TripSet:
+    """Переданный набор командировок или свежая загрузка."""
+    return source if source is not None else TripSet.load()
+
+
 def _ratio(value, divisor, step: Decimal = KOPECK) -> Decimal | None:
     """value / divisor с округлением до `step`; при нулевом делителе — None."""
     if not divisor:
@@ -222,14 +273,15 @@ def _kpi_values(trips: list[BusinessTrip]) -> dict:
     }
 
 
-def trips_kpis(period: Period, employee=None) -> dict:
+def trips_kpis(period: Period, employee=None, source: TripSet | None = None) -> dict:
     """Плитки вкладки и дельты к тому же периоду прошлого года.
 
     Всего потрачено — затраты и суточные командировок периода; человеко-дни —
     сумма дней командировок; средние — до копеек, без данных — None.
     """
-    current = _kpi_values(trips_in_period(period, employee))
-    previous = _kpi_values(trips_in_period(period.previous_year(), employee))
+    source = _source(source)
+    current = _kpi_values(source.in_period(period, employee))
+    previous = _kpi_values(source.in_period(period.previous_year(), employee))
     return {
         "current": current,
         "previous": previous,
@@ -258,14 +310,17 @@ def _expense_kinds_by_total(trips: list[BusinessTrip]) -> list[str]:
     ]
 
 
-def costs_by_month(period: Period, employee=None) -> dict:
+def costs_by_month(
+    period: Period, employee=None, source: TripSet | None = None
+) -> dict:
     """Затраты по месяцам начала командировок: серии по видам затрат и суточные.
 
     Если видов больше, чем помещается в палитру, крупнейшие идут отдельными
     сериями, остальные — одной «Прочие виды»; «Суточные» всегда последние.
     """
+    source = _source(source)
     months = period.months()
-    trips = trips_in_period(period, employee)
+    trips = source.in_period(period, employee)
     kinds = _expense_kinds_by_total(trips)
     if len(kinds) > MAX_MONTH_SERIES - 1:
         shown = kinds[: MAX_MONTH_SERIES - 2]
@@ -294,10 +349,13 @@ def costs_by_month(period: Period, employee=None) -> dict:
     }
 
 
-def cost_structure(period: Period, employee=None) -> list[dict]:
+def cost_structure(
+    period: Period, employee=None, source: TripSet | None = None
+) -> list[dict]:
     """Затраты периода по видам и суточные: сумма и доля в %, по убыванию."""
+    source = _source(source)
     totals = {}
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         for kind, amount in _kind_amounts(trip):
             totals[kind] = totals.get(kind, ZERO) + amount
     grand_total = sum(totals.values(), ZERO)
@@ -369,9 +427,12 @@ def _direction_buckets(trips: list[BusinessTrip], group: str) -> dict[str, dict]
     return buckets
 
 
-def directions(period: Period, employee=None, group: str = "city") -> list[dict]:
+def directions(
+    period: Period, employee=None, group: str = "city", source: TripSet | None = None
+) -> list[dict]:
     """Затраты командировок периода по направлениям, по убыванию суммы."""
-    buckets = _direction_buckets(trips_in_period(period, employee), group)
+    source = _source(source)
+    buckets = _direction_buckets(source.in_period(period, employee), group)
     rows = [
         {
             "key": item["key"],
@@ -386,16 +447,17 @@ def directions(period: Period, employee=None, group: str = "city") -> list[dict]
     return sorted(rows, key=lambda row: (-row["amount"], row["label"]))
 
 
-def annual_by_direction(today: date, employee=None, group: str = "city") -> dict:
+def annual_by_direction(
+    today: date, employee=None, group: str = "city", source: TripSet | None = None
+) -> dict:
     """Сколько в среднем за год уходит на каждое направление (вся история).
 
     Окно — от самой ранней даты выезда во всей базе (фильтр сотрудника на него
     не влияет) до сегодня; будущие командировки не учитываются. Среднее за год —
     сумма за окно × 365 / дней окна; при окне меньше года это оценка.
     """
-    start = BusinessTrip.objects.filter(beg_dt__lte=today).aggregate(
-        start=Min("beg_dt")
-    )["start"]
+    source = _source(source)
+    start = source.first_start(today)
     if start is None:
         return {
             "start": None,
@@ -407,7 +469,7 @@ def annual_by_direction(today: date, employee=None, group: str = "city") -> dict
         }
     window_days = (today - start).days + 1
     years = list(range(start.year, today.year + 1))
-    buckets = _direction_buckets(trips_until(today, employee), group)
+    buckets = _direction_buckets(source.until(today, employee), group)
     rows = []
     for item in buckets.values():
         rows.append(
@@ -432,13 +494,16 @@ def annual_by_direction(today: date, employee=None, group: str = "city") -> dict
     }
 
 
-def direction_norms(today: date, employee=None, group: str = "city") -> dict:
+def direction_norms(
+    today: date, employee=None, group: str = "city", source: TripSet | None = None
+) -> dict:
     """Типовые затраты по направлениям за всю историю: на поездку и на день.
 
     ₽ в день — на день пребывания в пункте. Командировки без пунктов
     в нормативы не входят.
     """
-    trips = trips_until(today, employee)
+    source = _source(source)
+    trips = source.until(today, employee)
     kinds = _expense_kinds_by_total(trips) + [ALLOWANCE_LABEL]
     buckets = _direction_buckets(trips, group)
     rows = []
@@ -466,13 +531,16 @@ def direction_norms(today: date, employee=None, group: str = "city") -> dict:
     }
 
 
-def by_service_type(period: Period, employee=None) -> list[dict]:
+def by_service_type(
+    period: Period, employee=None, source: TripSet | None = None
+) -> list[dict]:
     """Командировки периода по видам работ: средняя поездка, длительность, ₽ в день.
 
     Командировка с несколькими видами работ считается в каждом из них целиком.
     """
+    source = _source(source)
     buckets = {}
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         types = list(trip.service_type.all()) or [None]
         total = trip_total(trip)
         for service_type in types:
@@ -516,10 +584,13 @@ def employee_name(user) -> str:
     return employee_fio(user) or user.username
 
 
-def employee_days(period: Period, employee=None) -> list[dict]:
+def employee_days(
+    period: Period, employee=None, source: TripSet | None = None
+) -> list[dict]:
     """Дни в командировках по сотрудникам за период, по убыванию дней."""
+    source = _source(source)
     rows = {}
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         row = rows.setdefault(
             trip.employee_id,
             {
@@ -539,19 +610,19 @@ def employee_days(period: Period, employee=None) -> list[dict]:
     return sorted(result, key=lambda row: (-row["days"], row["name"]))
 
 
-def employee_month_load(period: Period, employee=None) -> dict:
+def employee_month_load(
+    period: Period, employee=None, source: TripSet | None = None
+) -> dict:
     """Дни в отъезде «сотрудник × месяц».
 
     Берутся командировки, пересекающие период (даже начавшиеся раньше); дни
     обрезаются по границам периода и раскладываются по календарным месяцам.
     """
+    source = _source(source)
     months = period.months()
     index = {month: position for position, month in enumerate(months)}
-    queryset = BusinessTrip.objects.filter(
-        beg_dt__lte=period.date_to, end_dt__gte=period.date_from
-    )
     rows = {}
-    for trip in load_trips(_filtered(queryset, employee)):
+    for trip in source.overlapping(period, employee):
         row = rows.setdefault(
             trip.employee_id,
             {
@@ -592,7 +663,9 @@ def accountable_spent(trip: BusinessTrip) -> Decimal:
     return expenses + (trip.allowance_amount or ZERO)
 
 
-def accountable(period: Period, today: date, employee=None) -> list[dict]:
+def accountable(
+    period: Period, today: date, employee=None, source: TripSet | None = None
+) -> list[dict]:
     """Подотчёт сотрудников: получено и расход за период, остаток на сегодня.
 
     Получено — поступления ДС по дате получения; расход — `accountable_spent`
@@ -600,6 +673,7 @@ def accountable(period: Period, today: date, employee=None) -> list[dict]:
     сегодняшний день (будущие командировки не учитываются). Плюс — деньги
     у сотрудника, минус — компания должна сотруднику.
     """
+    source = _source(source)
     receipts = _filtered(MoneyReceipt.objects.select_related("employee"), employee)
     rows = {}
 
@@ -620,9 +694,9 @@ def accountable(period: Period, today: date, employee=None) -> list[dict]:
         row_of(receipt.employee)["received"] += receipt.amount
     for receipt in receipts.filter(receipt_date__lte=today):
         row_of(receipt.employee)["balance"] += receipt.amount
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         row_of(trip.employee)["spent"] += accountable_spent(trip)
-    for trip in trips_until(today, employee):
+    for trip in source.until(today, employee):
         row_of(trip.employee)["balance"] -= accountable_spent(trip)
     result = [
         {**row, "diff": row["received"] - row["spent"]}
@@ -635,13 +709,16 @@ def accountable(period: Period, today: date, employee=None) -> list[dict]:
 # --- Командировки и деньги ----------------------------------------------------------
 
 
-def contract_trip_shares(period: Period, employee=None, limit: int = 15) -> list[dict]:
+def contract_trip_shares(
+    period: Period, employee=None, limit: int = 15, source: TripSet | None = None
+) -> list[dict]:
     """Контракты, по которым были командировки периода: доля командировок в сумме.
 
     «На командировки» — все доли контракта за всё время (экономика контракта
     целиком), выборка — по командировкам периода. По убыванию доли.
     """
-    trip_ids = [trip.pk for trip in trips_in_period(period, employee)]
+    source = _source(source)
+    trip_ids = [trip.pk for trip in source.in_period(period, employee)]
     contract_ids = set(
         BusinessTripContractExpense.objects.filter(
             business_trip_id__in=trip_ids
@@ -682,7 +759,7 @@ def contract_trip_shares(period: Period, employee=None, limit: int = 15) -> list
 
 
 def clients_trips_vs_payments(
-    period: Period, employee=None, limit: int = 15
+    period: Period, employee=None, limit: int = 15, source: TripSet | None = None
 ) -> list[dict]:
     """Затраты на выезды к клиенту и его оплаты за период.
 
@@ -690,8 +767,9 @@ def clients_trips_vs_payments(
     по датам оплат периода, фильтр сотрудника на них не действует. У корзин без
     клиента оплат нет (None).
     """
+    source = _source(source)
     buckets = {}
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         for share in trip_shares(trip):
             key, name = client_of(share.destination)
             item = buckets.setdefault(key, {"key": key, "name": name, "amount": ZERO})
@@ -722,13 +800,16 @@ def clients_trips_vs_payments(
     return rows[:limit]
 
 
-def unallocated_trips(period: Period, employee=None) -> dict:
+def unallocated_trips(
+    period: Period, employee=None, source: TripSet | None = None
+) -> dict:
     """Командировки периода, стоимость которых не разнесена на контракты.
 
     `has_contracts` — контракты выбраны, но их клиентов нет в пунктах
     командировки, поэтому долей нет.
     """
-    trips = trips_in_period(period, employee)
+    source = _source(source)
+    trips = source.in_period(period, employee)
     allocated = set(
         BusinessTripContractExpense.objects.filter(
             business_trip_id__in=[trip.pk for trip in trips]
@@ -769,22 +850,31 @@ def _trip_brief(trip: BusinessTrip) -> dict:
     }
 
 
-def repeat_visits(period: Period, employee=None) -> list[dict]:
+def repeat_visits(
+    period: Period, employee=None, source: TripSet | None = None
+) -> list[dict]:
     """Повторные выезды: то же подразделение не позже чем через 30 дней.
 
     Для каждого пункта командировок периода ищется ближайший предыдущий пункт
     того же подразделения в другой командировке (любого сотрудника, за всю
     историю), закончившийся не раньше чем за `REPEAT_WINDOW_DAYS` дней до начала.
     """
-    trips = trips_in_period(period, employee)
+    source = _source(source)
+    trips = source.in_period(period, employee)
     department_ids = {
         dest.department_id for trip in trips for dest in trip.destinations.all()
     }
     history = {}
-    for row in BusinessTripDestination.objects.filter(
-        department_id__in=department_ids
-    ).values("department_id", "business_trip_id", "beg_dt", "end_dt"):
-        history.setdefault(row["department_id"], []).append(row)
+    for other in source.trips:
+        for dest in other.destinations.all():
+            if dest.department_id in department_ids:
+                history.setdefault(dest.department_id, []).append(
+                    {
+                        "business_trip_id": other.pk,
+                        "beg_dt": dest.beg_dt,
+                        "end_dt": dest.end_dt,
+                    }
+                )
     rows = []
     for trip in trips:
         for dest in _sorted_destinations(trip):
@@ -832,13 +922,16 @@ def _region_keys(trip: BusinessTrip) -> dict[str, str]:
     return keys
 
 
-def merge_candidates(period: Period, employee=None, limit: int = 15) -> list[dict]:
+def merge_candidates(
+    period: Period, employee=None, limit: int = 15, source: TripSet | None = None
+) -> list[dict]:
     """Пары командировок в один регион с разрывом 1–14 дней: можно было объединить.
 
     Пересекающиеся по датам командировки (поехали параллельно) не считаются.
     Выводятся `limit` пар с наименьшим разрывом.
     """
-    trips = sorted(trips_in_period(period, employee), key=lambda t: t.beg_dt)
+    source = _source(source)
+    trips = sorted(source.in_period(period, employee), key=lambda t: t.beg_dt)
     regions = {trip.pk: _region_keys(trip) for trip in trips}
     rows = []
     for index, first in enumerate(trips):
@@ -892,7 +985,11 @@ def _main_region(trip: BusinessTrip) -> tuple[str, str] | None:
 
 
 def expensive_trips(
-    period: Period, today: date, employee=None, limit: int = 10
+    period: Period,
+    today: date,
+    employee=None,
+    limit: int = 10,
+    source: TripSet | None = None,
 ) -> list[dict]:
     """Командировки периода, заметно дороже обычной цены дня в их регионе.
 
@@ -901,9 +998,10 @@ def expensive_trips(
     `MIN_TRIPS_FOR_REGION_MEDIAN` поездок, иначе общая медиана. Выводятся
     командировки от `EXPENSIVE_RATIO` медианы, по убыванию отношения.
     """
+    source = _source(source)
     by_region = {}
     overall = []
-    for trip in trips_until(today):
+    for trip in source.until(today):
         per_day = _per_day_without_allowance(trip)
         # поездки без затрат (ещё не внесены или только суточные) тянули бы
         # медиану к нулю — в базу сравнения они не входят
@@ -917,7 +1015,7 @@ def expensive_trips(
         return []
     overall_median = statistics.median(overall)
     rows = []
-    for trip in trips_in_period(period, employee):
+    for trip in source.in_period(period, employee):
         per_day = _per_day_without_allowance(trip)
         if not per_day:
             continue
