@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'analytics/css/analytics.css' %}">
+    {# Chart.js лежит в проекте (без CDN); defer сохраняет порядок: сначала библиотека, потом наш скрипт #}
+    <script src="{% static 'analytics/vendor/chart.umd.min.js' %}" defer></script>
+    <script src="{% static 'analytics/js/charts.js' %}" defer></script>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} analytics{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Начало</a>
+    &rsaquo; <a href="{% url 'analytics:index' %}">Аналитика</a>
+    &rsaquo; {{ active_tab.title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<nav class="analytics-tabs" aria-label="Вкладки статистики">
+    {% for tab in tabs %}
+        <a href="{% url tab.url_name %}"{% if tab == active_tab %} class="active" aria-current="page"{% endif %}>{{ tab.title }}</a>
+    {% endfor %}
+</nav>
+
+<form method="get" class="analytics-filters">
+    {% for field in form %}
+        <div class="analytics-filter analytics-filter-{{ field.name }}">
+            {{ field.label_tag }}
+            {{ field }}
+        </div>
+    {% endfor %}
+    <button type="submit">Показать</button>
+</form>
+
+{# Показываем фактический период: при мусоре в параметрах форма откатывается к текущему году, а поля хранят ввод пользователя #}
+<p class="analytics-period">Период: {{ period.date_from|date:"d.m.Y" }} — {{ period.date_to|date:"d.m.Y" }} · сравнение с {{ previous_period.date_from|date:"d.m.Y" }} — {{ previous_period.date_to|date:"d.m.Y" }}</p>
+
+{% block analytics_content %}{% endblock %}
+{% endblock %}

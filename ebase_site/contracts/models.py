@@ -173,9 +173,12 @@ class Contract(ContractModelBase):
 
     def save(self, *args, **kwargs):
         self.update_payment_status()
+        self.debt = Decimal(str(self.contract_amount or 0)) - Decimal(
+            str(self.payment_amount or 0)
+        )
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs["update_fields"] = set(update_fields) | {"payment_status"}
+            kwargs["update_fields"] = set(update_fields) | {"payment_status", "debt"}
         super().save(*args, **kwargs)
 
 

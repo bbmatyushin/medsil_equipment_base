@@ -42,8 +42,9 @@ INSTALLED_APPS = [
     "spare_part.apps.SparePartConfig",
     "contracts.apps.ContractsConfig",
     "business_trip.apps.BusinessTripConfig",
+    "analytics.apps.AnalyticsConfig",
     "debug_toolbar",
-    "django.contrib.admin",
+    "ebase_site.apps.EbaseAdminConfig",  # django.contrib.admin с сайтом проекта
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

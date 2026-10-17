@@ -1,0 +1,445 @@
+/*
+ * Раздел «Аналитика»: цвета графиков, вкладки, фильтры, плитки, карточки, таблицы.
+ *
+ * Палитра подобрана по скиллу dataviz и проверена его валидатором (validate_palette.js)
+ * на фонах админки: #ffffff (светлая) и #121212 (тёмная). Шесть категориальных цветов
+ * в фиксированном порядке различимы при протанопии и дейтеранопии (соседние пары
+ * ΔE ≥ 8,4), у всех контраст с фоном ≥ 3:1. «Плюс/минус» — синий/красный
+ * (расходящаяся пара, без пары красный/зелёный).
+ * Темы переключаются так же, как в base.css и dark_mode.css админки Django 4.2.
+ */
+
+/* Светлая тема: по умолчанию и при явном выборе */
+html[data-theme="light"],
+:root {
+    --an-c1: #2a78d6; /* синий */
+    --an-c2: #d95926; /* оранжевый */
+    --an-c3: #199e70; /* бирюзовый */
+    --an-c4: #c98500; /* охра */
+    --an-c5: #d55181; /* пурпурный */
+    --an-c6: #008300; /* зелёный */
+    --an-positive: #2a78d6;
+    --an-negative: #e34948;
+    --an-grid: #e1e0d9;
+    --an-text: #52514e; /* подписи осей, легенды, пояснения */
+    --an-ink: #0b0b0b; /* значения */
+    --an-surface: #ffffff; /* фон карточек и графиков */
+    --an-border: rgba(11, 11, 11, 0.1);
+    --an-good: #006300; /* текст дельты «к лучшему» */
+    --an-bad: #d03b3b; /* текст дельты «к худшему» */
+}
+
+/* Тёмная тема по настройке системы (режим «auto») */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --an-c1: #3987e5;
+        --an-c2: #d95926;
+        --an-c3: #199e70;
+        --an-c4: #c98500;
+        --an-c5: #d55181;
+        --an-c6: #008300;
+        --an-positive: #3987e5;
+        --an-negative: #e66767;
+        --an-grid: #2c2c2a;
+        --an-text: #c3c2b7;
+        --an-ink: #ffffff;
+        --an-surface: #121212;
+        --an-border: rgba(255, 255, 255, 0.1);
+        --an-good: #0ca30c;
+        --an-bad: #e66767;
+    }
+}
+
+/* Тёмная тема, выбранная переключателем админки */
+html[data-theme="dark"] {
+    --an-c1: #3987e5;
+    --an-c2: #d95926;
+    --an-c3: #199e70;
+    --an-c4: #c98500;
+    --an-c5: #d55181;
+    --an-c6: #008300;
+    --an-positive: #3987e5;
+    --an-negative: #e66767;
+    --an-grid: #2c2c2a;
+    --an-text: #c3c2b7;
+    --an-ink: #ffffff;
+    --an-surface: #121212;
+    --an-border: rgba(255, 255, 255, 0.1);
+    --an-good: #0ca30c;
+    --an-bad: #e66767;
+}
+
+/* --- Вкладки ---------------------------------------------------------------- */
+
+.analytics-tabs {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 16px;
+    border-bottom: 1px solid var(--hairline-color);
+    /* на узком экране прокручивается полоса вкладок, а не страница */
+    overflow-x: auto;
+}
+
+.analytics-tabs a {
+    padding: 8px 14px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    color: var(--body-quiet-color);
+    white-space: nowrap;
+}
+
+.analytics-tabs a:hover,
+.analytics-tabs a:focus {
+    color: var(--link-hover-color);
+}
+
+.analytics-tabs a.active {
+    color: var(--body-loud-color);
+    border-bottom-color: var(--link-fg);
+    font-weight: 600;
+}
+
+/* --- Фильтры ---------------------------------------------------------------- */
+
+.analytics-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 16px;
+    margin: 0 0 8px;
+}
+
+.analytics-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* поля дат скрывает charts.js, если период не «Свой период» */
+.analytics-filter[hidden] {
+    display: none;
+}
+
+.analytics-filter label {
+    color: var(--body-quiet-color);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.analytics-filter select {
+    max-width: 320px;
+}
+
+.analytics-filters button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    background: var(--button-bg);
+    color: var(--button-fg);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.analytics-filters button:hover,
+.analytics-filters button:focus {
+    background: var(--button-hover-bg);
+}
+
+.analytics-period {
+    margin: 0 0 16px;
+    color: var(--body-quiet-color);
+}
+
+/* --- Плитки KPI ------------------------------------------------------------- */
+
+.an-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.an-tile {
+    min-width: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--an-border);
+    border-radius: 8px;
+    background: var(--an-surface);
+}
+
+.an-tile-label {
+    margin: 0 0 4px;
+    color: var(--an-text);
+    font-size: 0.8125rem;
+}
+
+.an-tile-value {
+    margin: 0;
+    color: var(--an-ink);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.an-tile-delta {
+    margin: 6px 0 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.an-tile-note {
+    margin: 2px 0 0;
+    color: var(--an-text);
+    font-size: 0.75rem;
+}
+
+/* Ссылка «Открыть в реестре» под плитками */
+.an-registry-link {
+    margin: 0 0 16px;
+    color: var(--an-text);
+    font-size: 0.8125rem;
+}
+
+/* Дельта к прошлому году: цвет по направлению, знак «+/−» дублирует его в тексте */
+.an-delta--up {
+    color: var(--an-good);
+}
+
+.an-delta--down {
+    color: var(--an-bad);
+}
+
+.an-delta--flat {
+    color: var(--an-text);
+}
+
+/* Плитка, где рост — плохо (затраты, долг): цвета дельты меняются местами */
+.an-tile--inverse .an-delta--up {
+    color: var(--an-bad);
+}
+
+.an-tile--inverse .an-delta--down {
+    color: var(--an-good);
+}
+
+/* --- Карточки графиков ------------------------------------------------------ */
+
+.an-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0 0 16px;
+}
+
+.an-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--an-border);
+    border-radius: 8px;
+    background: var(--an-surface);
+}
+
+.an-card--wide {
+    grid-column: 1 / -1;
+}
+
+.an-card h2 {
+    margin: 0 0 4px;
+    padding: 0;
+    background: none;
+    color: var(--an-ink);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.an-card-note {
+    margin: 0 0 12px;
+    color: var(--an-text);
+    font-size: 0.8125rem;
+}
+
+/* Chart.js с maintainAspectRatio: false занимает высоту контейнера целиком (с подписями осей) */
+.an-chart {
+    position: relative;
+    height: 300px;
+}
+
+.an-chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    margin: 0;
+    padding: 16px;
+    border-radius: 6px;
+    background: var(--darkened-bg);
+    color: var(--an-text);
+    text-align: center;
+}
+
+/* --- Таблицы и тепловая карта ----------------------------------------------- */
+
+/* широкая таблица прокручивается внутри карточки, а не страница */
+.an-table-wrap {
+    overflow-x: auto;
+}
+
+.an-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.an-table th,
+.an-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--hairline-color);
+    text-align: left;
+    vertical-align: top;
+}
+
+.an-table th {
+    color: var(--an-text);
+    font-weight: 600;
+}
+
+.an-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Пояснение рядом со значением («предоплата») */
+.an-note {
+    color: var(--an-text);
+    font-size: 0.75rem;
+}
+
+/* Матрица «оказано × оплачено»: количество, под ним сумма; ссылка — на всю ячейку.
+   Заголовки столбцов переносятся, чтобы матрица помещалась в половину ширины */
+.an-table.an-matrix th,
+.an-table.an-matrix td {
+    padding: 6px;
+}
+
+.an-table.an-matrix thead th {
+    white-space: normal;
+}
+
+.an-matrix td a {
+    display: block;
+}
+
+.an-matrix-amount {
+    display: block;
+    color: var(--an-text);
+    font-size: 0.75rem;
+}
+
+/*
+ * Подкраска ячеек матрицы: тон — смысл ячейки (класс an-tone-*, считает view),
+ * насыщенность — сумма (--an-shade, 0–1, корень доли от крупнейшей ячейки того же тона).
+ * Предел заливки (--an-tone-max) не выше 45 % поверх фона карточки, чтобы текст
+ * и ссылки читались; серый «в процессе» бледнее: внимание — на красные ячейки.
+ */
+.an-tone-risk {
+    --an-tone: var(--an-negative);
+    --an-tone-max: 45%;
+}
+
+.an-tone-ok {
+    --an-tone: var(--an-positive);
+    --an-tone-max: 35%;
+}
+
+.an-tone-progress {
+    --an-tone: var(--an-text);
+    --an-tone-max: 18%;
+}
+
+.an-matrix td[class*="an-tone-"] {
+    background: color-mix(
+        in srgb,
+        var(--an-tone) calc(var(--an-shade, 0) * var(--an-tone-max)),
+        var(--an-surface)
+    );
+}
+
+/* Образец цвета в пояснении под матрицей */
+.an-swatch {
+    display: inline-block;
+    width: 0.75em;
+    height: 0.75em;
+    border-radius: 2px;
+    vertical-align: -0.05em;
+    background: color-mix(in srgb, var(--an-tone) var(--an-tone-max), var(--an-surface));
+}
+
+/* Подзаголовок второго блока в той же карточке (график под матрицей) */
+.an-card h3.an-subtitle {
+    margin: 16px 0 4px;
+    padding: 0;
+    background: none;
+    color: var(--an-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: none;
+}
+
+/* таблица под графиком в той же карточке («Возраст долга») */
+.an-card .an-chart + .an-table-wrap {
+    margin-top: 12px;
+}
+
+/*
+ * Ячейка тепловой карты: класс an-heat-N, N = 0…5 — доля от максимума таблицы (считает view).
+ * Один оттенок (синий) поверх фона карточки: в тёмной теме малые значения темнее, большие светлее.
+ * Заливка не выше 60 %, чтобы основной цвет текста читался на всех уровнях.
+ */
+.an-heat-1 {
+    background: color-mix(in srgb, var(--an-c1) 12%, var(--an-surface));
+}
+
+.an-heat-2 {
+    background: color-mix(in srgb, var(--an-c1) 24%, var(--an-surface));
+}
+
+.an-heat-3 {
+    background: color-mix(in srgb, var(--an-c1) 36%, var(--an-surface));
+}
+
+.an-heat-4 {
+    background: color-mix(in srgb, var(--an-c1) 48%, var(--an-surface));
+}
+
+.an-heat-5 {
+    background: color-mix(in srgb, var(--an-c1) 60%, var(--an-surface));
+}
+
+/* --- Узкий экран: всё в одну колонку, без горизонтальной прокрутки ---------- */
+
+@media (max-width: 767px) {
+    .analytics-filter {
+        flex: 1 1 100%;
+    }
+
+    .analytics-filter select,
+    .analytics-filter input {
+        width: 100%;
+        max-width: none;
+        box-sizing: border-box;
+    }
+
+    .an-tiles,
+    .an-charts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .an-charts {
+        gap: 12px;
+    }
+
+    .an-card {
+        padding: 12px;
+    }
+}

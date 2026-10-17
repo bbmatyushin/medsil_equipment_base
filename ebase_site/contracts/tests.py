@@ -1,6 +1,8 @@
+import importlib
 from datetime import date
 from decimal import Decimal
 
+from django.apps import apps as django_apps
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -405,3 +407,67 @@ class ContractAdminBusinessTripSectionTests(TestCase):
             reverse("admin:business_trip_businesstrip_change", args=[trip.pk]),
             content,
         )
+
+
+class ContractDebtTests(TestCase):
+    """Долг пересчитывается при сохранении самого контракта + миграция пересчёта."""
+
+    def setUp(self):
+        self.city, _ = City.objects.get_or_create(
+            name="Москва", region=None, defaults={"region": None}
+        )
+        self.client_obj = Client.objects.create(
+            name="Тестовый клиент", city=self.city, inn="123456789001"
+        )
+        self.contract = Contract.objects.create(
+            client=self.client_obj,
+            contract_number="CNT-001",
+            conclusion_date="2026-01-15",
+            contract_amount=100000,
+        )
+
+    def test_new_contract_without_payments_has_full_debt(self):
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.debt, Decimal("100000"))
+
+    def test_debt_recalculated_when_amount_changes(self):
+        Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("100000")
+        )
+        self.contract.refresh_from_db()
+        self.contract.contract_amount = Decimal("150000")
+        self.contract.save()
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.debt, Decimal("50000"))
+        self.assertEqual(self.contract.payment_status, "partial")
+
+    def test_save_with_update_fields_updates_debt(self):
+        self.contract.contract_amount = Decimal("120000")
+        self.contract.save(update_fields=["contract_amount"])
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.debt, Decimal("120000"))
+
+    def test_recalc_migration_fixes_stale_totals(self):
+        Payment.objects.create(
+            contract=self.contract, date="2026-01-20", amount=Decimal("30000")
+        )
+        ContractExpense.objects.create(
+            contract=self.contract, expense_type="other", quantity=1, cost=5000
+        )
+        Contract.objects.filter(pk=self.contract.pk).update(
+            debt=0,
+            payment_amount=0,
+            expenses_amount=0,
+            profit=0,
+            payment_status="no_receipts",
+        )
+        migration = importlib.import_module(
+            "contracts.migrations.0006_recalc_contract_totals"
+        )
+        migration.recalc_contract_totals(django_apps, None)
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.payment_amount, Decimal("30000"))
+        self.assertEqual(self.contract.expenses_amount, Decimal("5000"))
+        self.assertEqual(self.contract.debt, Decimal("70000"))
+        self.assertEqual(self.contract.profit, Decimal("25000"))
+        self.assertEqual(self.contract.payment_status, "partial")

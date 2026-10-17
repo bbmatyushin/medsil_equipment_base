@@ -1,0 +1,157 @@
+{% extends "analytics/base.html" %}
+{% load analytics_tags %}
+
+{% block analytics_content %}
+<section class="an-tiles" aria-label="Итоги по контрактам периода">
+    {% for tile in tiles %}
+        <div class="an-tile{% if tile.inverse %} an-tile--inverse{% endif %}">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            {% if tile.percent %}
+                <p class="an-tile-value">{{ tile.value|pct }}</p>
+                <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta:"pp" }}</p>
+            {% else %}
+                <p class="an-tile-value">{{ tile.value|money }}</p>
+                <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta }}</p>
+            {% endif %}
+            <p class="an-tile-note">к {{ previous_period.date_from|date:"d.m.Y" }} — {{ previous_period.date_to|date:"d.m.Y" }}</p>
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link"><a href="{{ registry_url }}">Открыть в реестре</a> — контракты периода с теми же фильтрами; «Итого» списка совпадает с плитками.</p>
+
+<div class="an-charts">
+    <section class="an-card an-card--wide">
+        <h2>Движение денег</h2>
+        <p class="an-card-note">По фактическим датам оплат и затрат. Ушло — только затраты, отнесённые на контракты.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.money_flow chart_id="chart-money-flow" title="Движение денег по месяцам" %}
+    </section>
+
+    <section class="an-card">
+        <h2>Заключено контрактов</h2>
+        <p class="an-card-note">Сумма контрактов по дате заключения; накопительный итог — по правой шкале.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.concluded chart_id="chart-concluded" title="Заключено контрактов по месяцам" %}
+    </section>
+
+    <section class="an-card">
+        <h2>Структура затрат</h2>
+        <p class="an-card-note">Затраты на контракты по фактическим датам.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.cost_structure chart_id="chart-cost-structure" title="Структура затрат по месяцам" %}
+    </section>
+
+    <section class="an-card">
+        <h2>Возраст долга</h2>
+        <p class="an-card-note">Все контракты с долгом на сегодня, период не учитывается. Возраст — от окончания услуг, без даты окончания — от заключения.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.debt_aging chart_id="chart-debt-aging" title="Возраст долга" empty_text="Долгов нет" %}
+        {% if not charts.debt_aging.empty %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Срок</th>
+                            <th scope="col" class="num">Контрактов</th>
+                            <th scope="col" class="num">Долг</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bucket in aging %}
+                            <tr>
+                                <td>
+                                    {% if bucket.url %}<a href="{{ bucket.url }}">{{ bucket.label }}</a>{% else %}{{ bucket.label }}{% endif %}
+                                    {% if bucket.all_debtors %}<div class="an-note">{% if client %}все должники клиента{% else %}все должники{% endif %}: в корзине больше {{ max_link_ids }} контрактов</div>{% endif %}
+                                </td>
+                                <td class="num">{{ bucket.count }}</td>
+                                <td class="num">{{ bucket.amount|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Оказано × оплачено</h2>
+        <p class="an-card-note">Контракты периода: количество и сумма. Клик — список контрактов.</p>
+        <div class="an-table-wrap">
+            <table class="an-table an-matrix">
+                <thead>
+                    <tr>
+                        <th scope="col">Услуги \ оплата</th>
+                        {% for column in matrix.columns %}
+                            <th scope="col" class="num">{{ column.label|capfirst }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in matrix.rows %}
+                        <tr>
+                            <th scope="row">{{ row.label|capfirst }}</th>
+                            {% for cell in row.cells %}
+                                <td class="num an-tone-{{ cell.tone }}" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">
+                                    {% if cell.count %}
+                                        <a href="{{ cell.url }}">{{ cell.count }}<span class="an-matrix-amount">{{ cell.amount|money }}</span></a>
+                                    {% else %}
+                                        0<span class="an-matrix-amount">{{ cell.amount|money }}</span>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="an-card-note">Цвет ячейки: <span class="an-swatch an-tone-risk"></span> услуги оказаны, но оплачены не полностью, <span class="an-swatch an-tone-ok"></span> оплачено, <span class="an-swatch an-tone-progress"></span> работа и оплаты в процессе. Чем больше сумма, тем насыщеннее цвет.</p>
+
+        <h3 class="an-subtitle">Получено и долг по стадиям работ</h3>
+        <p class="an-card-note">Оплаты и остаток долга по тем же контрактам. Клик по полосе — должники этой стадии.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.stage_money chart_id="chart-stage-money" title="Получено и долг по стадиям работ" height=220 %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Топ клиентов</h2>
+        <p class="an-card-note">Оплаты по контрактам периода, 10 крупнейших клиентов; все клиенты, фильтр клиента не применяется.{% if pareto_caption %} {{ pareto_caption }}.{% endif %}</p>
+        {% include "analytics/includes/chart.html" with spec=charts.top_clients chart_id="chart-top-clients" title="Топ клиентов по оплатам" %}
+    </section>
+
+    <section class="an-card">
+        <h2>Рентабельность клиентов</h2>
+        <p class="an-card-note">Прибыль по контрактам периода: 10 лучших и все убыточные; все клиенты, фильтр клиента не применяется.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.profitability chart_id="chart-profitability" title="Рентабельность клиентов" height=profitability_height %}
+    </section>
+
+    <section class="an-card">
+        <h2>Контракты: сумма и маржа</h2>
+        <p class="an-card-note">Контракты периода с оплатами: по горизонтали сумма контракта, по вертикали маржа. Чем больше маржа по модулю, тем крупнее пузырёк (от ±100 % — максимальный); прибыльные — синие, убыточные — красные. Клик — карточка контракта.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.scatter chart_id="chart-scatter" title="Контракты: сумма и маржа" %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Платёжная дисциплина</h2>
+        <p class="an-card-note">Все поступления по контрактам периода, в том числе частично оплаченным: сколько дней прошло от заключения контракта до оплаты, в среднем по клиенту с весом по сумме оплаты. Меньше нуля — оплата до подписания.</p>
+        {% if discipline %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Клиент</th>
+                            <th scope="col" class="num">Средний срок оплаты, дн.</th>
+                            <th scope="col" class="num">Контрактов</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in discipline %}
+                            <tr>
+                                <td>{{ row.name }}</td>
+                                <td class="num">{{ row.avg_days|floatformat:1 }}{% if row.avg_days < 0 %} <span class="an-note">предоплата</span>{% endif %}</td>
+                                <td class="num">{{ row.contracts }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

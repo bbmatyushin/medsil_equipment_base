@@ -7,6 +7,7 @@ from debug_toolbar.toolbar import debug_toolbar_urls
 urlpatterns = [
     path("", include("ebase.urls")),
     path("", include("directory.urls")),
+    path("admin/analytics/", include("analytics.urls")),
     path("admin/", admin.site.urls),
 ]
 
