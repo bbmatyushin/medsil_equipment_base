@@ -172,8 +172,8 @@ def _trips_charts(
         "employee_days": chart_spec(
             "bar",
             [row["name"] for row in days],
-            # охра (--an-c4, #c98500): дни — не деньги, отличаем от синих сумм
-            [{"label": "Дней", "data": [row["days"] for row in days], "color": "c4"}],
+            # зелёный (--an-c6, #008300): дни — не деньги, отличаем от синих сумм
+            [{"label": "Дней", "data": [row["days"] for row in days], "color": "c6"}],
             fmt="count",
             horizontal=True,
             links=[row["url"] for row in days],
