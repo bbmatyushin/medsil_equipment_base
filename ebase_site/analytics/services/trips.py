@@ -534,6 +534,18 @@ def direction_norms(
     }
 
 
+def _service_type_parts(trip: BusinessTrip, cost: Decimal) -> list[tuple]:
+    """Стоимость командировки поровну между её видами работ (до копеек).
+
+    Возвращает пары (вид работ или None, доля) в порядке названий; остаток
+    копеек — первому. Без видов — одна пара (None, вся стоимость).
+    """
+    types = sorted(trip.service_type.all(), key=lambda service_type: service_type.name)
+    if not types:
+        return [(None, cost)]
+    return list(zip(types, split_proportional(cost, [1] * len(types))))
+
+
 def service_type_shares(
     period: Period, employee=None, source: TripSet | None = None
 ) -> dict:
@@ -542,24 +554,20 @@ def service_type_shares(
     В отличие от таблицы «По видам работ», стоимость командировки с несколькими
     видами делится между ними поровну (до копеек), поэтому сумма долей равна
     «Всего потрачено». Без вида — «Вид работ не указан». Порядок долек — как
-    в таблице (по числу поездок, затем по названию); если видов больше
-    `MAX_PIE_SLICES`, идущие в таблице дальше сворачиваются в «Прочие виды работ».
+    в таблице — по убыванию затрат вида, затем по названию; если видов больше
+    `MAX_PIE_SLICES`, самые маленькие сворачиваются в «Прочие виды работ».
     """
     source = _source(source)
     amounts = {}
-    trips_count = {}
     total = ZERO
     for trip in source.in_period(period, employee):
         cost = trip_total(trip)
         total += cost
-        names = sorted(service_type.name for service_type in trip.service_type.all())
-        if not names:
-            names = [NO_SERVICE_TYPE_LABEL]
-        for name, part in zip(names, split_proportional(cost, [1] * len(names))):
+        for service_type, part in _service_type_parts(trip, cost):
+            name = service_type.name if service_type else NO_SERVICE_TYPE_LABEL
             amounts[name] = amounts.get(name, ZERO) + part
-            trips_count[name] = trips_count.get(name, 0) + 1
     # тот же порядок, что у строк by_service_type
-    order = sorted(amounts, key=lambda name: (-trips_count[name], name))
+    order = sorted(amounts, key=lambda name: (-amounts[name], name))
     if len(order) > MAX_PIE_SLICES:
         kept, rest = order[: MAX_PIE_SLICES - 1], order[MAX_PIE_SLICES - 1 :]
     else:
@@ -581,13 +589,14 @@ def by_service_type(
     """Командировки периода по видам работ: средняя поездка, длительность, ₽ в день.
 
     Командировка с несколькими видами работ считается в каждом из них целиком.
+    Строки — по убыванию затрат вида, как дольки `service_type_shares` (там
+    стоимость такой командировки делится между видами поровну).
     """
     source = _source(source)
     buckets = {}
     for trip in source.in_period(period, employee):
-        types = list(trip.service_type.all()) or [None]
         total = trip_total(trip)
-        for service_type in types:
+        for service_type, part in _service_type_parts(trip, total):
             key = service_type.pk if service_type is not None else None
             item = buckets.setdefault(
                 key,
@@ -600,9 +609,11 @@ def by_service_type(
                     ),
                     "trips": 0,
                     "amount": ZERO,
+                    "share": ZERO,
                     "days": 0,
                 },
             )
+            item["share"] += part
             item["trips"] += 1
             item["amount"] += total
             item["days"] += trip.days_count or 0
@@ -614,10 +625,11 @@ def by_service_type(
             "avg_trip": _ratio(item["amount"], item["trips"]),
             "avg_days": _ratio(item["days"], item["trips"], TENTH),
             "per_day": _ratio(item["amount"], item["days"]),
+            "share": item["share"],
         }
         for item in buckets.values()
     ]
-    return sorted(rows, key=lambda row: (-row["trips"], row["label"]))
+    return sorted(rows, key=lambda row: (-row["share"], row["label"]))
 
 
 # --- Сотрудники и подотчёт ---------------------------------------------------------
