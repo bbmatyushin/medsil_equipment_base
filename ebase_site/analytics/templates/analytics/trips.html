@@ -20,7 +20,7 @@
 <p class="an-registry-link"><a href="{{ trips_list_url }}">Открыть список командировок</a> — командировки периода (по дате выезда) с теми же фильтрами.</p>
 
 <div class="an-charts">
-    <section class="an-card an-card--wide">
+    <section class="an-card">
         <h2>Затраты по месяцам</h2>
         <p class="an-card-note">Все затраты и суточные командировки относятся к месяцу её начала, как в отчёте по ДС.</p>
         {% include "analytics/includes/chart.html" with spec=charts.by_month chart_id="chart-trips-by-month" title="Затраты на командировки по месяцам" %}
@@ -165,7 +165,7 @@
 
 <h2 class="an-section-title">Сотрудники</h2>
 <div class="an-charts">
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Дни в разъездах</h2>
         <p class="an-card-note">Командировки периода по сотрудникам. Клик — командировки сотрудника.</p>
         {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height %}
@@ -197,7 +197,7 @@
         {% endif %}
     </section>
 
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Подотчёт</h2>
         <p class="an-card-note">Остаток = получено − (затраты без «Я.командировки» + суточные), накопительно на сегодня, период на остаток не влияет. Плюс — деньги у сотрудника, минус — компания должна сотруднику. Клик — поступления ДС сотрудника.</p>
         {% include "analytics/includes/chart.html" with spec=charts.balance chart_id="chart-trips-balance" title="Остаток подотчёта на сегодня" height=balance_height empty_text="Нет данных" %}
@@ -247,7 +247,7 @@
                             <tr>
                                 <th scope="row">{{ row.name }}</th>
                                 {% for cell in row.cells %}
-                                    <td class="num an-tone-load" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">{% if cell.days %}{{ cell.days }}{% endif %}</td>
+                                    {% if cell.days %}<td class="num an-tone-load" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">{{ cell.days }}</td>{% else %}<td class="num"></td>{% endif %}
                                 {% endfor %}
                                 <td class="num"><strong>{{ row.total }}</strong></td>
                             </tr>
@@ -298,7 +298,7 @@
         {% endif %}
     </section>
 
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Клиенты: выезды и оплаты</h2>
         <p class="an-card-note">Затраты отнесены к клиенту по пунктам командировки; оплаты — по датам оплат периода, фильтр сотрудника на них не действует.</p>
         {% include "analytics/includes/chart.html" with spec=charts.clients chart_id="chart-trips-clients" title="Затраты на выезды по клиентам" height=clients_height %}
@@ -328,7 +328,7 @@
         {% endif %}
     </section>
 
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Не разнесены на контракты</h2>
         <p class="an-card-note">Командировки периода без долей по контрактам: контракт не выбран или его клиента нет в пунктах командировки.</p>
         {% if unallocated.rows %}
@@ -402,7 +402,7 @@
         {% endif %}
     </section>
 
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Можно было объединить</h2>
         <p class="an-card-note">Командировки периода в один регион с разрывом до {{ merge_window_days }} дней (поездки с пересекающимися датами не учитываются).</p>
         {% if merges %}
@@ -435,7 +435,7 @@
         {% endif %}
     </section>
 
-    <section class="an-card">
+    <section class="an-card an-card--wide">
         <h2>Необычно дорогие поездки</h2>
         <p class="an-card-note">₽ в день без суточных против медианы основного региона поездки за всю историю (при меньше чем 3 поездках в регионе — общей медианы); показаны от 1,5×.</p>
         {% if expensive %}
