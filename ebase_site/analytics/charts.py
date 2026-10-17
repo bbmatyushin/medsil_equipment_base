@@ -6,9 +6,15 @@ View собирает спецификацию через `chart_spec()`, шаб
 и списков, без Decimal и дат.
 """
 
+import math
+
 KINDS = ("bar", "line", "scatter")
 FORMATS = ("money", "count", "percent")
 AXES = ("y", "y2")
+
+# Радиус пузырька scatter, px
+BUBBLE_MIN_RADIUS = 4
+BUBBLE_MAX_RADIUS = 20
 
 
 def to_float(value) -> float:
@@ -18,14 +24,34 @@ def to_float(value) -> float:
     return round(float(value), 2)
 
 
+def bubble_radius(value, full_scale) -> float:
+    """Радиус пузырька по модулю значения, знак не важен.
+
+    0 — минимальный радиус, |value| ≥ `full_scale` — максимальный. Радиус
+    растёт как корень из доли шкалы, чтобы площадь пузырька росла примерно
+    пропорционально значению.
+    """
+    share = min(abs(to_float(value)) / full_scale, 1.0)
+    radius = BUBBLE_MIN_RADIUS + (BUBBLE_MAX_RADIUS - BUBBLE_MIN_RADIUS) * math.sqrt(
+        share
+    )
+    return round(radius, 1)
+
+
 def _point(point: dict) -> dict:
-    """Точка scatter: координаты в float, подпись и ссылка — строки."""
-    return {
+    """Точка scatter: координаты в float, подпись и ссылка — строки.
+
+    Необязательный `r` — радиус пузырька в px (см. `bubble_radius`).
+    """
+    result = {
         "x": to_float(point.get("x")),
         "y": to_float(point.get("y")),
         "label": str(point.get("label") or ""),
         "url": point.get("url") or None,
     }
+    if point.get("r") is not None:
+        result["r"] = to_float(point["r"])
+    return result
 
 
 def _dataset(dataset: dict, chart_kind: str) -> dict:
@@ -82,7 +108,8 @@ def chart_spec(
       со шкалой 0–100 %, остальные серии — в формате графика (`fmt`).
       Пример: «Накопительно» поверх столбцов — `axis="y2", fmt="money"`
       (правая шкала денег подстраивается под данные и не сплющивает столбцы).
-      У scatter `data` — точки `{"x", "y", "label", "url"}`.
+      У scatter `data` — точки `{"x", "y", "label", "url", "r"?}`; `sign_colors`
+      у scatter красит точки по знаку `y`.
     - `fmt`: формат значений ("money" | "count" | "percent"); у scatter — ось Y.
     - `x_fmt`: формат оси X у scatter (по умолчанию деньги), у остальных не используется.
     - `links[i]`: куда ведёт клик по i-й метке (None — никуда).

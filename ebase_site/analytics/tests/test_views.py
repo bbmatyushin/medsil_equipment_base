@@ -611,6 +611,28 @@ class FinancePageTests(TestCase):
             ["Альфа", "Бета", "Гамма"],
         )
 
+    def test_finance_scatter_bubbles_sized_by_margin_and_colored_by_sign(self):
+        client = make_client("Пузырьки")
+        # маржа 100 %: оплата без затрат
+        _paid_contract(client, "B-1", date(2026, 3, 1), 1000)
+        # маржа 10 % и −50 %: затраты 900 и 1500 при оплате 1000
+        for number, cost in (("B-2", 900), ("B-3", 1500)):
+            contract = _paid_contract(client, number, date(2026, 3, 1), 1000)
+            ContractExpense.objects.create(
+                contract=contract, expense_type="other", quantity=1, cost=cost
+            )
+
+        response = self._get()
+
+        dataset = response.context["charts"]["scatter"]["datasets"][0]
+        self.assertIs(dataset["sign_colors"], True)
+        # крупные пузырьки идут первыми, чтобы мелкие рисовались поверх них
+        self.assertEqual(
+            [(point["y"], point["r"]) for point in dataset["data"]],
+            [(100.0, 20.0), (-50.0, 15.3), (10.0, 9.1)],
+        )
+        self.assertContains(response, "убыточные — красные")
+
     def test_finance_profitability_losers_at_bottom(self):
         names = ["Альфа", "Бета", "Гамма", "Дельта"]
         alpha, beta, gamma, delta = (make_client(name) for name in names)

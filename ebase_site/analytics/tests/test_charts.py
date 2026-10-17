@@ -8,7 +8,13 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from analytics.charts import chart_spec, to_float
+from analytics.charts import (
+    BUBBLE_MAX_RADIUS,
+    BUBBLE_MIN_RADIUS,
+    bubble_radius,
+    chart_spec,
+    to_float,
+)
 from analytics.links import change_url, changelist_url
 from analytics.templatetags.analytics_tags import delta, delta_class, money, pct
 
@@ -174,6 +180,15 @@ class ChartSpecTests(SimpleTestCase):
             ],
         )
 
+    def test_scatter_point_keeps_bubble_radius(self):
+        spec = chart_spec(
+            "scatter",
+            [],
+            [{"label": "Контракты", "data": [{"x": 1, "y": -40, "r": 14.1}]}],
+            fmt="percent",
+        )
+        self.assertEqual(spec["datasets"][0]["data"][0]["r"], 14.1)
+
     def test_scatter_without_points_is_empty(self):
         spec = chart_spec("scatter", [], [{"label": "Контракты", "data": []}])
         self.assertTrue(spec["empty"])
@@ -317,3 +332,28 @@ class ChartAssetsTests(TestCase):
         self.assertContains(response, "analytics/vendor/chart.umd.min.js")
         self.assertContains(response, "analytics/js/charts.js")
         self.assertContains(response, "analytics/css/analytics.css")
+
+
+class BubbleRadiusTests(SimpleTestCase):
+    """Радиус пузырька: площадь растёт с модулем значения, знак не важен."""
+
+    def test_zero_and_none_give_min_radius(self):
+        self.assertEqual(bubble_radius(0, 100), BUBBLE_MIN_RADIUS)
+        self.assertEqual(bubble_radius(None, 100), BUBBLE_MIN_RADIUS)
+
+    def test_full_scale_gives_max_radius(self):
+        self.assertEqual(bubble_radius(Decimal("100"), 100), BUBBLE_MAX_RADIUS)
+
+    def test_beyond_full_scale_is_capped(self):
+        self.assertEqual(bubble_radius(Decimal("-900"), 100), BUBBLE_MAX_RADIUS)
+
+    def test_sign_does_not_matter(self):
+        self.assertEqual(bubble_radius(Decimal("-25"), 100), bubble_radius(25, 100))
+
+    def test_radius_grows_as_square_root(self):
+        # четверть шкалы — половина пути от минимального радиуса к максимальному
+        self.assertEqual(
+            bubble_radius(25, 100), (BUBBLE_MIN_RADIUS + BUBBLE_MAX_RADIUS) / 2
+        )
+        self.assertLess(bubble_radius(10, 100), bubble_radius(40, 100))
+        self.assertLess(bubble_radius(40, 100), bubble_radius(90, 100))

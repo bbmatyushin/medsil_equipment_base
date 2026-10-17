@@ -146,14 +146,21 @@
                 result.stack = "line-" + index;
             }
         } else {
+            // Радиус пузырька задаёт сервер (point.r), без него — обычная точка
+            const radii = dataset.data.map((point) => point.r || 5);
             Object.assign(result, {
-                backgroundColor: color,
+                // Полупрозрачные пузырьки: наложения видны; по знаку — убыточные красные
+                backgroundColor: dataset.sign_colors
+                    ? dataset.data.map((point) =>
+                          withAlpha(point.y < 0 ? theme.negative : theme.positive, 0.7)
+                      )
+                    : color,
                 borderColor: theme.surface,
-                borderWidth: 2,
-                pointRadius: 5,
-                pointHoverRadius: 7,
+                borderWidth: 1,
+                pointRadius: radii,
+                pointHoverRadius: radii.map((radius) => radius + 2),
                 // Попасть мышью проще, чем в саму точку
-                pointHitRadius: 12,
+                pointHitRadius: 8,
             });
         }
         return result;
@@ -224,6 +231,16 @@
             }
         }
         return scales;
+    }
+
+    // Цвет с прозрачностью: #rrggbb -> rgba(); другие записи цвета — как есть
+    function withAlpha(color, alpha) {
+        const match = /^#([0-9a-f]{6})$/i.exec(color);
+        if (!match) {
+            return color;
+        }
+        const n = parseInt(match[1], 16);
+        return "rgba(" + (n >> 16) + ", " + ((n >> 8) & 255) + ", " + (n & 255) + ", " + alpha + ")";
     }
 
     // Цвет ключа серии в подсказке (у столбцов «по знаку» — свой у каждого столбца)

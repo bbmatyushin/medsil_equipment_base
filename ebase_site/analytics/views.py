@@ -8,7 +8,7 @@ from django.views.generic import TemplateView
 
 from clients.models import Client
 
-from .charts import chart_spec
+from .charts import bubble_radius, chart_spec
 from .filters import FinanceFilterForm, Period, PeriodForm, month_label
 from .links import change_url, changelist_url
 from .navigation import TABS, visible_tabs
@@ -62,6 +62,10 @@ CONTRACTS = "contracts_contract"
 # Не больше стольких id в ссылке `?id__in=`: UUID с разделителем «%2C» — 39 символов,
 # 90 штук ≈ 3,5 КБ, меньше предела строки запроса gunicorn по умолчанию (4094 байта)
 MAX_LINK_IDS = 90
+
+# Маржа, при которой пузырёк «Контракты: сумма и маржа» максимальный. Маржа
+# в плюс не бывает больше 100 %, убыток — бывает (−900 %), такие тоже максимальные
+MARGIN_FOR_MAX_BUBBLE = 100
 
 # Плитки: ключ показателя finance_kpis, подпись, «рост — плохо» (затраты, долг)
 FINANCE_TILES = [
@@ -172,6 +176,23 @@ def _horizontal_chart_height(rows: int) -> int:
     return max(MIN_CHART_HEIGHT_PX, rows * ROW_HEIGHT_PX + 60)
 
 
+def _scatter_bubbles(points: list[dict]) -> list[dict]:
+    """Точки «Контракты: сумма и маржа»: ссылка на контракт и радиус по марже.
+
+    Чем больше модуль маржи, тем крупнее пузырёк (убыточные красит `charts.js`).
+    Крупные идут первыми, чтобы мелкие рисовались поверх них.
+    """
+    bubbles = [
+        {
+            **point,
+            "url": change_url(CONTRACTS, point["id"]),
+            "r": bubble_radius(point["y"], MARGIN_FOR_MAX_BUBBLE),
+        }
+        for point in points
+    ]
+    return sorted(bubbles, key=lambda bubble: -bubble["r"])
+
+
 def _finance_charts(
     flow: dict,
     concluded: dict,
@@ -257,10 +278,8 @@ def _finance_charts(
             [
                 {
                     "label": "Контракты",
-                    "data": [
-                        {**point, "url": change_url(CONTRACTS, point["id"])}
-                        for point in points
-                    ],
+                    "data": _scatter_bubbles(points),
+                    "sign_colors": True,
                 }
             ],
             fmt="percent",
