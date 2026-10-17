@@ -705,7 +705,7 @@ class AccountableTests(TestCase):
         make_receipt(self.employee, date(2026, 3, 1), 10000)
         self._trip(date(2026, 3, 2), 3, [("Гостиница", 4000), ("Такси", 2000)])
 
-        row = accountable(YEAR_2026, TODAY)[0]
+        row = accountable(YEAR_2026)[0]
 
         self.assertEqual(row["received"], D("10000"))
         self.assertEqual(row["spent"], D("8100"))
@@ -716,7 +716,7 @@ class AccountableTests(TestCase):
     def test_accountable_excludes_yandex_trips(self):
         self._trip(date(2026, 3, 2), 1, [("Я.командировки", 5000), ("Такси", 300)])
 
-        row = accountable(YEAR_2026, TODAY)[0]
+        row = accountable(YEAR_2026)[0]
 
         self.assertEqual(row["spent"], D("1000"))
         self.assertEqual(row["balance"], D("-1000"))
@@ -726,24 +726,32 @@ class AccountableTests(TestCase):
         self._trip(date(2025, 12, 2), 1, [("Такси", 300)])
         make_receipt(self.employee, date(2026, 2, 1), 2000)
 
-        row = accountable(YEAR_2026, TODAY)[0]
+        row = accountable(YEAR_2026)[0]
 
         self.assertEqual(row["received"], D("2000"))
         self.assertEqual(row["spent"], D("0"))
         self.assertEqual(row["balance"], D("6000"))
 
-    def test_balance_ignores_future_trips(self):
-        make_receipt(self.employee, date(2026, 3, 1), 5000)
-        self._trip(TODAY + timedelta(days=10), 2, [("Такси", 100)])
+    def test_balance_user_example_with_trip_later_this_month(self):
+        """Пример пользователя: командировка в октябре, но после «сегодня» (16.10)."""
+        make_receipt(self.employee, date(2026, 9, 10), 2000)
+        make_receipt(self.employee, date(2026, 10, 5), 3000)
+        self._trip(
+            date(2026, 10, 20),
+            2,
+            [("Я.командировки", D("8289.60")), ("Гостиница", D("4140.50"))],
+        )
 
-        row = accountable(YEAR_2026, TODAY)[0]
+        row = accountable(YEAR_2026)[0]
 
-        self.assertEqual(row["spent"], D("1500"))
-        self.assertEqual(row["balance"], D("5000"))
+        self.assertEqual(row["received"], D("5000"))
+        self.assertEqual(row["spent"], D("5540.50"))
+        self.assertEqual(row["diff"], D("-540.50"))
+        self.assertEqual(row["balance"], D("-540.50"))
 
     def test_accountable_skips_empty_rows(self):
         make_employee("petrov", "Петров", "Пётр", "Петрович")
-        self.assertEqual(accountable(YEAR_2026, TODAY), [])
+        self.assertEqual(accountable(YEAR_2026), [])
 
     def test_accountable_matches_money_report(self):
         make_receipt(self.employee, date(2026, 3, 1), 7000)
@@ -767,7 +775,7 @@ class AccountableTests(TestCase):
                 (D(str(v)) for v in values if isinstance(v, (int, float, D))), D("0")
             )
 
-        row = accountable(march, TODAY)[0]
+        row = accountable(march)[0]
         self.assertEqual(numbers("D", 7, 18), row["received"])
         self.assertEqual(numbers("G", 7, 44) + numbers("D", 24, 34), row["spent"])
         self.assertEqual(row["spent"], D("3000") + D("456.78") + 3 * 700)

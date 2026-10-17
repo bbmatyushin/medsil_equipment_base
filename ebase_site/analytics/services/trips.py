@@ -664,14 +664,16 @@ def accountable_spent(trip: BusinessTrip) -> Decimal:
 
 
 def accountable(
-    period: Period, today: date, employee=None, source: TripSet | None = None
+    period: Period, employee=None, source: TripSet | None = None
 ) -> list[dict]:
     """Подотчёт сотрудников: получено и расход за период, остаток на сегодня.
 
     Получено — поступления ДС по дате получения; расход — `accountable_spent`
-    командировок по месяцу выезда. Остаток = все поступления − весь расход по
-    сегодняшний день (будущие командировки не учитываются). Плюс — деньги
-    у сотрудника, минус — компания должна сотруднику.
+    командировок по месяцу выезда (как в отчёте по ДС). Остаток = все внесённые
+    поступления − расход всех внесённых командировок, без отсечения по дате:
+    командировка, которая начнётся позже в этом месяце, уже входит в отчёт по ДС
+    и в расход, значит и в остаток. Плюс — деньги у сотрудника, минус — компания
+    должна сотруднику.
     """
     source = _source(source)
     receipts = _filtered(MoneyReceipt.objects.select_related("employee"), employee)
@@ -692,11 +694,11 @@ def accountable(
     date_range = (period.date_from, period.date_to)
     for receipt in receipts.filter(receipt_date__range=date_range):
         row_of(receipt.employee)["received"] += receipt.amount
-    for receipt in receipts.filter(receipt_date__lte=today):
+    for receipt in receipts:
         row_of(receipt.employee)["balance"] += receipt.amount
     for trip in source.in_period(period, employee):
         row_of(trip.employee)["spent"] += accountable_spent(trip)
-    for trip in source.until(today, employee):
+    for trip in source._of(employee):
         row_of(trip.employee)["balance"] -= accountable_spent(trip)
     result = [
         {**row, "diff": row["received"] - row["spent"]}

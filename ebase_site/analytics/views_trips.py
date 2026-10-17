@@ -227,7 +227,7 @@ class TripsView(AnalyticsTabView):
             trips.employee_days(period, employee, source=source), period
         )
         accountable = _with_receipt_links(
-            trips.accountable(period, today, employee, source=source)
+            trips.accountable(period, employee, source=source)
         )
         clients = trips.clients_trips_vs_payments(period, employee, source=source)
         context.update(
