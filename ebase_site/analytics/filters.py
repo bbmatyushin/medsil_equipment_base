@@ -6,7 +6,9 @@ from datetime import date
 
 from django import forms
 
+from business_trip.xlsx_report import employee_fio
 from clients.models import Client
+from users.models import CompanyUser
 
 MONTH_ABBR = [
     "янв",
@@ -32,6 +34,10 @@ PRESETS = [
 ]
 
 DEFAULT_PRESET = "year"
+
+# Направления вкладки «Командировки»: по городам или по регионам
+TRIP_GROUPS = [("city", "Города"), ("region", "Регионы")]
+DEFAULT_GROUP = "city"
 
 # Допустимые годы для своего периода: вне границ shift_year/months упадут или раздуются
 MIN_YEAR = 1900
@@ -151,3 +157,32 @@ class FinanceFilterForm(PeriodForm):
     def get_client(self) -> Client | None:
         """Выбранный клиент или None (нет значения / неверный UUID / нет контрактов)."""
         return self._cleaned().get("client")
+
+
+class EmployeeChoiceField(forms.ModelChoiceField):
+    """Сотрудник по ФИО (без ФИО — по логину)."""
+
+    def label_from_instance(self, obj) -> str:
+        return employee_fio(obj) or obj.username
+
+
+class TripsFilterForm(PeriodForm):
+    """Фильтры вкладки «Командировки»: период, сотрудник, города или регионы."""
+
+    employee = EmployeeChoiceField(
+        CompanyUser.objects.filter(business_trip_employee__isnull=False)
+        .distinct()
+        .order_by("last_name", "first_name", "patron"),
+        required=False,
+        label="Сотрудник",
+        empty_label="Все сотрудники",
+    )
+    group = forms.ChoiceField(choices=TRIP_GROUPS, required=False, label="Направления")
+
+    def get_employee(self) -> CompanyUser | None:
+        """Выбранный сотрудник или None (нет значения / неверный UUID / нет командировок)."""
+        return self._cleaned().get("employee")
+
+    def get_group(self) -> str:
+        """«city» или «region»; мусор -> города."""
+        return self._cleaned().get("group") or DEFAULT_GROUP

@@ -1,4 +1,4 @@
-"""Фильтры шаблонов раздела «Аналитика»: деньги, проценты, дельты."""
+"""Фильтры шаблонов раздела «Аналитика»: деньги, числа, проценты, дельты."""
 
 from django import template
 
@@ -21,6 +21,16 @@ def money(value) -> str:
     if value is None:
         return EMPTY
     return f"{format_money(value)} ₽"
+
+
+@register.filter
+def number(value) -> str:
+    """1234 -> «1 234», 12.5 -> «12,5», 12.0 -> «12», None -> «—»."""
+    if value is None:
+        return EMPTY
+    if value == int(value):
+        return _number(int(value), 0)
+    return _number(value, 1)
 
 
 @register.filter

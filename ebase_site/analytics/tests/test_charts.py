@@ -16,7 +16,13 @@ from analytics.charts import (
     to_float,
 )
 from analytics.links import change_url, changelist_url
-from analytics.templatetags.analytics_tags import delta, delta_class, money, pct
+from analytics.templatetags.analytics_tags import (
+    delta,
+    delta_class,
+    money,
+    number,
+    pct,
+)
 
 
 class ToFloatTests(SimpleTestCase):
@@ -297,6 +303,12 @@ class FilterTests(SimpleTestCase):
     def test_money_filter(self):
         self.assertEqual(money(Decimal("20000")), "20 000,00 ₽")
         self.assertEqual(money(None), "—")
+
+    def test_number_filter(self):
+        self.assertEqual(number(1234), "1 234")
+        self.assertEqual(number(None), "—")
+        self.assertEqual(number(Decimal("12.5")), "12,5")
+        self.assertEqual(number(Decimal("12.0")), "12")
 
     def test_pct_filter(self):
         self.assertEqual(pct(Decimal("12.5")), "12,5 %")

@@ -6,8 +6,11 @@ from django.utils import translation
 from clients.models import Client
 from contracts.models import Contract
 from directory.models import City
+from business_trip.models import BusinessTrip
+from users.models import CompanyUser
 from analytics.filters import (
     FinanceFilterForm,
+    TripsFilterForm,
     Period,
     PeriodForm,
     month_label,
@@ -271,3 +274,47 @@ class DateWidgetFormatTests(SimpleTestCase):
         with translation.override("ru"):
             self.assertIn('value="2026-03-05"', str(form["date_from"]))
             self.assertIn('value="2026-04-10"', str(form["date_to"]))
+
+
+class TripsFilterFormTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.traveller = CompanyUser.objects.create_user(
+            "ivanov", last_name="Иванов", first_name="Иван", patron="Иванович"
+        )
+        cls.no_fio = CompanyUser.objects.create_user("petrov")
+        cls.homebody = CompanyUser.objects.create_user("sidorov", last_name="Сидоров")
+        for employee in (cls.traveller, cls.no_fio):
+            BusinessTrip.objects.create(
+                employee=employee, beg_dt=date(2026, 3, 1), end_dt=date(2026, 3, 2)
+            )
+
+    def test_trips_form_defaults(self):
+        form = TripsFilterForm(data={})
+        self.assertIsNone(form.get_employee())
+        self.assertEqual(form.get_group(), "city")
+        self.assertEqual(form.get_period(TODAY), YEAR_2026)
+
+    def test_trips_form_employee_and_group(self):
+        form = TripsFilterForm(
+            data={"employee": str(self.traveller.pk), "group": "region"}
+        )
+        self.assertEqual(form.get_employee(), self.traveller)
+        self.assertEqual(form.get_group(), "region")
+
+    def test_trips_form_garbage_falls_back(self):
+        form = TripsFilterForm(data={"employee": "not-a-uuid", "group": "foo"})
+        self.assertIsNone(form.get_employee())
+        self.assertEqual(form.get_group(), "city")
+
+    def test_trips_form_lists_only_employees_with_trips(self):
+        queryset = TripsFilterForm(data={}).fields["employee"].queryset
+        self.assertEqual(set(queryset), {self.traveller, self.no_fio})
+        self.assertEqual(queryset.count(), 2)
+
+    def test_trips_form_employee_label_is_fio(self):
+        field = TripsFilterForm(data={}).fields["employee"]
+        self.assertEqual(
+            field.label_from_instance(self.traveller), "Иванов Иван Иванович"
+        )
+        self.assertEqual(field.label_from_instance(self.no_fio), "petrov")
