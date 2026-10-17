@@ -1,4 +1,5 @@
 import re
+import uuid
 from datetime import date
 from decimal import Decimal
 from unittest import mock
@@ -12,6 +13,7 @@ from django.utils.html import escape
 
 from analytics.services.finance import TOTAL_KEYS
 from analytics.tests.factories import (
+    make_city,
     make_client,
     make_contract,
     make_department,
@@ -22,6 +24,7 @@ from analytics.tests.factories import (
 )
 from analytics.navigation import TABS, Tab, visible_tabs
 from analytics.views import MAX_LINK_IDS, _pareto_caption
+from analytics.views_trips import _ids_link
 from clients.models import Client
 from contracts.admin import format_money
 from contracts.models import Contract, ContractExpense
@@ -825,7 +828,7 @@ class ParetoCaptionTests(SimpleTestCase):
                 self.assertEqual(self._caption(clients_for_80, clients_total), expected)
 
 
-TRIPS_CHART_KEYS = {"by_month", "structure"}
+TRIPS_CHART_KEYS = {"by_month", "structure", "directions"}
 
 
 class TripsPageTests(TestCase):
@@ -908,3 +911,63 @@ class TripsPageTests(TestCase):
         self.assertEqual(
             self._filter_spec(changelist, "employee").value(), str(self.employee.pk)
         )
+
+    def test_trips_direction_links(self):
+        self.assertIsNone(_ids_link([]))
+        fake_ids = [str(uuid.uuid4()) for _ in range(MAX_LINK_IDS + 1)]
+        url = _ids_link(fake_ids[:MAX_LINK_IDS])
+        query = parse_qs(urlsplit(url).query)
+        self.assertEqual(len(query["id__in"][0].split(",")), MAX_LINK_IDS)
+        self.assertIsNone(_ids_link(fake_ids))
+
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+        self._trip(self.other, date(2026, 4, 1), date(2026, 4, 2))
+        response = self._get()
+        spec = response.context["charts"]["directions"]
+        self.assertEqual(spec["labels"], ["Казань (Татарстан)"])
+        changelist = self.client.get(spec["links"][0])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 2)
+
+    def test_trips_service_type_link_selects_sidebar_filter(self):
+        self._trip(
+            self.employee, date(2026, 3, 1), date(2026, 3, 3), service_types=["ТО"]
+        )
+        self._trip(self.employee, date(2026, 4, 1), date(2026, 4, 2))
+
+        response = self._get()
+
+        rows = {row["label"]: row for row in response.context["service_types"]}
+        changelist = self.client.get(rows["ТО"]["url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 1)
+        spec = next(
+            spec
+            for spec in changelist.context["cl"].filter_specs
+            if getattr(spec, "field_path", None) == "service_type"
+        )
+        self.assertEqual(spec.lookup_val, str(rows["ТО"]["id"]))
+        empty_url = rows["Вид работ не указан"]["url"]
+        self.assertIn("service_type__isnull=True", empty_url)
+        changelist = self.client.get(empty_url)
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 1)
+
+    def test_trips_group_switch(self):
+        chelny = make_department(
+            "Больница Челнов", city=make_city("Набережные Челны", "Татарстан")
+        )
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+        make_trip(
+            self.employee,
+            date(2026, 4, 1),
+            date(2026, 4, 2),
+            destinations=[(chelny, date(2026, 4, 1), date(2026, 4, 2))],
+        )
+
+        cities = self._get().context["annual"]["rows"]
+        regions = self._get({"group": "region"}).context["annual"]["rows"]
+
+        self.assertEqual(len(cities), 2)
+        self.assertEqual([row["label"] for row in regions], ["Татарстан"])
+        self.assertEqual(self._get({"group": "region"}).context["group"], "region")

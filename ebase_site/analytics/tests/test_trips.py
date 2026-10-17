@@ -5,6 +5,10 @@ from django.test import TestCase
 
 from analytics.filters import Period
 from analytics.services.trips import (
+    annual_by_direction,
+    by_service_type,
+    direction_norms,
+    directions,
     client_of,
     cost_structure,
     costs_by_month,
@@ -401,3 +405,223 @@ class MonthTests(TestCase):
         self.assertAlmostEqual(
             float(sum(row["share_pct"] for row in rows)), 100.0, delta=0.1
         )
+
+
+class DirectionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+        cls.kazan2 = make_department("Поликлиника Казани")
+        cls.chelny = make_department(
+            "Больница Челнов", city=make_city("Набережные Челны", "Татарстан")
+        )
+        cls.samara = make_department(
+            "Больница Самары", city=make_city("Самара", "Самарская область")
+        )
+
+    def test_directions_sum_equals_total(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 5),
+            destinations=[
+                (self.kazan, date(2026, 3, 1), date(2026, 3, 2)),
+                (self.samara, date(2026, 3, 3), date(2026, 3, 5)),
+            ],
+            expenses=[("Билеты", date(2026, 2, 27), D("1000.01"))],
+        )
+        make_trip(
+            self.employee,
+            date(2026, 4, 1),
+            date(2026, 4, 2),
+            expenses=[("Такси", date(2026, 4, 1), 300)],
+        )
+        rows = directions(YEAR_2026)
+        self.assertEqual(
+            sum(row["amount"] for row in rows),
+            trips_kpis(YEAR_2026)["current"]["total"],
+        )
+        self.assertIn("Пункты не указаны", [row["label"] for row in rows])
+        self.assertEqual(rows[0]["amount"], max(row["amount"] for row in rows))
+
+    def test_directions_count_trip_once_per_direction(self):
+        trip = make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 4),
+            destinations=[
+                (self.kazan, date(2026, 3, 1), date(2026, 3, 2)),
+                (self.kazan2, date(2026, 3, 3), date(2026, 3, 4)),
+            ],
+        )
+        rows = directions(YEAR_2026)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["trips"], 1)
+        self.assertEqual(rows[0]["days"], 4)
+        self.assertEqual(rows[0]["trip_ids"], [str(trip.pk)])
+
+    def test_directions_region_group_merges_cities(self):
+        for department, day in ((self.kazan, 1), (self.chelny, 10)):
+            make_trip(
+                self.employee,
+                date(2026, 3, day),
+                date(2026, 3, day + 1),
+                destinations=[(department, date(2026, 3, day), date(2026, 3, day + 1))],
+            )
+        self.assertEqual(len(directions(YEAR_2026, group="city")), 2)
+        rows = directions(YEAR_2026, group="region")
+        self.assertEqual([row["label"] for row in rows], ["Татарстан"])
+        self.assertEqual(rows[0]["trips"], 2)
+        self.assertEqual(rows[0]["amount"], D("2800"))
+
+
+class AnnualTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.other = make_employee("petrov", "Петров", "Пётр", "Петрович")
+        cls.kazan = make_department("Больница Казани")
+
+    def _one_day_trip(self, employee, day, total):
+        return make_trip(
+            employee,
+            day,
+            day,
+            destinations=[(self.kazan, day, day)],
+            expenses=[("Такси", day, D(total) - 700)],
+        )
+
+    def test_annual_window_estimate(self):
+        start = TODAY - timedelta(days=99)
+        self._one_day_trip(self.employee, start, 10000)
+
+        annual = annual_by_direction(TODAY)
+
+        self.assertEqual(annual["start"], start)
+        self.assertEqual(annual["window_days"], 100)
+        self.assertTrue(annual["is_estimate"])
+        self.assertEqual(annual["months"], 3)
+        self.assertEqual(annual["years"], [2026])
+        row = annual["rows"][0]
+        self.assertEqual(row["label"], "Казань (Татарстан)")
+        self.assertEqual(row["total"], D("10000"))
+        self.assertEqual(row["per_year"], D("36500.00"))
+        self.assertEqual(row["trips_per_year"], D("3.7"))
+        self.assertEqual(row["by_year"], [D("10000")])
+
+    def test_annual_by_year_columns(self):
+        self._one_day_trip(self.employee, date(2025, 6, 1), 1000)
+        self._one_day_trip(self.employee, date(2026, 6, 1), 3000)
+
+        annual = annual_by_direction(TODAY)
+
+        self.assertEqual(annual["years"], [2025, 2026])
+        self.assertFalse(annual["is_estimate"])
+        row = annual["rows"][0]
+        self.assertEqual(row["by_year"], [D("1000"), D("3000")])
+        self.assertEqual(row["total"], D("4000"))
+
+    def test_annual_window_ignores_employee_filter(self):
+        earliest = date(2026, 1, 1)
+        self._one_day_trip(self.other, earliest, 1000)
+        self._one_day_trip(self.employee, date(2026, 9, 1), 2000)
+
+        annual = annual_by_direction(TODAY, self.employee)
+
+        self.assertEqual(annual["start"], earliest)
+        self.assertEqual(annual["rows"][0]["total"], D("2000"))
+
+    def test_annual_ignores_future_trips(self):
+        self._one_day_trip(self.employee, date(2026, 9, 1), 2000)
+        self._one_day_trip(self.employee, TODAY + timedelta(days=1), 5000)
+        make_trip(self.other, date(2026, 12, 1), date(2026, 12, 3))
+
+        annual = annual_by_direction(TODAY)
+
+        self.assertEqual(annual["start"], date(2026, 9, 1))
+        self.assertEqual(sum(row["total"] for row in annual["rows"]), D("2000"))
+
+    def test_annual_empty(self):
+        annual = annual_by_direction(TODAY)
+        self.assertIsNone(annual["start"])
+        self.assertEqual(annual["rows"], [])
+        self.assertEqual(annual["years"], [])
+
+
+class NormsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def test_norms_per_day_by_kind(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            destinations=[(self.kazan, date(2026, 3, 1), date(2026, 3, 2))],
+            expenses=[("Гостиница", date(2026, 3, 1), 4000)],
+        )
+        make_trip(
+            self.employee,
+            date(2026, 4, 1),
+            date(2026, 4, 3),
+            destinations=[(self.kazan, date(2026, 4, 1), date(2026, 4, 3))],
+            expenses=[
+                ("Гостиница", date(2026, 4, 1), 6000),
+                ("Такси", date(2026, 4, 2), D("100.01")),
+            ],
+        )
+
+        norms = direction_norms(TODAY)
+
+        self.assertEqual(norms["kinds"], ["Гостиница", "Такси", "Суточные"])
+        row = norms["rows"][0]
+        self.assertEqual(row["trips"], 2)
+        self.assertEqual(row["avg_days"], D("2.5"))
+        hotel = row["per_day_by_kind"][norms["kinds"].index("Гостиница")]
+        self.assertEqual(hotel, D("2000.00"))
+        self.assertEqual(row["per_day_by_kind"][-1], D("700.00"))
+        self.assertAlmostEqual(
+            float(sum(row["per_day_by_kind"])), float(row["per_day"]), delta=0.011
+        )
+        self.assertEqual(row["avg_trip"], D("6800.01"))
+
+    def test_norms_skip_trips_without_destinations(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            expenses=[("Такси", date(2026, 3, 1), 300)],
+        )
+        self.assertEqual(direction_norms(TODAY)["rows"], [])
+
+
+class ServiceTypeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def test_service_type_counts_trip_in_each_type(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            destinations=[(self.kazan, date(2026, 3, 1), date(2026, 3, 2))],
+            expenses=[("Такси", date(2026, 3, 1), 4600)],
+            service_types=["ТО", "ремонт"],
+        )
+        make_trip(self.employee, date(2026, 5, 1), date(2026, 5, 1))
+
+        rows = {row["label"]: row for row in by_service_type(YEAR_2026)}
+
+        for name in ("ТО", "ремонт"):
+            self.assertEqual(rows[name]["trips"], 1)
+            self.assertEqual(rows[name]["avg_trip"], D("6000.00"))
+            self.assertEqual(rows[name]["avg_days"], D("2.0"))
+            self.assertEqual(rows[name]["per_day"], D("3000.00"))
+            self.assertIsNotNone(rows[name]["id"])
+        self.assertIsNone(rows["Вид работ не указан"]["id"])
+        self.assertEqual(rows["Вид работ не указан"]["avg_trip"], D("700.00"))

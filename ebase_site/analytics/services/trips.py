@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
-from django.db.models import QuerySet
+from django.db.models import Min, QuerySet
 
 from analytics.filters import Period
 from analytics.services.finance import _bucket_by_month, _delta_pct
@@ -26,6 +26,11 @@ NO_CITY_LABEL = "Город не указан"
 NO_REGION_SUFFIX = " (регион не указан)"
 NO_CLIENT_LABEL = "Клиент не указан"
 OTHER_KINDS_LABEL = "Прочие виды"
+NO_SERVICE_TYPE_LABEL = "Вид работ не указан"
+
+DAYS_IN_YEAR = 365
+# Средняя длина месяца для подписи «оценка по N мес.»
+DAYS_IN_MONTH = Decimal("30.4")
 
 # Серий на графике «Затраты по месяцам» не больше, чем цветов палитры charts.js
 MAX_MONTH_SERIES = 6
@@ -279,3 +284,194 @@ def cost_structure(period: Period, employee=None) -> list[dict]:
         for kind, amount in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
         if amount
     ]
+
+
+# --- Направления, среднее за год, нормативы, виды работ ---------------------------
+
+
+def _direction_buckets(trips: list[BusinessTrip], group: str) -> dict[str, dict]:
+    """Доли командировок, собранные по направлениям (город или регион).
+
+    В корзине: подпись, сумма, суммы по видам затрат и по годам начала
+    командировок, дни пунктов (у «Пункты не указаны» — дни командировок)
+    и id командировок в порядке появления.
+    """
+    buckets = {}
+
+    def bucket(dest) -> dict:
+        key, label = direction_of(dest, group)
+        if key not in buckets:
+            buckets[key] = {
+                "key": key,
+                "label": label,
+                "amount": ZERO,
+                "by_kind": {},
+                "by_year": {},
+                "days": 0,
+                "trip_ids": [],
+            }
+        return buckets[key]
+
+    for trip in trips:
+        destinations = list(trip.destinations.all())
+        touched = []
+        for dest in destinations:
+            item = bucket(dest)
+            item["days"] += destination_days(dest)
+            touched.append(item)
+        if not destinations:
+            item = bucket(None)
+            item["days"] += trip.days_count or 0
+            touched.append(item)
+        for share in trip_shares(trip):
+            item = bucket(share.destination)
+            item["amount"] += share.amount
+            item["by_kind"][share.kind] = (
+                item["by_kind"].get(share.kind, ZERO) + share.amount
+            )
+            year = trip.beg_dt.year
+            item["by_year"][year] = item["by_year"].get(year, ZERO) + share.amount
+        trip_id = str(trip.pk)
+        for item in touched:
+            if trip_id not in item["trip_ids"]:
+                item["trip_ids"].append(trip_id)
+    return buckets
+
+
+def directions(period: Period, employee=None, group: str = "city") -> list[dict]:
+    """Затраты командировок периода по направлениям, по убыванию суммы."""
+    buckets = _direction_buckets(trips_in_period(period, employee), group)
+    rows = [
+        {
+            "key": item["key"],
+            "label": item["label"],
+            "amount": item["amount"],
+            "trips": len(item["trip_ids"]),
+            "days": item["days"],
+            "trip_ids": item["trip_ids"],
+        }
+        for item in buckets.values()
+    ]
+    return sorted(rows, key=lambda row: (-row["amount"], row["label"]))
+
+
+def annual_by_direction(today: date, employee=None, group: str = "city") -> dict:
+    """Сколько в среднем за год уходит на каждое направление (вся история).
+
+    Окно — от самой ранней даты выезда во всей базе (фильтр сотрудника на него
+    не влияет) до сегодня; будущие командировки не учитываются. Среднее за год —
+    сумма за окно × 365 / дней окна; при окне меньше года это оценка.
+    """
+    start = BusinessTrip.objects.filter(beg_dt__lte=today).aggregate(
+        start=Min("beg_dt")
+    )["start"]
+    if start is None:
+        return {
+            "start": None,
+            "window_days": 0,
+            "months": 0,
+            "is_estimate": False,
+            "years": [],
+            "rows": [],
+        }
+    window_days = (today - start).days + 1
+    years = list(range(start.year, today.year + 1))
+    buckets = _direction_buckets(trips_until(today, employee), group)
+    rows = []
+    for item in buckets.values():
+        rows.append(
+            {
+                "key": item["key"],
+                "label": item["label"],
+                "by_year": [item["by_year"].get(year, ZERO) for year in years],
+                "total": item["amount"],
+                "per_year": _ratio(item["amount"] * DAYS_IN_YEAR, window_days),
+                "trips_per_year": _ratio(
+                    len(item["trip_ids"]) * DAYS_IN_YEAR, window_days, TENTH
+                ),
+            }
+        )
+    return {
+        "start": start,
+        "window_days": window_days,
+        "months": max(1, round(window_days / DAYS_IN_MONTH)),
+        "is_estimate": window_days < DAYS_IN_YEAR,
+        "years": years,
+        "rows": sorted(rows, key=lambda row: (-row["total"], row["label"])),
+    }
+
+
+def direction_norms(today: date, employee=None, group: str = "city") -> dict:
+    """Типовые затраты по направлениям за всю историю: на поездку и на день.
+
+    ₽ в день — на день пребывания в пункте. Командировки без пунктов
+    в нормативы не входят.
+    """
+    trips = trips_until(today, employee)
+    kinds = _expense_kinds_by_total(trips) + [ALLOWANCE_LABEL]
+    buckets = _direction_buckets(trips, group)
+    rows = []
+    for item in buckets.values():
+        if item["key"] == "none" or not item["days"]:
+            continue
+        count = len(item["trip_ids"])
+        rows.append(
+            {
+                "key": item["key"],
+                "label": item["label"],
+                "trips": count,
+                "avg_days": _ratio(item["days"], count, TENTH),
+                "avg_trip": _ratio(item["amount"], count),
+                "per_day": _ratio(item["amount"], item["days"]),
+                "per_day_by_kind": [
+                    _ratio(item["by_kind"].get(kind, ZERO), item["days"])
+                    for kind in kinds
+                ],
+            }
+        )
+    return {
+        "kinds": kinds,
+        "rows": sorted(rows, key=lambda row: (-row["trips"], row["label"])),
+    }
+
+
+def by_service_type(period: Period, employee=None) -> list[dict]:
+    """Командировки периода по видам работ: средняя поездка, длительность, ₽ в день.
+
+    Командировка с несколькими видами работ считается в каждом из них целиком.
+    """
+    buckets = {}
+    for trip in trips_in_period(period, employee):
+        types = list(trip.service_type.all()) or [None]
+        total = trip_total(trip)
+        for service_type in types:
+            key = service_type.pk if service_type is not None else None
+            item = buckets.setdefault(
+                key,
+                {
+                    "id": key,
+                    "label": (
+                        service_type.name
+                        if service_type is not None
+                        else NO_SERVICE_TYPE_LABEL
+                    ),
+                    "trips": 0,
+                    "amount": ZERO,
+                    "days": 0,
+                },
+            )
+            item["trips"] += 1
+            item["amount"] += total
+            item["days"] += trip.days_count or 0
+    rows = [
+        {
+            "id": item["id"],
+            "label": item["label"],
+            "trips": item["trips"],
+            "avg_trip": _ratio(item["amount"], item["trips"]),
+            "avg_days": _ratio(item["days"], item["trips"], TENTH),
+            "per_day": _ratio(item["amount"], item["days"]),
+        }
+        for item in buckets.values()
+    ]
+    return sorted(rows, key=lambda row: (-row["trips"], row["label"]))

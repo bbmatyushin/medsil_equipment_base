@@ -54,4 +54,112 @@
         {% endif %}
     </section>
 </div>
+
+<h2 class="an-section-title">Направления</h2>
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Направления за период</h2>
+        <p class="an-card-note">Затраты и суточные по {% if group == "region" %}регионам{% else %}городам{% endif %} пунктов, {{ directions_limit }} крупнейших. Затраты в датах пункта относятся к нему, остальные (например, билеты до выезда) и суточные делятся по дням пунктов. Клик — командировки направления.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.directions chart_id="chart-trips-directions" title="Затраты по направлениям" height=directions_height %}
+    </section>
+
+    <section class="an-card">
+        <h2>В среднем за год</h2>
+        <p class="an-card-note">Вся история, период не учитывается.{% if annual.start %} {% if annual.is_estimate %}Оценка по данным с {{ annual.start|date:"d.m.Y" }} ({{ annual.months }} мес.): сумма пересчитана на 12 месяцев.{% else %}По данным с {{ annual.start|date:"d.m.Y" }}.{% endif %}{% endif %}</p>
+        {% if annual.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Направление</th>
+                            {% for year in annual.years %}<th scope="col" class="num">{{ year }}</th>{% endfor %}
+                            <th scope="col" class="num">В среднем за год</th>
+                            <th scope="col" class="num">Поездок в год</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in annual.rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                {% for amount in row.by_year %}<td class="num">{{ amount|money }}</td>{% endfor %}
+                                <td class="num"><strong>{{ row.per_year|money }}</strong></td>
+                                <td class="num">{{ row.trips_per_year|number }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Нормативы для бюджета</h2>
+        <p class="an-card-note">Вся история, период не учитывается. ₽ в день — на день пребывания в пункте; командировки без пунктов не входят.</p>
+        {% if norms.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Направление</th>
+                            <th scope="col" class="num">Поездок</th>
+                            <th scope="col" class="num">Дней в среднем</th>
+                            <th scope="col" class="num">Средняя поездка</th>
+                            <th scope="col" class="num">₽ в день</th>
+                            {% for kind in norms.kinds %}<th scope="col" class="num">{{ kind }}, ₽/день</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in norms.rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td class="num">{{ row.trips|number }}</td>
+                                <td class="num">{{ row.avg_days|number }}</td>
+                                <td class="num">{{ row.avg_trip|money }}</td>
+                                <td class="num"><strong>{{ row.per_day|money }}</strong></td>
+                                {% for amount in row.per_day_by_kind %}<td class="num">{{ amount|money }}</td>{% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>По видам работ</h2>
+        <p class="an-card-note">Командировки периода. Командировка с несколькими видами работ считается в каждом. Клик — командировки этого вида.</p>
+        {% if service_types %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Вид работ</th>
+                            <th scope="col" class="num">Поездок</th>
+                            <th scope="col" class="num">Средняя поездка</th>
+                            <th scope="col" class="num">Дней в среднем</th>
+                            <th scope="col" class="num">₽ в день</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in service_types %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.label }}</a></td>
+                                <td class="num">{{ row.trips|number }}</td>
+                                <td class="num">{{ row.avg_trip|money }}</td>
+                                <td class="num">{{ row.avg_days|number }}</td>
+                                <td class="num">{{ row.per_day|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}
