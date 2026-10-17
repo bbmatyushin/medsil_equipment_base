@@ -1,13 +1,16 @@
 """Вкладка «Командировки» раздела «Аналитика»."""
 
+import math
+
 from .charts import chart_spec
 from .filters import Period, TripsFilterForm, month_label
 from .links import changelist_url
 from .services import trips
 from .views import MAX_LINK_IDS, AnalyticsTabView, _horizontal_chart_height
 
-# Список командировок в админке: сюда ведут клики по виджетам
+# Списки в админке: сюда ведут клики по виджетам
 TRIPS = "business_trip_businesstrip"
+RECEIPTS = "business_trip_moneyreceipt"
 
 # Сколько направлений показывать на графике «Направления за период»
 TOP_DIRECTIONS = 15
@@ -75,7 +78,52 @@ def _service_type_links(rows: list[dict], period: Period, employee) -> list[dict
     return result
 
 
-def _trips_charts(by_month: dict, structure: list[dict], top: list[dict]) -> dict:
+def _with_load_shades(load: dict) -> dict:
+    """Ячейки «сотрудник × месяц» с насыщенностью заливки (0–1).
+
+    Насыщенность — корень доли дней от самой загруженной ячейки: редкие
+    короткие поездки не пропадают на фоне длинных.
+    """
+    top = load["max"]
+    load["labels"] = [month_label(month) for month in load["months"]]
+    for row in load["rows"]:
+        row["cells"] = [
+            {"days": days, "shade": round(math.sqrt(days / top), 2) if top else 0}
+            for days in row["days"]
+        ]
+    return load
+
+
+def _with_receipt_links(rows: list[dict]) -> list[dict]:
+    """Строки подотчёта со ссылкой на поступления ДС сотрудника."""
+    return [
+        {**row, "url": changelist_url(RECEIPTS, employee=row["id"])} for row in rows
+    ]
+
+
+def _with_employee_links(rows: list[dict], period: Period) -> list[dict]:
+    """Строки «Дни в разъездах» со ссылкой на командировки сотрудника за период."""
+    return [
+        {
+            **row,
+            "url": changelist_url(
+                TRIPS,
+                beg_dt__gte=period.date_from.isoformat(),
+                beg_dt__lte=period.date_to.isoformat(),
+                employee=row["id"],
+            ),
+        }
+        for row in rows
+    ]
+
+
+def _trips_charts(
+    by_month: dict,
+    structure: list[dict],
+    top: list[dict],
+    days: list[dict],
+    balance: list[dict],
+) -> dict:
     """Спецификации графиков вкладки «Командировки»."""
     return {
         "by_month": chart_spec(
@@ -100,6 +148,27 @@ def _trips_charts(by_month: dict, structure: list[dict], top: list[dict]) -> dic
             horizontal=True,
             links=[_ids_link(row["trip_ids"]) for row in top],
         ),
+        "employee_days": chart_spec(
+            "bar",
+            [row["name"] for row in days],
+            [{"label": "Дней", "data": [row["days"] for row in days]}],
+            fmt="count",
+            horizontal=True,
+            links=[row["url"] for row in days],
+        ),
+        "balance": chart_spec(
+            "bar",
+            [row["name"] for row in balance],
+            [
+                {
+                    "label": "Остаток на сегодня",
+                    "data": [row["balance"] for row in balance],
+                    "sign_colors": True,
+                }
+            ],
+            horizontal=True,
+            links=[row["url"] for row in balance],
+        ),
     }
 
 
@@ -121,6 +190,8 @@ class TripsView(AnalyticsTabView):
         kpis = trips.trips_kpis(period, employee)
         structure = trips.cost_structure(period, employee)
         top = trips.directions(period, employee, group)[:TOP_DIRECTIONS]
+        days = _with_employee_links(trips.employee_days(period, employee), period)
+        accountable = _with_receipt_links(trips.accountable(period, today, employee))
         context.update(
             employee=employee,
             group=group,
@@ -132,7 +203,14 @@ class TripsView(AnalyticsTabView):
                 by_month=trips.costs_by_month(period, employee),
                 structure=structure,
                 top=top,
+                days=days,
+                balance=accountable,
             ),
+            employee_days=days,
+            employee_days_height=_horizontal_chart_height(len(days)),
+            load=_with_load_shades(trips.employee_month_load(period, employee)),
+            accountable=accountable,
+            balance_height=_horizontal_chart_height(len(accountable)),
             directions_height=_horizontal_chart_height(len(top)),
             directions_limit=TOP_DIRECTIONS,
             annual=trips.annual_by_direction(today, employee, group),

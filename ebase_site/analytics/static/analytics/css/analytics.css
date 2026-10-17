@@ -357,6 +357,12 @@ html[data-theme="dark"] {
     --an-tone-max: 18%;
 }
 
+/* «Кто и когда в отъезде»: насыщенность — дни в месяце */
+.an-tone-load {
+    --an-tone: var(--an-c1);
+    --an-tone-max: 40%;
+}
+
 .an-matrix td[class*="an-tone-"] {
     background: color-mix(
         in srgb,

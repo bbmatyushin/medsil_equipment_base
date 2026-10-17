@@ -162,4 +162,102 @@
         {% endif %}
     </section>
 </div>
+
+<h2 class="an-section-title">Сотрудники</h2>
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Дни в разъездах</h2>
+        <p class="an-card-note">Командировки периода по сотрудникам. Клик — командировки сотрудника.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.employee_days chart_id="chart-trips-employee-days" title="Дни в командировках по сотрудникам" height=employee_days_height %}
+        {% if employee_days %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Сотрудник</th>
+                            <th scope="col" class="num">Поездок</th>
+                            <th scope="col" class="num">Дней</th>
+                            <th scope="col" class="num">Сумма</th>
+                            <th scope="col" class="num">₽ в день</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in employee_days %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.name }}</a></td>
+                                <td class="num">{{ row.trips|number }}</td>
+                                <td class="num">{{ row.days|number }}</td>
+                                <td class="num">{{ row.amount|money }}</td>
+                                <td class="num">{{ row.per_day|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Подотчёт</h2>
+        <p class="an-card-note">Остаток = получено − (затраты без «Я.командировки» + суточные), накопительно на сегодня, период на остаток не влияет. Плюс — деньги у сотрудника, минус — компания должна сотруднику. Клик — поступления ДС сотрудника.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.balance chart_id="chart-trips-balance" title="Остаток подотчёта на сегодня" height=balance_height empty_text="Нет данных" %}
+        {% if accountable %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Сотрудник</th>
+                            <th scope="col" class="num">Получено за период</th>
+                            <th scope="col" class="num">Расход за период</th>
+                            <th scope="col" class="num">Разница</th>
+                            <th scope="col" class="num">Остаток на сегодня</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in accountable %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.name }}</a></td>
+                                <td class="num">{{ row.received|money }}</td>
+                                <td class="num">{{ row.spent|money }}</td>
+                                <td class="num">{{ row.diff|money }}</td>
+                                <td class="num"><strong>{{ row.balance|money }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Кто и когда в отъезде</h2>
+        <p class="an-card-note">Дни в командировках по месяцам периода; командировки на стыке периода обрезаются по его границам. Чем больше дней, тем насыщеннее цвет.</p>
+        {% if load.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table an-matrix">
+                    <thead>
+                        <tr>
+                            <th scope="col">Сотрудник</th>
+                            {% for label in load.labels %}<th scope="col" class="num">{{ label }}</th>{% endfor %}
+                            <th scope="col" class="num">Всего</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in load.rows %}
+                            <tr>
+                                <th scope="row">{{ row.name }}</th>
+                                {% for cell in row.cells %}
+                                    <td class="num an-tone-load" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">{% if cell.days %}{{ cell.days }}{% endif %}</td>
+                                {% endfor %}
+                                <td class="num"><strong>{{ row.total }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

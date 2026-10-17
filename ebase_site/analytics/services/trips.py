@@ -7,14 +7,15 @@
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from django.db.models import Min, QuerySet
 
 from analytics.filters import Period
 from analytics.services.finance import _bucket_by_month, _delta_pct
-from business_trip.models import BusinessTrip, BusinessTripDestination
+from business_trip.models import BusinessTrip, BusinessTripDestination, MoneyReceipt
+from business_trip.xlsx_report import EXCLUDED_EXPENSE_TYPE_NAME, employee_fio
 
 ZERO = Decimal("0")
 KOPECK = Decimal("0.01")
@@ -475,3 +476,127 @@ def by_service_type(period: Period, employee=None) -> list[dict]:
         for item in buckets.values()
     ]
     return sorted(rows, key=lambda row: (-row["trips"], row["label"]))
+
+
+# --- Сотрудники и подотчёт ---------------------------------------------------------
+
+
+def employee_name(user) -> str:
+    """ФИО сотрудника, без ФИО — логин."""
+    return employee_fio(user) or user.username
+
+
+def employee_days(period: Period, employee=None) -> list[dict]:
+    """Дни в командировках по сотрудникам за период, по убыванию дней."""
+    rows = {}
+    for trip in trips_in_period(period, employee):
+        row = rows.setdefault(
+            trip.employee_id,
+            {
+                "id": trip.employee_id,
+                "name": employee_name(trip.employee),
+                "trips": 0,
+                "days": 0,
+                "amount": ZERO,
+            },
+        )
+        row["trips"] += 1
+        row["days"] += trip.days_count or 0
+        row["amount"] += trip_total(trip)
+    result = [
+        {**row, "per_day": _ratio(row["amount"], row["days"])} for row in rows.values()
+    ]
+    return sorted(result, key=lambda row: (-row["days"], row["name"]))
+
+
+def employee_month_load(period: Period, employee=None) -> dict:
+    """Дни в отъезде «сотрудник × месяц».
+
+    Берутся командировки, пересекающие период (даже начавшиеся раньше); дни
+    обрезаются по границам периода и раскладываются по календарным месяцам.
+    """
+    months = period.months()
+    index = {month: position for position, month in enumerate(months)}
+    queryset = BusinessTrip.objects.filter(
+        beg_dt__lte=period.date_to, end_dt__gte=period.date_from
+    )
+    rows = {}
+    for trip in load_trips(_filtered(queryset, employee)):
+        row = rows.setdefault(
+            trip.employee_id,
+            {
+                "id": trip.employee_id,
+                "name": employee_name(trip.employee),
+                "days": [0] * len(months),
+                "total": 0,
+            },
+        )
+        day = max(trip.beg_dt, period.date_from)
+        last = min(trip.end_dt, period.date_to)
+        while day <= last:
+            row["days"][index[day.replace(day=1)]] += 1
+            row["total"] += 1
+            day += timedelta(days=1)
+    result = sorted(rows.values(), key=lambda row: (-row["total"], row["name"]))
+    return {
+        "months": months,
+        "rows": result,
+        "max": max((max(row["days"]) for row in result), default=0),
+    }
+
+
+def accountable_spent(trip: BusinessTrip) -> Decimal:
+    """Расход по подотчёту: затраты без «Я.командировки» и суточные.
+
+    Как «ИТОГО расход» отчёта по ДС: «Я.командировки» оплачены компанией
+    напрямую и через сотрудника не проходят.
+    """
+    expenses = sum(
+        (
+            expense.amount
+            for expense in trip.expenses.all()
+            if expense.expense_type.name != EXCLUDED_EXPENSE_TYPE_NAME
+        ),
+        ZERO,
+    )
+    return expenses + (trip.allowance_amount or ZERO)
+
+
+def accountable(period: Period, today: date, employee=None) -> list[dict]:
+    """Подотчёт сотрудников: получено и расход за период, остаток на сегодня.
+
+    Получено — поступления ДС по дате получения; расход — `accountable_spent`
+    командировок по месяцу выезда. Остаток = все поступления − весь расход по
+    сегодняшний день (будущие командировки не учитываются). Плюс — деньги
+    у сотрудника, минус — компания должна сотруднику.
+    """
+    receipts = _filtered(MoneyReceipt.objects.select_related("employee"), employee)
+    rows = {}
+
+    def row_of(user) -> dict:
+        return rows.setdefault(
+            user.pk,
+            {
+                "id": user.pk,
+                "name": employee_name(user),
+                "received": ZERO,
+                "spent": ZERO,
+                "balance": ZERO,
+            },
+        )
+
+    date_range = (period.date_from, period.date_to)
+    for receipt in receipts.filter(receipt_date__range=date_range):
+        row_of(receipt.employee)["received"] += receipt.amount
+    for receipt in receipts.filter(receipt_date__lte=today):
+        row_of(receipt.employee)["balance"] += receipt.amount
+    for trip in trips_in_period(period, employee):
+        row_of(trip.employee)["spent"] += accountable_spent(trip)
+    for trip in trips_until(today, employee):
+        row_of(trip.employee)["balance"] -= accountable_spent(trip)
+    result = [
+        {**row, "diff": row["received"] - row["spent"]}
+        for row in rows.values()
+        if row["received"] or row["spent"] or row["balance"]
+    ]
+    return sorted(result, key=lambda row: row["name"])

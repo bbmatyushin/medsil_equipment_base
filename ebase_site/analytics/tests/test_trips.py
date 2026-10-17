@@ -5,7 +5,10 @@ from django.test import TestCase
 
 from analytics.filters import Period
 from analytics.services.trips import (
+    accountable,
     annual_by_direction,
+    employee_days,
+    employee_month_load,
     by_service_type,
     direction_norms,
     directions,
@@ -24,9 +27,11 @@ from analytics.tests.factories import (
     make_client,
     make_department,
     make_employee,
+    make_receipt,
     make_trip,
 )
-from business_trip.models import BusinessTrip
+from business_trip.models import BusinessTrip, MoneyReceipt
+from business_trip.xlsx_report import build_money_report
 
 D = Decimal
 
@@ -625,3 +630,134 @@ class ServiceTypeTests(TestCase):
             self.assertIsNotNone(rows[name]["id"])
         self.assertIsNone(rows["Вид работ не указан"]["id"])
         self.assertEqual(rows["Вид работ не указан"]["avg_trip"], D("700.00"))
+
+
+class EmployeeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def test_employee_days(self):
+        for day in (1, 10):
+            make_trip(
+                self.employee,
+                date(2026, 3, day),
+                date(2026, 3, day + 2),
+                destinations=[(self.kazan, date(2026, 3, day), date(2026, 3, day + 2))],
+            )
+        rows = employee_days(YEAR_2026)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["name"], "Иванов Иван Иванович")
+        self.assertEqual((row["trips"], row["days"]), (2, 6))
+        self.assertEqual(row["amount"], D("4200"))
+        self.assertEqual(row["per_day"], D("700.00"))
+
+    def test_month_load_splits_and_clips(self):
+        make_trip(self.employee, date(2026, 3, 29), date(2026, 4, 2))
+        make_trip(self.employee, date(2026, 2, 27), date(2026, 3, 1))
+
+        load = employee_month_load(YEAR_2026)
+        row = load["rows"][0]
+        self.assertEqual(row["days"][1], 2)  # февраль: 27–28
+        self.assertEqual(row["days"][2], 4)  # март: 1, 29–31
+        self.assertEqual(row["days"][3], 2)  # апрель: 1–2
+        self.assertEqual(row["total"], 8)
+        self.assertEqual(load["max"], 4)
+
+        march = employee_month_load(Period(date(2026, 3, 1), date(2026, 3, 31)))
+        self.assertEqual(march["rows"][0]["days"], [4])
+
+    def test_month_load_empty(self):
+        load = employee_month_load(YEAR_2026)
+        self.assertEqual(load["rows"], [])
+        self.assertEqual(load["max"], 0)
+
+
+class AccountableTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def _trip(self, beg, days, expenses):
+        end = beg + timedelta(days=days - 1)
+        return make_trip(
+            self.employee,
+            beg,
+            end,
+            destinations=[(self.kazan, beg, end)],
+            expenses=[(kind, beg, amount) for kind, amount in expenses],
+        )
+
+    def test_accountable_user_example(self):
+        make_receipt(self.employee, date(2026, 3, 1), 10000)
+        self._trip(date(2026, 3, 2), 3, [("Гостиница", 4000), ("Такси", 2000)])
+
+        row = accountable(YEAR_2026, TODAY)[0]
+
+        self.assertEqual(row["received"], D("10000"))
+        self.assertEqual(row["spent"], D("8100"))
+        self.assertEqual(row["diff"], D("1900"))
+        self.assertEqual(row["balance"], D("1900"))
+        self.assertEqual(row["name"], "Иванов Иван Иванович")
+
+    def test_accountable_excludes_yandex_trips(self):
+        self._trip(date(2026, 3, 2), 1, [("Я.командировки", 5000), ("Такси", 300)])
+
+        row = accountable(YEAR_2026, TODAY)[0]
+
+        self.assertEqual(row["spent"], D("1000"))
+        self.assertEqual(row["balance"], D("-1000"))
+
+    def test_balance_is_cumulative(self):
+        make_receipt(self.employee, date(2025, 12, 1), 5000)
+        self._trip(date(2025, 12, 2), 1, [("Такси", 300)])
+        make_receipt(self.employee, date(2026, 2, 1), 2000)
+
+        row = accountable(YEAR_2026, TODAY)[0]
+
+        self.assertEqual(row["received"], D("2000"))
+        self.assertEqual(row["spent"], D("0"))
+        self.assertEqual(row["balance"], D("6000"))
+
+    def test_balance_ignores_future_trips(self):
+        make_receipt(self.employee, date(2026, 3, 1), 5000)
+        self._trip(TODAY + timedelta(days=10), 2, [("Такси", 100)])
+
+        row = accountable(YEAR_2026, TODAY)[0]
+
+        self.assertEqual(row["spent"], D("1500"))
+        self.assertEqual(row["balance"], D("5000"))
+
+    def test_accountable_skips_empty_rows(self):
+        make_employee("petrov", "Петров", "Пётр", "Петрович")
+        self.assertEqual(accountable(YEAR_2026, TODAY), [])
+
+    def test_accountable_matches_money_report(self):
+        make_receipt(self.employee, date(2026, 3, 1), 7000)
+        make_receipt(self.employee, date(2026, 3, 15), D("1234.56"))
+        self._trip(date(2026, 3, 2), 2, [("Гостиница", 3000), ("Я.командировки", 9000)])
+        self._trip(date(2026, 3, 20), 1, [("Такси", D("456.78"))])
+        march = Period(date(2026, 3, 1), date(2026, 3, 31))
+
+        trips = BusinessTrip.objects.filter(
+            employee=self.employee, beg_dt__range=(march.date_from, march.date_to)
+        ).prefetch_related("destinations__department__city", "expenses__expense_type")
+        receipts = MoneyReceipt.objects.filter(
+            employee=self.employee,
+            receipt_date__range=(march.date_from, march.date_to),
+        )
+        ws = build_money_report(self.employee, 2026, 3, trips, receipts).active
+
+        def numbers(column, first, last):
+            values = (ws[f"{column}{row}"].value for row in range(first, last + 1))
+            return sum(
+                (D(str(v)) for v in values if isinstance(v, (int, float, D))), D("0")
+            )
+
+        row = accountable(march, TODAY)[0]
+        self.assertEqual(numbers("D", 7, 18), row["received"])
+        self.assertEqual(numbers("G", 7, 44) + numbers("D", 24, 34), row["spent"])
+        self.assertEqual(row["spent"], D("3000") + D("456.78") + 3 * 700)

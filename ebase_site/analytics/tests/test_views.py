@@ -19,6 +19,7 @@ from analytics.tests.factories import (
     make_department,
     make_employee,
     make_payment,
+    make_receipt,
     make_shipment,
     make_trip,
 )
@@ -828,7 +829,13 @@ class ParetoCaptionTests(SimpleTestCase):
                 self.assertEqual(self._caption(clients_for_80, clients_total), expected)
 
 
-TRIPS_CHART_KEYS = {"by_month", "structure", "directions"}
+TRIPS_CHART_KEYS = {
+    "by_month",
+    "structure",
+    "directions",
+    "employee_days",
+    "balance",
+}
 
 
 class TripsPageTests(TestCase):
@@ -971,3 +978,40 @@ class TripsPageTests(TestCase):
         self.assertEqual(len(cities), 2)
         self.assertEqual([row["label"] for row in regions], ["Татарстан"])
         self.assertEqual(self._get({"group": "region"}).context["group"], "region")
+
+    def test_trips_balance_row_links_to_receipts(self):
+        make_receipt(self.employee, date(2026, 3, 1), 5000)
+        self._trip(self.employee, date(2026, 3, 2), date(2026, 3, 3))
+
+        response = self._get()
+
+        row = response.context["accountable"][0]
+        self.assertEqual(
+            row["url"],
+            reverse("admin:business_trip_moneyreceipt_changelist")
+            + f"?employee={self.employee.pk}",
+        )
+        changelist = self.client.get(row["url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(
+            self._filter_spec(changelist, "employee").value(), str(self.employee.pk)
+        )
+        self.assertContains(response, "2 600,00 ₽")
+
+    def test_trips_month_load_is_shaded(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 4))
+        self._trip(self.other, date(2026, 3, 1), date(2026, 3, 1))
+
+        response = self._get()
+
+        rows = {row["name"]: row for row in response.context["load"]["rows"]}
+        self.assertEqual(
+            rows["Иванов Иван Иванович"]["cells"][2], {"days": 4, "shade": 1.0}
+        )
+        self.assertEqual(
+            rows["Петров Пётр Петрович"]["cells"][2], {"days": 1, "shade": 0.5}
+        )
+        self.assertEqual(
+            rows["Петров Пётр Петрович"]["cells"][0], {"days": 0, "shade": 0}
+        )
+        self.assertContains(response, "an-tone-load")
