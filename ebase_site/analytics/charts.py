@@ -11,8 +11,9 @@ import math
 KINDS = ("bar", "line", "scatter", "doughnut")
 FORMATS = ("money", "money_short", "count", "percent")
 AXES = ("y", "y2")
-# Смысловые цвета серии вместо очередного цвета палитры
-COLORS = ("positive", "negative")
+# Цвет серии вместо очередного цвета палитры: смысловой («плюс/минус») или
+# слот палитры по имени (c1–c6, переменные --an-c1…--an-c6 в analytics.css)
+COLORS = ("positive", "negative", "c1", "c2", "c3", "c4", "c5", "c6")
 
 # Радиус пузырька scatter, px
 BUBBLE_MIN_RADIUS = 4
@@ -119,8 +120,8 @@ def chart_spec(
       Пример: «Накопительно» поверх столбцов — `axis="y2", fmt="money"`
       (правая шкала денег подстраивается под данные и не сплющивает столбцы).
       У scatter `data` — точки `{"x", "y", "label", "url", "r"?}`; `sign_colors`
-      у scatter красит точки по знаку `y`. `color` ("positive" | "negative") —
-      смысловой цвет серии вместо очередного цвета палитры.
+      у scatter красит точки по знаку `y`. `color` ("positive" | "negative" | "c1"…"c6") —
+      смысловой цвет или слот палитры вместо очередного цвета палитры.
     - `fmt`: формат значений ("money" | "money_short" | "count" | "percent");
       у scatter — ось Y. "money_short" — деньги сокращённо («342 тыс. ₽») и в подсказке.
     - `x_fmt`: формат оси X у scatter (по умолчанию деньги), у остальных не используется.

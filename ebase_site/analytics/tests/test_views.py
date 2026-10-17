@@ -1261,3 +1261,11 @@ class TripsPageTests(TestCase):
         self.assertLess(
             card.index('data-chart="chart-trips-employee-days"'), card.index("<table")
         )
+
+    def test_trips_employee_days_chart_is_ochre(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+
+        dataset = response.context["charts"]["employee_days"]["datasets"][0]
+        self.assertEqual(dataset["color"], "c4")

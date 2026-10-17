@@ -61,8 +61,16 @@
     function readTheme() {
         const styles = getComputedStyle(document.documentElement);
         const value = (name) => styles.getPropertyValue(name).trim();
+        const series = [1, 2, 3, 4, 5, 6].map((i) => value("--an-c" + i));
         return {
-            series: [1, 2, 3, 4, 5, 6].map((i) => value("--an-c" + i)),
+            series: series,
+            // слоты палитры по имени: цвет серии spec.color = "c1"…"c6"
+            c1: series[0],
+            c2: series[1],
+            c3: series[2],
+            c4: series[3],
+            c5: series[4],
+            c6: series[5],
             positive: value("--an-positive"),
             negative: value("--an-negative"),
             grid: value("--an-grid"),
@@ -107,7 +115,7 @@
 
     function buildDataset(spec, dataset, index, theme) {
         // Цвета серий идут строго по порядку палитры (view не отдаёт больше 6 серий),
-        // смысловой цвет серии (dataset.color: positive / negative) — вместо очередного
+        // цвет серии dataset.color (positive / negative / c1…c6) — вместо очередного
         const color = dataset.color ? theme[dataset.color] : theme.series[index % theme.series.length];
         const result = {
             label: dataset.label,

@@ -56,6 +56,14 @@ class ChartSpecTests(SimpleTestCase):
         empty = chart_spec("doughnut", ["ТО"], [{"label": "Затраты", "data": [0]}])
         self.assertTrue(empty["empty"])
 
+    def test_chart_spec_palette_color(self):
+        spec = chart_spec(
+            "bar", ["Иванов"], [{"label": "Дней", "data": [3], "color": "c4"}]
+        )
+        self.assertEqual(spec["datasets"][0]["color"], "c4")
+        with self.assertRaises(ValueError):
+            chart_spec("bar", ["x"], [{"label": "y", "data": [1], "color": "c7"}])
+
     def test_chart_spec_keys_and_defaults(self):
         spec = chart_spec("bar", ["янв 2026"], [{"label": "Пришло", "data": [1]}])
         self.assertEqual(
