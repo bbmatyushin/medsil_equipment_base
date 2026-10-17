@@ -978,88 +978,92 @@ class ContractsScatterTests(TestCase):
 
 
 class PaymentDisciplineTests(TestCase):
-    def _paid(
-        self, client, number, end_date, payment_date, conclusion=None, amount=1000
-    ):
-        contract = make_contract(
-            client,
-            number,
-            conclusion or date(2026, 1, 15),
-            amount,
-            service_end_date=end_date,
-        )
-        make_payment(contract, payment_date, amount)
-        return contract
+    """Дни от заключения контракта до каждой оплаты, среднее с весом по сумме."""
 
-    def test_payment_discipline_days(self):
+    def _contract(self, client, number, conclusion=date(2026, 1, 15), **fields):
+        return make_contract(client, number, conclusion, 100000, **fields)
+
+    def _pay(self, contract, days, amount):
+        """Оплата через `days` дней после заключения контракта."""
+        make_payment(contract, contract.conclusion_date + timedelta(days=days), amount)
+
+    def test_days_from_conclusion_weighted_by_amount(self):
         client = make_client("Альфа")
-        # конец услуг 1 марта, оплата 31 марта: 30 дней
-        self._paid(client, "PD-1", date(2026, 3, 1), date(2026, 3, 31))
-        # предоплата за 10 дней: -10
-        self._paid(client, "PD-2", date(2026, 5, 11), date(2026, 5, 1))
+        contract = self._contract(client, "PD-1")
+        self._pay(contract, 10, 400)
+        self._pay(contract, 30, 600)
 
         result = payment_discipline(P)
 
+        # (400 × 10 + 600 × 30) / 1000 = 22
         self.assertEqual(
             result,
             [
                 {
                     "client_id": str(client.pk),
                     "name": "Альфа",
-                    "avg_days": Decimal("10.0"),
-                    "contracts": 2,
+                    "avg_days": Decimal("22.0"),
+                    "contracts": 1,
                 }
             ],
         )
 
-    def test_payment_discipline_uses_last_payment(self):
+    def test_partially_paid_contracts_count_and_unpaid_are_skipped(self):
         client = make_client("Альфа")
-        contract = make_contract(
-            client,
-            "PL-1",
-            date(2026, 1, 15),
-            1000,
-            service_end_date=date(2026, 2, 1),
-        )
-        make_payment(contract, date(2026, 2, 5), 400)
-        make_payment(contract, date(2026, 2, 21), 600)
+        self._pay(self._contract(client, "PP-1"), 10, 1000)  # оплачен частично
+        self._pay(self._contract(client, "PP-2"), 30, 1000)
+        self._contract(client, "PP-3")  # без оплат
 
         (row,) = payment_discipline(P)
 
-        # последняя оплата 21 февраля: 20 дней
+        self.assertEqual(row["contracts"], 2)
         self.assertEqual(row["avg_days"], Decimal("20.0"))
 
-    def test_payment_discipline_falls_back_to_conclusion_date(self):
+    def test_service_end_date_is_ignored(self):
+        # годовой договор: конец услуг 31.12, оплата через 21 день после подписания
         client = make_client("Альфа")
-        self._paid(client, "PF-1", None, date(2026, 2, 14), conclusion=date(2026, 2, 4))
-
-        (row,) = payment_discipline(P)
-
-        self.assertEqual(row["avg_days"], Decimal("10.0"))
-
-    def test_payment_discipline_only_paid_contracts(self):
-        client = make_client("Альфа")
-        self._paid(client, "PP-1", date(2026, 3, 1), date(2026, 3, 11))  # paid: 10
-        partial = make_contract(
-            client, "PP-2", date(2026, 1, 15), 5000, service_end_date=date(2026, 3, 1)
+        contract = self._contract(
+            client,
+            "PE-1",
+            conclusion=date(2026, 3, 23),
+            service_end_date=date(2026, 12, 31),
         )
-        make_payment(partial, date(2026, 9, 1), 1000)  # частичная оплата
-        make_contract(client, "PP-3", date(2026, 1, 15), 5000)  # без оплат
+        self._pay(contract, 21, 5000)
 
         (row,) = payment_discipline(P)
 
-        self.assertEqual(row["contracts"], 1)
+        self.assertEqual(row["avg_days"], Decimal("21.0"))
+
+    def test_refunds_are_ignored(self):
+        client = make_client("Альфа")
+        contract = self._contract(client, "PR-1")
+        self._pay(contract, 10, 1000)
+        self._pay(contract, 40, -300)
+
+        (row,) = payment_discipline(P)
+
         self.assertEqual(row["avg_days"], Decimal("10.0"))
 
-    def test_payment_discipline_sorted_by_avg_days_desc_then_name(self):
-        slow = make_client("Медленный")
-        fast = make_client("Быстрый")
-        tie_b = make_client("Яблоко")
-        tie_a = make_client("Арбуз")
-        self._paid(slow, "PS-1", date(2026, 3, 1), date(2026, 4, 1))  # 31
-        self._paid(fast, "PS-2", date(2026, 3, 11), date(2026, 3, 1))  # -10
-        self._paid(tie_b, "PS-3", date(2026, 3, 1), date(2026, 3, 6))  # 5
-        self._paid(tie_a, "PS-4", date(2026, 3, 1), date(2026, 3, 6))  # 5
+    def test_client_with_only_refunds_is_skipped(self):
+        self._pay(self._contract(make_client("Возврат"), "PR-2"), 5, -100)
+
+        self.assertEqual(payment_discipline(P), [])
+
+    def test_payment_before_conclusion_is_negative(self):
+        client = make_client("Альфа")
+        self._pay(self._contract(client, "PB-1"), -10, 1000)
+
+        (row,) = payment_discipline(P)
+
+        self.assertEqual(row["avg_days"], Decimal("-10.0"))
+
+    def test_sorted_by_avg_days_desc_then_name(self):
+        slow, fast = make_client("Медленный"), make_client("Быстрый")
+        tie_b, tie_a = make_client("Яблоко"), make_client("Арбуз")
+        self._pay(self._contract(slow, "PS-1"), 31, 1000)
+        self._pay(self._contract(fast, "PS-2"), -10, 1000)
+        self._pay(self._contract(tie_b, "PS-3"), 5, 1000)
+        self._pay(self._contract(tie_a, "PS-4"), 5, 1000)
 
         result = payment_discipline(P)
 
@@ -1073,35 +1077,23 @@ class PaymentDisciplineTests(TestCase):
             ],
         )
 
-    def test_payment_discipline_avg_rounded_half_up(self):
+    def test_avg_rounded_half_up(self):
         client = make_client("Альфа")
-        for index, days in enumerate([1, 0, 0, 0], start=1):
-            self._paid(
-                client,
-                f"PR-{index}",
-                date(2026, 3, 1),
-                date(2026, 3, 1) + timedelta(days=days),
-            )
+        contract = self._contract(client, "PH-1")
+        self._pay(contract, 1, 100)
+        self._pay(contract, 0, 300)
 
         (row,) = payment_discipline(P)
 
-        # 1 / 4 = 0,25 -> 0,3 (не банковское округление)
+        # (1 × 100) / 400 = 0,25 -> 0,3 (не банковское округление)
         self.assertEqual(row["avg_days"], Decimal("0.3"))
-        self.assertEqual(row["contracts"], 4)
 
-    def test_payment_discipline_period_and_client_filter(self):
-        alpha = make_client("Альфа")
-        beta = make_client("Бета")
-        self._paid(alpha, "PC-1", date(2026, 3, 1), date(2026, 3, 11))  # 10
-        self._paid(beta, "PC-2", date(2026, 3, 1), date(2026, 3, 21))  # 20
-        # заключён вне периода
-        self._paid(
-            alpha,
-            "PC-3",
-            date(2025, 11, 1),
-            date(2025, 12, 31),
-            conclusion=date(2025, 10, 1),
-        )
+    def test_period_and_client_filter(self):
+        alpha, beta = make_client("Альфа"), make_client("Бета")
+        self._pay(self._contract(alpha, "PC-1"), 10, 1000)
+        self._pay(self._contract(beta, "PC-2"), 20, 1000)
+        # заключён вне периода, оплачен в периоде — не учитывается
+        self._pay(self._contract(alpha, "PC-3", conclusion=date(2025, 12, 1)), 60, 1000)
 
         everyone = {r["name"]: r["avg_days"] for r in payment_discipline(P)}
         only_alpha = payment_discipline(P, client=alpha)
@@ -1110,15 +1102,16 @@ class PaymentDisciplineTests(TestCase):
         self.assertEqual([r["name"] for r in only_alpha], ["Альфа"])
         self.assertEqual(only_alpha[0]["contracts"], 1)
 
-    def test_payment_discipline_one_query(self):
+    def test_one_query(self):
         for index in range(3):
-            client = make_client(f"Клиент {index}")
-            self._paid(client, f"PQ-{index}", date(2026, 3, 1), date(2026, 3, 11))
+            contract = self._contract(make_client(f"Клиент {index}"), f"PQ-{index}")
+            self._pay(contract, 10, 1000)
+            self._pay(contract, 20, 1000)
 
         with self.assertNumQueries(1):
             result = payment_discipline(P)
 
         self.assertEqual(len(result), 3)
 
-    def test_payment_discipline_empty_period(self):
+    def test_empty_period(self):
         self.assertEqual(payment_discipline(P), [])

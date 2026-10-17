@@ -735,14 +735,9 @@ class FinancePageTests(TestCase):
 
     def test_finance_discipline_marks_prepayment(self):
         alpha = make_client("Альфа")
-        contract = make_contract(
-            alpha,
-            "PRE-1",
-            date(2026, 3, 1),
-            1000,
-            service_end_date=date(2026, 3, 31),
-        )
-        make_payment(contract, date(2026, 3, 10), 1000)
+        contract = make_contract(alpha, "PRE-1", date(2026, 3, 22), 1000)
+        # оплата за 21 день до подписания
+        make_payment(contract, date(2026, 3, 1), 1000)
 
         response = self._get()
 
@@ -750,6 +745,17 @@ class FinancePageTests(TestCase):
         self.assertContains(
             response, '-21,0 <span class="an-note">предоплата</span>', count=1
         )
+
+    def test_finance_discipline_counts_partially_paid_contracts(self):
+        alpha = make_client("Альфа")
+        contract = make_contract(alpha, "PART-1", date(2026, 3, 1), 1000)
+        make_payment(contract, date(2026, 3, 15), 400)
+
+        response = self._get()
+
+        (row,) = response.context["discipline"]
+        self.assertEqual((row["name"], row["avg_days"]), ("Альфа", Decimal("14")))
+        self.assertContains(response, "с весом по сумме оплаты")
 
 
 class ParetoCaptionTests(SimpleTestCase):

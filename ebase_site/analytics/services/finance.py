@@ -11,7 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from itertools import accumulate
 from typing import Iterable
 
-from django.db.models import Count, Max, Q, QuerySet, Sum
+from django.db.models import Count, Q, QuerySet, Sum
 from django.utils import timezone
 
 from analytics.filters import Period
@@ -417,40 +417,43 @@ def contracts_scatter(period: Period, client: Client | None = None) -> list[dict
 
 
 def payment_discipline(period: Period, client: Client | None = None) -> list[dict]:
-    """Платёжная дисциплина клиентов по оплаченным контрактам периода.
+    """Платёжная дисциплина: через сколько дней после подписания клиенты платят.
 
-    Дни = дата последней оплаты минус дата окончания услуг (а без неё — дата
-    заключения); отрицательное значение означает предоплату. Среднее по
-    клиенту до 0,1, сортировка по убыванию среднего, при равенстве — по
-    названию. Контракты без оплат пропускаются.
+    Учитывается каждое поступление по контрактам периода — и по полностью, и по
+    частично оплаченным; возвраты (суммы ≤ 0) не учитываются. Дни = дата оплаты
+    минус дата заключения контракта, отрицательное значение — оплата до
+    подписания. Среднее по клиенту взвешено суммами оплат (крупная оплата весит
+    больше мелкой), до 0,1; `contracts` — сколько контрактов клиента с оплатами.
+    Сортировка по убыванию среднего, при равенстве — по названию.
     """
-    rows = (
-        contracts_in_period(period, client)
-        .filter(payment_status="paid")
-        .annotate(last_payment=Max("payments__date"))
-        .values_list(
-            "client_id",
-            "client__name",
-            "service_end_date",
-            "conclusion_date",
-            "last_payment",
-        )
+    rows = Payment.objects.filter(
+        contract__in=contracts_in_period(period, client), amount__gt=0
+    ).values_list(
+        "contract__client_id",
+        "contract__client__name",
+        "contract_id",
+        "contract__conclusion_date",
+        "date",
+        "amount",
     )
-    days_by_client: dict[str, tuple[str, list[int]]] = {}
-    for client_id, name, end_date, conclusion_date, last_payment in rows:
-        if last_payment is None:
-            continue
-        days = (last_payment - (end_date or conclusion_date)).days
-        days_by_client.setdefault(str(client_id), (name, []))[1].append(days)
+    by_client: dict[str, dict] = {}
+    for client_id, name, contract_id, conclusion_date, paid_on, amount in rows:
+        totals = by_client.setdefault(
+            str(client_id),
+            {"name": name, "weighted": ZERO, "amount": ZERO, "contracts": set()},
+        )
+        totals["weighted"] += amount * (paid_on - conclusion_date).days
+        totals["amount"] += amount
+        totals["contracts"].add(contract_id)
 
     result = [
         {
             "client_id": client_id,
-            "name": name,
-            "avg_days": _round_tenth(Decimal(sum(days)) / len(days)),
-            "contracts": len(days),
+            "name": totals["name"],
+            "avg_days": _round_tenth(totals["weighted"] / totals["amount"]),
+            "contracts": len(totals["contracts"]),
         }
-        for client_id, (name, days) in days_by_client.items()
+        for client_id, totals in by_client.items()
     ]
     result.sort(key=lambda row: (-row["avg_days"], row["name"]))
     return result
