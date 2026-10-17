@@ -7,9 +7,16 @@
 
 from itertools import count
 
-from clients.models import Client
+from business_trip.models import (
+    BusinessTrip,
+    BusinessTripDestination,
+    BusinessTripExpense,
+    ExpenseType,
+    MoneyReceipt,
+)
+from clients.models import Client, Department
 from contracts.models import Contract, Payment
-from directory.models import City, Unit
+from directory.models import City, ServiceType, Unit
 from spare_part.models import SparePart, SparePartShipmentM2M, SparePartShipmentV2
 from users.models import CompanyUser
 
@@ -66,4 +73,75 @@ def make_shipment(contract, shipment_dt, total) -> SparePartShipmentM2M:
     )
     return SparePartShipmentM2M.objects.create(
         shipment=shipment, spare_part=spare_part, quantity=1, price=total
+    )
+
+
+_DEFAULT = object()
+
+
+def make_employee(
+    username="ivanov", last_name="Иванов", first_name="Иван", patron="Иванович"
+) -> CompanyUser:
+    """Сотрудник с ФИО."""
+    return CompanyUser.objects.create_user(
+        username, last_name=last_name, first_name=first_name, patron=patron
+    )
+
+
+def make_city(name="Казань", region="Татарстан") -> City:
+    """Город (пара «город, регион» уникальна — берётся существующий)."""
+    city, _ = City.objects.get_or_create(name=name, region=region)
+    return city
+
+
+def make_department(name, client=None, city=_DEFAULT, address=None) -> Department:
+    """Подразделение. По умолчанию город — Казань; `city=None` — без города."""
+    if city is _DEFAULT:
+        city = make_city()
+    return Department.objects.create(
+        name=name,
+        address=address or f"адрес {name}",
+        client=client,
+        city=city,
+    )
+
+
+def make_trip(
+    employee,
+    beg,
+    end,
+    *,
+    destinations=(),
+    expenses=(),
+    service_types=(),
+    contracts=(),
+) -> BusinessTrip:
+    """Командировка с пунктами, затратами, видами работ и контрактами.
+
+    `destinations` — кортежи (подразделение, дата прибытия, дата выбытия);
+    `expenses` — кортежи (вид затрат, дата, сумма); `service_types` — имена
+    видов работ. Контракты добавляются последними: сигналы пересчитают доли.
+    """
+    trip = BusinessTrip.objects.create(employee=employee, beg_dt=beg, end_dt=end)
+    for department, dest_beg, dest_end in destinations:
+        BusinessTripDestination.objects.create(
+            business_trip=trip, department=department, beg_dt=dest_beg, end_dt=dest_end
+        )
+    for type_name, day, amount in expenses:
+        expense_type, _ = ExpenseType.objects.get_or_create(name=type_name)
+        BusinessTripExpense.objects.create(
+            business_trip=trip, expense_type=expense_type, date=day, amount=amount
+        )
+    for name in service_types:
+        service_type, _ = ServiceType.objects.get_or_create(name=name)
+        trip.service_type.add(service_type)
+    if contracts:
+        trip.contract.add(*contracts)
+    return trip
+
+
+def make_receipt(employee, receipt_date, amount) -> MoneyReceipt:
+    """Поступление ДС сотруднику."""
+    return MoneyReceipt.objects.create(
+        employee=employee, receipt_date=receipt_date, amount=amount
     )
