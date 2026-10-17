@@ -2,4 +2,56 @@
 {% load analytics_tags %}
 
 {% block analytics_content %}
+<h2 class="an-section-title">Обзор</h2>
+<section class="an-tiles" aria-label="Итоги по командировкам периода">
+    {% for tile in tiles %}
+        <div class="an-tile{% if tile.inverse %} an-tile--inverse{% endif %}">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            {% if tile.kind == "count" %}
+                <p class="an-tile-value">{{ tile.value|number }}</p>
+            {% else %}
+                <p class="an-tile-value">{{ tile.value|money }}</p>
+            {% endif %}
+            <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta }}</p>
+            <p class="an-tile-note">к {{ previous_period.date_from|date:"d.m.Y" }} — {{ previous_period.date_to|date:"d.m.Y" }}</p>
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link"><a href="{{ trips_list_url }}">Открыть список командировок</a> — командировки периода (по дате выезда) с теми же фильтрами.</p>
+
+<div class="an-charts">
+    <section class="an-card an-card--wide">
+        <h2>Затраты по месяцам</h2>
+        <p class="an-card-note">Все затраты и суточные командировки относятся к месяцу её начала, как в отчёте по ДС.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.by_month chart_id="chart-trips-by-month" title="Затраты на командировки по месяцам" %}
+    </section>
+
+    <section class="an-card">
+        <h2>Структура затрат</h2>
+        <p class="an-card-note">Затраты командировок периода по видам и суточные.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.structure chart_id="chart-trips-structure" title="Структура затрат на командировки" %}
+        {% if structure %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Вид затрат</th>
+                            <th scope="col" class="num">Сумма</th>
+                            <th scope="col" class="num">Доля</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in structure %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td class="num">{{ row.amount|money }}</td>
+                                <td class="num">{{ row.share_pct|pct }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

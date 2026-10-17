@@ -3,13 +3,17 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from analytics.filters import Period
 from analytics.services.trips import (
-    load_trips,
     client_of,
+    cost_structure,
+    costs_by_month,
     direction_of,
+    load_trips,
     split_proportional,
     trip_shares,
     trip_total,
+    trips_kpis,
 )
 from analytics.tests.factories import (
     make_city,
@@ -21,6 +25,9 @@ from analytics.tests.factories import (
 from business_trip.models import BusinessTrip
 
 D = Decimal
+
+TODAY = date(2026, 10, 16)
+YEAR_2026 = Period(date(2026, 1, 1), date(2026, 12, 31))
 
 
 def _by_destination(shares):
@@ -257,3 +264,140 @@ class AttributionTests(TestCase):
                     direction_of(share.destination, "region")
                     client_of(share.destination)
                 trip_total(trip)
+
+
+class KpiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.other = make_employee("petrov", "Петров", "Пётр", "Петрович")
+        cls.kazan = make_department("Больница Казани")
+
+    def _trip(self, employee, beg, days, expense):
+        end = beg + timedelta(days=days - 1)
+        return make_trip(
+            employee,
+            beg,
+            end,
+            destinations=[(self.kazan, beg, end)],
+            expenses=[("Такси", beg, expense)] if expense else [],
+        )
+
+    def test_kpis_empty_period(self):
+        kpis = trips_kpis(YEAR_2026)
+        current = kpis["current"]
+        self.assertEqual(current["total"], D("0"))
+        self.assertEqual(current["count"], 0)
+        self.assertEqual(current["person_days"], 0)
+        self.assertIsNone(current["avg_trip"])
+        self.assertIsNone(current["avg_day"])
+        self.assertTrue(all(value is None for value in kpis["delta_pct"].values()))
+        self.assertEqual(
+            set(kpis["delta_pct"]),
+            {"total", "count", "person_days", "avg_trip", "avg_day"},
+        )
+
+    def test_kpis_values_and_delta(self):
+        self._trip(self.employee, date(2026, 3, 1), 3, 1000)
+        self._trip(self.employee, date(2026, 5, 1), 2, 500)
+        self._trip(self.employee, date(2025, 5, 1), 2, 1100)
+
+        kpis = trips_kpis(YEAR_2026)
+
+        current = kpis["current"]
+        self.assertEqual(current["total"], D("5000"))
+        self.assertEqual(current["count"], 2)
+        self.assertEqual(current["person_days"], 5)
+        self.assertEqual(current["avg_trip"], D("2500.00"))
+        self.assertEqual(current["avg_day"], D("1000.00"))
+        self.assertEqual(kpis["previous"]["total"], D("2500"))
+        self.assertEqual(kpis["delta_pct"]["total"], D("100.0"))
+
+    def test_kpis_employee_filter(self):
+        self._trip(self.employee, date(2026, 3, 1), 3, 1000)
+        self._trip(self.other, date(2026, 3, 1), 2, 500)
+
+        current = trips_kpis(YEAR_2026, self.other)["current"]
+
+        self.assertEqual(current["count"], 1)
+        self.assertEqual(current["total"], D("1900"))
+
+
+class MonthTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def test_months_use_trip_start_month(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 30),
+            date(2026, 4, 2),
+            destinations=[(self.kazan, date(2026, 3, 30), date(2026, 4, 2))],
+            expenses=[("Такси", date(2026, 4, 2), 400)],
+        )
+        result = costs_by_month(YEAR_2026)
+        self.assertEqual(len(result["months"]), 12)
+        by_label = {series["label"]: series["data"] for series in result["series"]}
+        self.assertEqual(by_label["Такси"][2], D("400"))
+        self.assertEqual(by_label["Такси"][3], D("0"))
+        self.assertEqual(by_label["Суточные"][2], D("2800"))
+        self.assertEqual(result["series"][-1]["label"], "Суточные")
+
+    def test_month_sum_equals_total_tile(self):
+        for month in (2, 6, 11):
+            make_trip(
+                self.employee,
+                date(2026, month, 3),
+                date(2026, month, 5),
+                destinations=[(self.kazan, date(2026, month, 3), date(2026, month, 5))],
+                expenses=[
+                    ("Такси", date(2026, month, 3), D("123.45")),
+                    ("Гостиница", date(2026, month, 4), 3000),
+                ],
+            )
+        result = costs_by_month(YEAR_2026)
+        total = sum(sum(series["data"]) for series in result["series"])
+        self.assertEqual(total, trips_kpis(YEAR_2026)["current"]["total"])
+
+    def test_month_series_collapse_to_six(self):
+        kinds = ["А", "Б", "В", "Г", "Д", "Е", "Ж"]
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 1),
+            destinations=[(self.kazan, date(2026, 3, 1), date(2026, 3, 1))],
+            expenses=[
+                (kind, date(2026, 3, 1), (len(kinds) - index) * 100)
+                for index, kind in enumerate(kinds)
+            ],
+        )
+        series = costs_by_month(YEAR_2026)["series"]
+        self.assertEqual(
+            [item["label"] for item in series],
+            ["А", "Б", "В", "Г", "Прочие виды", "Суточные"],
+        )
+        others = next(item for item in series if item["label"] == "Прочие виды")
+        self.assertEqual(others["data"][2], D("600"))
+
+    def test_structure_shares(self):
+        make_trip(
+            self.employee,
+            date(2026, 3, 1),
+            date(2026, 3, 3),
+            destinations=[(self.kazan, date(2026, 3, 1), date(2026, 3, 3))],
+            expenses=[
+                ("Гостиница", date(2026, 3, 1), 6000),
+                ("Такси", date(2026, 3, 2), 900),
+            ],
+        )
+        rows = cost_structure(YEAR_2026)
+        self.assertEqual(
+            [(row["label"], row["amount"]) for row in rows],
+            [("Гостиница", D("6000")), ("Суточные", D("2100")), ("Такси", D("900"))],
+        )
+        self.assertEqual(rows[0]["share_pct"], D("66.7"))
+        self.assertAlmostEqual(
+            float(sum(row["share_pct"] for row in rows)), 100.0, delta=0.1
+        )

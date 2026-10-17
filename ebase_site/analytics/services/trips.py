@@ -8,21 +8,29 @@
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from django.db.models import QuerySet
 
 from analytics.filters import Period
+from analytics.services.finance import _bucket_by_month, _delta_pct
 from business_trip.models import BusinessTrip, BusinessTripDestination
 
 ZERO = Decimal("0")
 KOPECK = Decimal("0.01")
+TENTH = Decimal("0.1")
 
 ALLOWANCE_LABEL = "Суточные"
 NO_DESTINATIONS_LABEL = "Пункты не указаны"
 NO_CITY_LABEL = "Город не указан"
 NO_REGION_SUFFIX = " (регион не указан)"
 NO_CLIENT_LABEL = "Клиент не указан"
+OTHER_KINDS_LABEL = "Прочие виды"
+
+# Серий на графике «Затраты по месяцам» не больше, чем цветов палитры charts.js
+MAX_MONTH_SERIES = 6
+
+KPI_KEYS = ("total", "count", "person_days", "avg_trip", "avg_day")
 
 
 @dataclass(frozen=True)
@@ -159,3 +167,115 @@ def trips_until(today: date, employee=None) -> list[BusinessTrip]:
     """Командировки, начавшиеся не позже `today` (вся история)."""
     queryset = BusinessTrip.objects.filter(beg_dt__lte=today)
     return load_trips(_filtered(queryset, employee))
+
+
+def _ratio(value, divisor, step: Decimal = KOPECK) -> Decimal | None:
+    """value / divisor с округлением до `step`; при нулевом делителе — None."""
+    if not divisor:
+        return None
+    return (Decimal(value) / Decimal(divisor)).quantize(step, rounding=ROUND_HALF_UP)
+
+
+# --- Основа: плитки, затраты по месяцам, структура -----------------------------
+
+
+def _kpi_values(trips: list[BusinessTrip]) -> dict:
+    total = sum((trip_total(trip) for trip in trips), ZERO)
+    person_days = sum(trip.days_count or 0 for trip in trips)
+    return {
+        "total": total,
+        "count": len(trips),
+        "person_days": person_days,
+        "avg_trip": _ratio(total, len(trips)),
+        "avg_day": _ratio(total, person_days),
+    }
+
+
+def trips_kpis(period: Period, employee=None) -> dict:
+    """Плитки вкладки и дельты к тому же периоду прошлого года.
+
+    Всего потрачено — затраты и суточные командировок периода; человеко-дни —
+    сумма дней командировок; средние — до копеек, без данных — None.
+    """
+    current = _kpi_values(trips_in_period(period, employee))
+    previous = _kpi_values(trips_in_period(period.previous_year(), employee))
+    return {
+        "current": current,
+        "previous": previous,
+        "delta_pct": {key: _delta_pct(current[key], previous[key]) for key in KPI_KEYS},
+    }
+
+
+def _kind_amounts(trip: BusinessTrip) -> list[tuple[str, Decimal]]:
+    """(вид затрат, сумма) по затратам командировки и её суточным."""
+    pairs = [(e.expense_type.name, e.amount) for e in trip.expenses.all()]
+    pairs.append((ALLOWANCE_LABEL, trip.allowance_amount or ZERO))
+    return pairs
+
+
+def _expense_kinds_by_total(trips: list[BusinessTrip]) -> list[str]:
+    """Виды затрат (без суточных) с ненулевой суммой — по убыванию суммы."""
+    totals = {}
+    for trip in trips:
+        for expense in trip.expenses.all():
+            name = expense.expense_type.name
+            totals[name] = totals.get(name, ZERO) + expense.amount
+    return [
+        name
+        for name, amount in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+        if amount
+    ]
+
+
+def costs_by_month(period: Period, employee=None) -> dict:
+    """Затраты по месяцам начала командировок: серии по видам затрат и суточные.
+
+    Если видов больше, чем помещается в палитру, крупнейшие идут отдельными
+    сериями, остальные — одной «Прочие виды»; «Суточные» всегда последние.
+    """
+    months = period.months()
+    trips = trips_in_period(period, employee)
+    kinds = _expense_kinds_by_total(trips)
+    if len(kinds) > MAX_MONTH_SERIES - 1:
+        shown = kinds[: MAX_MONTH_SERIES - 2]
+    else:
+        shown = kinds
+
+    def series_of(kind: str) -> str:
+        if kind == ALLOWANCE_LABEL or kind in shown:
+            return kind
+        return OTHER_KINDS_LABEL
+
+    labels = list(shown)
+    if len(shown) < len(kinds):
+        labels.append(OTHER_KINDS_LABEL)
+    labels.append(ALLOWANCE_LABEL)
+    pairs = {label: [] for label in labels}
+    for trip in trips:
+        for kind, amount in _kind_amounts(trip):
+            pairs[series_of(kind)].append((trip.beg_dt, amount))
+    return {
+        "months": months,
+        "series": [
+            {"label": label, "data": _bucket_by_month(pairs[label], months)}
+            for label in labels
+        ],
+    }
+
+
+def cost_structure(period: Period, employee=None) -> list[dict]:
+    """Затраты периода по видам и суточные: сумма и доля в %, по убыванию."""
+    totals = {}
+    for trip in trips_in_period(period, employee):
+        for kind, amount in _kind_amounts(trip):
+            totals[kind] = totals.get(kind, ZERO) + amount
+    grand_total = sum(totals.values(), ZERO)
+    return [
+        {
+            "label": kind,
+            "amount": amount,
+            "share_pct": _ratio(amount * 100, grand_total, TENTH),
+        }
+        for kind, amount in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+        if amount
+    ]

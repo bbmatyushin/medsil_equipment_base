@@ -14,8 +14,11 @@ from analytics.services.finance import TOTAL_KEYS
 from analytics.tests.factories import (
     make_client,
     make_contract,
+    make_department,
+    make_employee,
     make_payment,
     make_shipment,
+    make_trip,
 )
 from analytics.navigation import TABS, Tab, visible_tabs
 from analytics.views import MAX_LINK_IDS, _pareto_caption
@@ -820,3 +823,88 @@ class ParetoCaptionTests(SimpleTestCase):
         for clients_for_80, clients_total, expected in cases:
             with self.subTest(clients_total=clients_total):
                 self.assertEqual(self._caption(clients_for_80, clients_total), expected)
+
+
+TRIPS_CHART_KEYS = {"by_month", "structure"}
+
+
+class TripsPageTests(TestCase):
+    """Вкладка «Командировки»: виджеты, подписи и ссылки в списки админки."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            "super", "super@example.com", "pass"
+        )
+        cls.employee = make_employee()
+        cls.other = make_employee("petrov", "Петров", "Пётр", "Петрович")
+        cls.kazan = make_department("Больница Казани")
+
+    def setUp(self):
+        self.client.force_login(self.superuser)
+
+    def _get(self, params=None):
+        with _fixed_today():
+            response = self.client.get(reverse("analytics:trips"), params or {})
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def _trip(self, employee, beg, end, expense=1000, **kwargs):
+        return make_trip(
+            employee,
+            beg,
+            end,
+            destinations=[(self.kazan, beg, end)],
+            expenses=[("Такси", beg, expense)],
+            **kwargs,
+        )
+
+    @staticmethod
+    def _filter_spec(response, parameter_name):
+        return next(
+            spec
+            for spec in response.context["cl"].filter_specs
+            if getattr(spec, "parameter_name", None) == parameter_name
+        )
+
+    def test_trips_page_empty_db(self):
+        response = self._get()
+
+        self.assertContains(response, "Нет данных")
+        charts = response.context["charts"]
+        self.assertTrue(TRIPS_CHART_KEYS <= set(charts))
+        for key, spec in charts.items():
+            self.assertTrue(spec["empty"], key)
+        # средние и все дельты без данных — «—»
+        self.assertContains(response, '<p class="an-tile-value">—</p>', count=2)
+        self.assertContains(response, 'an-delta--flat">—</p>', count=5)
+        self.assertNotContains(response, "None")
+
+    def test_trips_tiles_kinds(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile for tile in response.context["tiles"]}
+        self.assertEqual(tiles["Командировок"]["kind"], "count")
+        self.assertEqual(tiles["Человеко-дней"]["kind"], "count")
+        self.assertEqual(tiles["Всего потрачено"]["kind"], "money")
+        self.assertTrue(tiles["Всего потрачено"]["inverse"])
+        self.assertContains(response, '<p class="an-tile-value">3</p>')
+        self.assertContains(response, '<p class="an-tile-value">3 100,00 ₽</p>')
+
+    def test_trips_list_link_filters_period_and_employee(self):
+        self._trip(self.employee, date(2026, 3, 1), date(2026, 3, 3))
+        self._trip(self.employee, date(2026, 5, 1), date(2026, 5, 2))
+        self._trip(self.employee, date(2025, 5, 1), date(2025, 5, 2))
+        self._trip(self.other, date(2026, 3, 1), date(2026, 3, 2))
+
+        response = self._get({"employee": str(self.employee.pk)})
+        url = response.context["trips_list_url"]
+
+        changelist = self.client.get(url)
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 2)
+        self.assertEqual(
+            self._filter_spec(changelist, "employee").value(), str(self.employee.pk)
+        )
