@@ -439,7 +439,19 @@ html[data-theme="dark"] {
 
 /* --- Узкий экран: всё в одну колонку, без горизонтальной прокрутки ---------- */
 
+/* Таблица слева, диаграмма справа в одной карточке («По видам работ») */
+.an-split {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 16px;
+    align-items: start;
+}
+
 @media (max-width: 767px) {
+    .an-split {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .analytics-filter {
         flex: 1 1 100%;
     }

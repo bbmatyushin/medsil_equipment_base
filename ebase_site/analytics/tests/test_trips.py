@@ -6,6 +6,7 @@ from django.test import TestCase
 from analytics.filters import Period
 from analytics.services.trips import (
     TripSet,
+    service_type_shares,
     accountable,
     annual_by_direction,
     clients_trips_vs_payments,
@@ -611,6 +612,71 @@ class NormsTests(TestCase):
             expenses=[("Такси", date(2026, 3, 1), 300)],
         )
         self.assertEqual(direction_norms(TODAY)["rows"], [])
+
+
+class ServiceTypeSharesTests(TestCase):
+    """Доли видов работ для круговой диаграммы: сумма долей = всего затрат."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.employee = make_employee()
+        cls.kazan = make_department("Больница Казани")
+
+    def _trip(self, day, total, service_types):
+        # однодневная поездка: суточные 700 + затраты до нужной суммы
+        return make_trip(
+            self.employee,
+            date(2026, 3, day),
+            date(2026, 3, day),
+            destinations=[(self.kazan, date(2026, 3, day), date(2026, 3, day))],
+            expenses=[("Такси", date(2026, 3, day), D(total) - 700)],
+            service_types=service_types,
+        )
+
+    def test_split_equally_and_sum_equals_total(self):
+        self._trip(1, "6000.01", ["ТО", "ремонт"])
+        self._trip(2, 700, [])
+
+        result = service_type_shares(YEAR_2026)
+
+        slices = {item["label"]: item["amount"] for item in result["slices"]}
+        self.assertEqual(
+            slices,
+            {
+                "ТО": D("3000.01"),
+                "ремонт": D("3000.00"),
+                "Вид работ не указан": D("700"),
+            },
+        )
+        self.assertEqual(result["total"], D("6700.01"))
+        self.assertEqual(result["total"], trips_kpis(YEAR_2026)["current"]["total"])
+        self.assertEqual(sum(slices.values()), result["total"])
+
+    def test_order_by_name_with_unspecified_last(self):
+        self._trip(1, 900, [])
+        self._trip(2, 5000, ["ремонт"])
+        self._trip(3, 1000, ["Монтаж"])
+
+        labels = [item["label"] for item in service_type_shares(YEAR_2026)["slices"]]
+
+        self.assertEqual(labels, ["Монтаж", "ремонт", "Вид работ не указан"])
+
+    def test_collapse_to_six_slices(self):
+        for day, name in enumerate(["А", "Б", "В", "Г", "Д", "Е", "Ж"], start=1):
+            self._trip(day, 1000 + day * 100, [name])
+
+        result = service_type_shares(YEAR_2026)
+
+        labels = [item["label"] for item in result["slices"]]
+        self.assertEqual(labels, ["В", "Г", "Д", "Е", "Ж", "Прочие виды работ"])
+        others = result["slices"][-1]["amount"]
+        self.assertEqual(others, D("1100") + D("1200"))
+        self.assertEqual(sum(i["amount"] for i in result["slices"]), result["total"])
+
+    def test_empty(self):
+        self.assertEqual(
+            service_type_shares(YEAR_2026), {"total": D("0"), "slices": []}
+        )
 
 
 class ServiceTypeTests(TestCase):

@@ -43,6 +43,19 @@ class ChartSpecTests(SimpleTestCase):
         self.assertEqual(spec["datasets"][0]["data"], [10.51])
         self.assertFalse(spec["empty"])
 
+    def test_chart_spec_doughnut(self):
+        spec = chart_spec(
+            "doughnut",
+            ["ТО", "ремонт"],
+            [{"label": "Затраты", "data": [Decimal("3000"), Decimal("1500.5")]}],
+        )
+        self.assertEqual(spec["kind"], "doughnut")
+        self.assertEqual(spec["datasets"][0]["kind"], "doughnut")
+        self.assertEqual(spec["datasets"][0]["data"], [3000.0, 1500.5])
+        self.assertFalse(spec["empty"])
+        empty = chart_spec("doughnut", ["ТО"], [{"label": "Затраты", "data": [0]}])
+        self.assertTrue(empty["empty"])
+
     def test_chart_spec_keys_and_defaults(self):
         spec = chart_spec("bar", ["янв 2026"], [{"label": "Пришло", "data": [1]}])
         self.assertEqual(

@@ -119,6 +119,18 @@
         if (dataset.axis === "y2" && !spec.horizontal) {
             result.yAxisID = "y2";
         }
+        if (dataset.kind === "doughnut") {
+            // Дольки — по палитре в фиксированном порядке (view отдаёт не больше 6),
+            // между дольками — зазор цвета фона
+            Object.assign(result, {
+                backgroundColor: dataset.data.map((_, i) => theme.series[i % theme.series.length]),
+                borderColor: theme.surface,
+                borderWidth: 2,
+                hoverOffset: 4,
+            });
+            delete result.order;
+            return result;
+        }
         if (dataset.kind === "bar") {
             result.backgroundColor = dataset.sign_colors
                 ? dataset.data.map((v) => (v < 0 ? theme.negative : theme.positive))
@@ -325,6 +337,33 @@
         },
     };
 
+    // Сумма в центре кольца (spec.kind === "doughnut"): подпись «Всего» и итог
+    // сокращённо («93 тыс. ₽»). Текст — цветами текста, не цветом долек.
+    const doughnutCenter = {
+        id: "anDoughnutCenter",
+        afterDraw(chart, args, options) {
+            if (!options.enabled) {
+                return;
+            }
+            const arc = chart.getDatasetMeta(0).data[0];
+            if (!arc) {
+                return;
+            }
+            const total = chart.data.datasets[0].data.reduce((sum, value) => sum + value, 0);
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = options.labelColor;
+            ctx.font = "12px " + Chart.defaults.font.family;
+            ctx.fillText(options.label, arc.x, arc.y - 11);
+            ctx.fillStyle = options.valueColor;
+            ctx.font = "600 16px " + Chart.defaults.font.family;
+            ctx.fillText(options.format(total), arc.x, arc.y + 9);
+            ctx.restore();
+        },
+    };
+
     // Цвет ключа серии в подсказке (у столбцов «по знаку» — свой у каждого столбца)
     function keyColor(dataset, index) {
         const color = dataset.backgroundColor;
@@ -344,6 +383,15 @@
             },
             labelPointStyle: () => ({ pointStyle: "line", rotation: 0 }),
         };
+        if (spec.kind === "doughnut") {
+            // «ТО: 30 000 ₽ (45,2 %)»
+            callbacks.label = (ctx) => {
+                const total = ctx.dataset.data.reduce((sum, value) => sum + value, 0);
+                const share = total ? (ctx.parsed * 100) / total : 0;
+                return ctx.label + ": " + formatValue(ctx.parsed, spec.format) + " (" + PERCENT.format(share) + " %)";
+            };
+            callbacks.labelPointStyle = () => ({ pointStyle: "rect", rotation: 0 });
+        }
         if (spec.kind === "scatter") {
             callbacks.title = (items) => (items.length ? items[0].raw.label : "");
             callbacks.label = (ctx) =>
@@ -364,6 +412,14 @@
     }
 
     function buildLegend(spec, theme) {
+        if (spec.kind === "doughnut") {
+            // Ключ на каждую дольку (стандартные подписи Chart.js для кольца)
+            return {
+                display: true,
+                position: "bottom",
+                labels: { color: theme.text, usePointStyle: true, pointStyle: "rect" },
+            };
+        }
         return {
             // Одна серия — легенда не нужна, её называет заголовок карточки
             display: spec.datasets.length > 1,
@@ -426,10 +482,24 @@
                 },
             },
         };
+        if (spec.kind === "doughnut") {
+            Object.assign(config.options, {
+                cutout: "62%",
+                scales: {},
+                interaction: { mode: "nearest", intersect: true },
+            });
+            config.options.plugins.anDoughnutCenter = {
+                enabled: true,
+                label: "Всего",
+                format: (value) => formatTick(value, "money_short"),
+                labelColor: theme.text,
+                valueColor: theme.ink,
+            };
+        }
         if (!animate) {
             config.options.animation = false;
         }
-        config.plugins = [valueLabels];
+        config.plugins = [valueLabels, doughnutCenter];
         return config;
     }
 

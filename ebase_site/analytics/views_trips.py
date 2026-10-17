@@ -140,6 +140,7 @@ def _trips_charts(
     days: list[dict],
     balance: list[dict],
     clients: list[dict],
+    service_type_shares: dict,
 ) -> dict:
     """Спецификации графиков вкладки «Командировки»."""
     return {
@@ -200,6 +201,17 @@ def _trips_charts(
             ],
             horizontal=True,
         ),
+        # кольцо «По видам работ»: доли делят стоимость поездки поровну между её видами
+        "service_types": chart_spec(
+            "doughnut",
+            [item["label"] for item in service_type_shares["slices"]],
+            [
+                {
+                    "label": "Затраты",
+                    "data": [item["amount"] for item in service_type_shares["slices"]],
+                }
+            ],
+        ),
     }
 
 
@@ -244,6 +256,9 @@ class TripsView(AnalyticsTabView):
                 days=days,
                 balance=accountable,
                 clients=clients,
+                service_type_shares=trips.service_type_shares(
+                    period, employee, source=source
+                ),
             ),
             employee_days=days,
             employee_days_height=_horizontal_chart_height(len(days)),

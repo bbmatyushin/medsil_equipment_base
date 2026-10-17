@@ -836,6 +836,7 @@ TRIPS_CHART_KEYS = {
     "employee_days",
     "balance",
     "clients",
+    "service_types",
 }
 
 
@@ -1227,3 +1228,22 @@ class TripsPageTests(TestCase):
         response = self._get()
         self.assertContains(response, "₽ выездов на 1000 ₽ оплат")
         self.assertNotContains(response, "на 100 ₽ оплат")
+
+    def test_trips_service_types_doughnut_next_to_table(self):
+        self._trip(
+            self.employee, date(2026, 3, 1), date(2026, 3, 3), service_types=["ТО"]
+        )
+
+        response = self._get()
+
+        spec = response.context["charts"]["service_types"]
+        self.assertEqual(spec["kind"], "doughnut")
+        self.assertEqual(spec["labels"], ["ТО"])
+        self.assertEqual(spec["datasets"][0]["data"], [3100.0])
+        html = response.content.decode()
+        card = html[html.index("<h2>По видам работ</h2>") :]
+        card = card[: card.index("</section>")]
+        # таблица слева, диаграмма справа
+        self.assertLess(
+            card.index("<table"), card.index('data-chart="chart-trips-service-types"')
+        )

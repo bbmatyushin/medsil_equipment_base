@@ -8,7 +8,7 @@ View собирает спецификацию через `chart_spec()`, шаб
 
 import math
 
-KINDS = ("bar", "line", "scatter")
+KINDS = ("bar", "line", "scatter", "doughnut")
 FORMATS = ("money", "money_short", "count", "percent")
 AXES = ("y", "y2")
 # Смысловые цвета серии вместо очередного цвета палитры
@@ -105,7 +105,9 @@ def chart_spec(
 ) -> dict:
     """JSON-совместимая спецификация графика.
 
-    - `kind`: "bar" | "line" | "scatter".
+    - `kind`: "bar" | "line" | "scatter" | "doughnut". У "doughnut" одна серия,
+      метки — дольки; цвета дольки идут по палитре по порядку (не больше 6 долек),
+      в центре кольца `charts.js` пишет сумму значений.
     - `datasets`: серии
       `{"label", "data", "kind"?, "axis"?, "sign_colors"?, "fmt"?, "color"?}`.
       `kind` серии задаёт смешанный график (линия поверх столбцов),

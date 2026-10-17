@@ -35,6 +35,9 @@ NO_REGION_SUFFIX = " (регион не указан)"
 NO_CLIENT_LABEL = "Клиент не указан"
 OTHER_KINDS_LABEL = "Прочие виды"
 NO_SERVICE_TYPE_LABEL = "Вид работ не указан"
+OTHER_SERVICE_TYPES_LABEL = "Прочие виды работ"
+# Долек на круговой диаграмме не больше, чем цветов палитры charts.js
+MAX_PIE_SLICES = 6
 
 DAYS_IN_YEAR = 365
 
@@ -529,6 +532,49 @@ def direction_norms(
         "kinds": kinds,
         "rows": sorted(rows, key=lambda row: (-row["trips"], row["label"])),
     }
+
+
+def service_type_shares(
+    period: Period, employee=None, source: TripSet | None = None
+) -> dict:
+    """Затраты командировок периода по видам работ — доли круговой диаграммы.
+
+    В отличие от таблицы «По видам работ», стоимость командировки с несколькими
+    видами делится между ними поровну (до копеек), поэтому сумма долей равна
+    «Всего потрачено». Без вида — «Вид работ не указан». Если видов больше
+    `MAX_PIE_SLICES`, мелкие сворачиваются в «Прочие виды работ». Доли идут по
+    названию (цвет закреплён за видом, а не за местом по сумме), «Вид работ не
+    указан» и «Прочие» — последними.
+    """
+    source = _source(source)
+    amounts = {}
+    total = ZERO
+    for trip in source.in_period(period, employee):
+        cost = trip_total(trip)
+        total += cost
+        names = sorted(service_type.name for service_type in trip.service_type.all())
+        if not names:
+            names = [NO_SERVICE_TYPE_LABEL]
+        for name, part in zip(names, split_proportional(cost, [1] * len(names))):
+            amounts[name] = amounts.get(name, ZERO) + part
+    named = {name: amount for name, amount in amounts.items() if amount}
+    unspecified = named.pop(NO_SERVICE_TYPE_LABEL, None)
+    room = MAX_PIE_SLICES - (1 if unspecified is not None else 0)
+    others = ZERO
+    if len(named) > room:
+        by_amount = sorted(named.items(), key=lambda item: (-item[1], item[0]))
+        keep = dict(by_amount[: room - 1])
+        others = sum((amount for name, amount in by_amount[room - 1 :]), ZERO)
+        named = keep
+    slices = [
+        {"label": name, "amount": amount}
+        for name, amount in sorted(named.items(), key=lambda item: item[0].lower())
+    ]
+    if unspecified is not None:
+        slices.append({"label": NO_SERVICE_TYPE_LABEL, "amount": unspecified})
+    if others:
+        slices.append({"label": OTHER_SERVICE_TYPES_LABEL, "amount": others})
+    return {"total": total, "slices": slices}
 
 
 def by_service_type(
