@@ -300,7 +300,7 @@
                     const color = keyColor(dataset, index);
                     const room = horizontal ? Math.abs(x - base) : Math.abs(y - base);
                     if (ctx.measureText(text).width + 8 <= room) {
-                        ctx.fillStyle = textOn(color);
+                        ctx.fillStyle = options.whiteOn.includes(color) ? "#ffffff" : textOn(color);
                         ctx.fillText(text, horizontal ? (x + base) / 2 : x, horizontal ? y : (y + base) / 2);
                     } else if (horizontal) {
                         outside.set(index, (outside.get(index) || []).concat({ text: text, color: color }));
@@ -411,6 +411,8 @@
                     anValueLabels: {
                         enabled: Boolean(spec.value_labels),
                         format: (value) => formatTick(value, spec.format),
+                        // на синих полосах — всегда белый текст: тёмный сливается с синим
+                        whiteOn: [theme.positive, theme.series[0]],
                     },
                 },
                 onClick: (event, elements) => {
