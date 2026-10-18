@@ -841,12 +841,33 @@ def _units_by_model(source, filters) -> dict:
     return units
 
 
+def _is_at_client(device) -> bool:
+    return install_state(device) == STATE_AT_CLIENT
+
+
+def breakdowns_outside_park(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> int:
+    """Поломки периода приборов, которые сейчас не у клиента (без монтажа, сняты).
+
+    В частоту «на прибор в год» они не входят: её знаменатель — приборы
+    у клиентов, и числитель берётся по тем же приборам.
+    """
+    source = _source(source)
+    return sum(
+        1
+        for service in _period_breakdowns(source, period, today, filters)
+        if not _is_at_client(source.device_of(service))
+    )
+
+
 def reliability(
     period: Period, today: date, filters: EquipmentFilters, source=None
 ) -> list[dict]:
     """Поломок на прибор в год по моделям с `MIN_UNITS_FOR_RELIABILITY`+ приборами.
 
-    Знаменатель — приборы модели у клиентов сейчас: истории парка нет.
+    Знаменатель — приборы модели у клиентов сейчас (истории парка нет),
+    числитель — поломки этих же приборов; остальные — `breakdowns_outside_park`.
     """
     source = _source(source)
     days = effective_days(period, today)
@@ -855,7 +876,9 @@ def reliability(
     units = _units_by_model(source, filters)
     by_model = {}
     for service in _period_breakdowns(source, period, today, filters):
-        by_model.setdefault(source.device_of(service).equipment_id, []).append(service)
+        device = source.device_of(service)
+        if _is_at_client(device):
+            by_model.setdefault(device.equipment_id, []).append(service)
     rows = []
     for equipment_id, services in by_model.items():
         devices = units.get(equipment_id, [])
@@ -989,6 +1012,7 @@ def models_summary(
                 "others": 0,
                 "planned": 0,
                 "breakdowns": 0,
+                "breakdowns_at_client": 0,
                 "durations": [],
                 "fund_working": 0,
                 "fund_total": 0,
@@ -1004,8 +1028,11 @@ def models_summary(
         if device is not None and work_kind(service) == WORK_PLANNED:
             row_of(device.equipment)["planned"] += 1
     for service in _period_breakdowns(source, period, today, filters):
-        row = row_of(source.device_of(service).equipment)
+        device = source.device_of(service)
+        row = row_of(device.equipment)
         row["breakdowns"] += 1
+        # частота — по приборам у клиентов, как на графике «Поломок на прибор в год»
+        row["breakdowns_at_client"] += 1 if _is_at_client(device) else 0
         if service.end_dt is not None:
             row["durations"].append(repair_days(service))
     for replacement in source.replacements_of(filters):
@@ -1015,11 +1042,12 @@ def models_summary(
     result = []
     for row in models.values():
         durations = row.pop("durations")
+        at_client_breakdowns = row.pop("breakdowns_at_client")
         result.append(
             {
                 **row,
                 "per_unit_year": _per_unit_year(
-                    row["breakdowns"], row["at_client"], days
+                    at_client_breakdowns, row["at_client"], days
                 ),
                 "median_days": _median(durations),
             }

@@ -1712,3 +1712,16 @@ class EquipmentPageTests(TestCase):
         response = self._get()
 
         self.assertContains(response, '<td class="an-nowrap">BC-5000</td>', count=2)
+
+    def test_reliability_note_counts_breakdowns_outside_park(self):
+        repair = make_service_type("ремонт")
+        not_installed = make_device(self.model, "N1")
+        make_service(not_installed, date(2026, 3, 1), service_type=repair)
+        make_service(not_installed, date(2026, 4, 1), service_type=repair)
+
+        response = self._get()
+
+        self.assertEqual(response.context["reliability_outside"], 2)
+        self.assertContains(
+            response, "Поломки приборов, которые сейчас не у клиента, не входят: 2."
+        )

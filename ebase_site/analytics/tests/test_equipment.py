@@ -7,6 +7,7 @@ from django.test import RequestFactory, TestCase
 
 from analytics.filters import EquipmentFilters, Period
 from analytics.services.equipment import (
+    breakdowns_outside_park,
     fund_kpis,
     issue_interval,
     issue_timeline,
@@ -680,6 +681,33 @@ class ReliabilityTests(TestCase):
             (Decimal(2) / 4 * 365 / 289).quantize(Decimal("0.01")),
         )
         self.assertEqual(len(row["service_ids"]), 2)
+
+    def test_reliability_counts_only_devices_at_clients(self):
+        # поломки прибора без монтажа не должны раздувать частоту модели:
+        # числитель и знаменатель — одни и те же приборы (у клиентов сейчас)
+        for number in range(3):
+            self._installed(self.model, f"M{number}")
+        not_installed = make_device(self.model, "N1")
+        for month in range(1, 7):
+            self._breakdown(not_installed, date(2026, month, 1))
+        removed = make_device(self.model, "N2")
+        make_install(removed, self.department, date(2019, 1, 1), active=False)
+        self._breakdown(removed, date(2026, 7, 1))
+        source = self._source()
+
+        rows = reliability(YEAR_2026, TODAY, EquipmentFilters(), source=source)
+        summary = models_summary(YEAR_2026, TODAY, EquipmentFilters(), source=source)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(
+            breakdowns_outside_park(
+                YEAR_2026, TODAY, EquipmentFilters(), source=source
+            ),
+            7,
+        )
+        # в сводной «Поломок» — все поломки модели, частота — по приборам у клиентов
+        self.assertEqual(summary[0]["breakdowns"], 7)
+        self.assertEqual(summary[0]["per_unit_year"], Decimal("0.00"))
 
     def test_reliability_future_period_is_empty(self):
         devices = [self._installed(self.model, f"M{n}") for n in range(3)]

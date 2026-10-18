@@ -343,6 +343,9 @@ def _reliability_context(source, filters, period, today) -> dict:
     return {
         "reliability": rows,
         "reliability_height": _horizontal_chart_height(len(rows)),
+        "reliability_outside": equipment.breakdowns_outside_park(
+            period, today, filters, source=source
+        ),
         "min_units": equipment.MIN_UNITS_FOR_RELIABILITY,
         "repeats": repeats,
         "repeat_windows": equipment.REPEAT_WINDOWS,
