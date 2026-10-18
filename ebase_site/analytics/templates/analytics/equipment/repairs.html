@@ -1,1 +1,143 @@
 {% load analytics_tags %}
+<section class="an-tiles" aria-label="Ремонты за период">
+    {% for tile in repairs_tiles %}
+        <div class="an-tile{% if tile.inverse %} an-tile--inverse{% endif %}">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            {% if tile.kind == "percent" %}
+                <p class="an-tile-value">{{ tile.value|pct }}</p>
+            {% else %}
+                <p class="an-tile-value">{{ tile.value|number }}</p>
+            {% endif %}
+            {% if tile.snapshot %}
+                <p class="an-tile-note">на сегодня, без закрытых и начатых больше года назад</p>
+            {% else %}
+                {% if tile.pp %}
+                    <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta:"pp" }}</p>
+                {% else %}
+                    <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta }}</p>
+                {% endif %}
+                <p class="an-tile-note">к {{ previous_period.date_from|date:"d.m.Y" }} — {{ previous_period.date_to|date:"d.m.Y" }}</p>
+            {% endif %}
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link">Работы с датой начала в периоде. ТО — виды работ с отметкой «Плановое ТО» в справочнике, остальные виды — поломки; медиана и доля с подменой — по поломкам.{% if repairs.unknown_type %} Без вида работ: {{ repairs.unknown_type|number }} — не входят ни в ТО, ни в поломки.{% endif %}</p>
+
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Работы по месяцам</h2>
+        <p class="an-card-note">Все работы периода по видам работ.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.works_by_month chart_id="chart-eq-works" title="Работы по месяцам и видам работ" only %}
+    </section>
+
+    <section class="an-card">
+        <h2>ТО по месяцам</h2>
+        <p class="an-card-note">Работы с отметкой «Плановое ТО» на приборах, поставленных нами и не нами; линия — ТО в том же месяце год назад.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.planned_by_month chart_id="chart-eq-planned" title="ТО по месяцам" only %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Длительность</h2>
+        <p class="an-card-note">Корзины — закрытые поломки периода, дни с датами начала и окончания (клик — ремонты корзины); таблица — все виды работ.{% if durations.open %} Без даты окончания: {{ durations.open|number }} — не учтены.{% endif %}</p>
+        <div class="an-split an-split--even">
+            <div>
+                {% include "analytics/includes/chart.html" with spec=charts.durations chart_id="chart-eq-durations" title="Длительность поломок" only %}
+            </div>
+            <div class="an-table-wrap">
+                {% if durations.by_type %}
+                    <table class="an-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Вид работ</th>
+                                <th scope="col" class="num">Работ</th>
+                                <th scope="col" class="num">Медиана, дней</th>
+                                <th scope="col" class="num">Максимум, дней</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in durations.by_type %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td class="num">{{ row.count|number }}</td>
+                                    <td class="num">{{ row.median|number }}</td>
+                                    <td class="num">{{ row.max|number }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="an-chart-empty">Нет данных за выбранный период</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Открытые ремонты</h2>
+        <p class="an-card-note">На сегодня, период не учитывается: ремонты без даты окончания, начатые за последние 365 дней. Сверху — самые долгие. Клик — карточка ремонта.</p>
+        {% if open_repairs.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Прибор</th>
+                            <th scope="col">Подразделение</th>
+                            <th scope="col">Вид работ</th>
+                            <th scope="col" class="num">Начат</th>
+                            <th scope="col" class="num">Дней в работе</th>
+                            <th scope="col">Подменный прибор</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in open_repairs.rows %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.device }}</a></td>
+                                <td>{{ row.department|default:"—" }}</td>
+                                <td>{{ row.service_type }}</td>
+                                <td class="num">{{ row.beg_dt|date:"d.m.Y" }}</td>
+                                <td class="num">{{ row.days|number }}</td>
+                                <td>{{ row.replacement|default:"—" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет открытых ремонтов</p>
+        {% endif %}
+        {% if open_repairs.old_count %}
+            <p class="an-note">Старые незакрытые (начаты раньше {{ open_repairs.old_before|date:"d.m.Y" }}): {% if old_open_url %}<a href="{{ old_open_url }}">{{ open_repairs.old_count|number }}</a>{% else %}{{ open_repairs.old_count|number }}{% endif %}</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Нагрузка инженеров</h2>
+        <p class="an-card-note">Число работ периода по инженерам и месяцам (по дате начала). Чем больше работ, тем насыщеннее цвет.</p>
+        {% if engineer_load.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table an-matrix">
+                    <thead>
+                        <tr>
+                            <th scope="col">Инженер</th>
+                            {% for label in engineer_load.labels %}<th scope="col" class="num">{{ label }}</th>{% endfor %}
+                            <th scope="col" class="num">Всего</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in engineer_load.rows %}
+                            <tr>
+                                <th scope="row">{{ row.name }}</th>
+                                {% for cell in row.cells %}
+                                    {% if cell.days %}<td class="num an-tone-load" style="--an-shade: {{ cell.shade|stringformat:".2f" }}">{{ cell.days }}</td>{% else %}<td class="num"></td>{% endif %}
+                                {% endfor %}
+                                <td class="num"><strong>{{ row.total }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных за выбранный период</p>
+        {% endif %}
+    </section>
+</div>

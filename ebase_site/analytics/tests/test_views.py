@@ -31,7 +31,8 @@ from analytics.tests.factories import (
 )
 from analytics.navigation import TABS, Tab, visible_tabs
 from analytics.views import MAX_LINK_IDS, _pareto_caption
-from analytics.views_equipment import ACCOUNTING, ids_link
+from analytics.links import change_url
+from analytics.views_equipment import ACCOUNTING, SERVICES, ids_link
 from analytics.views_trips import _ids_link
 from clients.models import Client
 from contracts.admin import format_money
@@ -1335,6 +1336,9 @@ EQUIPMENT_CHART_KEYS = {
     "structure_statuses",
     "structure_regions",
     "park_age",
+    "works_by_month",
+    "planned_by_month",
+    "durations",
 }
 
 
@@ -1414,6 +1418,8 @@ class EquipmentPageTests(TestCase):
             response.context["charts"]["structure_regions"]["labels"],
             ["Город не указан"],
         )
+        # открытый ремонт прибора без названия модели — в таблице «Открытые ремонты»
+        self.assertContains(response, "Модель без названия [SN1]")
 
     def test_park_tiles(self):
         self._installed("A1", our_service=True)
@@ -1530,3 +1536,57 @@ class EquipmentPageTests(TestCase):
 
         self.assertLessEqual(before, 30)
         self.assertEqual(before, after)
+
+    def test_repairs_tiles(self):
+        device = self._installed("A1")
+        make_service(
+            device,
+            date(2026, 3, 1),
+            date(2026, 3, 2),
+            service_type=make_service_type("Тех. обслуживание", planned=True),
+        )
+        make_service(device, date(2026, 9, 1), service_type=make_service_type("ремонт"))
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile for tile in response.context["repairs_tiles"]}
+        self.assertEqual(tiles["ТО проведено"]["value"], 1)
+        self.assertEqual(tiles["ТО проведено"]["kind"], "count")
+        self.assertTrue(tiles["Поломок с подменой"]["pp"])
+        self.assertTrue(tiles["Поломок"]["inverse"])
+        self.assertIsNone(tiles["В работе сейчас"]["delta"])
+        self.assertTrue(tiles["В работе сейчас"]["snapshot"])
+        self.assertEqual(tiles["В работе сейчас"]["value"], 1)
+
+    def test_open_repair_row_links_to_service(self):
+        device = self._installed("A1")
+        repair = make_service(device, date(2026, 9, 1))
+
+        response = self._get()
+
+        row = response.context["open_repairs"]["rows"][0]
+        self.assertEqual(row["url"], change_url(SERVICES, repair.pk))
+
+    def test_old_open_link_filters_service_list(self):
+        device = self._installed("A1")
+        make_service(device, date(2024, 1, 10))
+        make_service(device, date(2024, 2, 10))
+        make_service(device, date(2026, 9, 1))
+
+        response = self._get()
+
+        self.assertEqual(response.context["open_repairs"]["old_count"], 2)
+        changelist = self.client.get(response.context["old_open_url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 2)
+
+    def test_engineer_load_is_shaded(self):
+        device = self._installed("A1")
+        for day in (1, 2):
+            make_service(device, date(2026, 3, day), engineer="Петров")
+
+        response = self._get()
+
+        row = response.context["engineer_load"]["rows"][0]
+        self.assertEqual(row["name"], "Петров")
+        self.assertEqual(row["cells"][2], {"days": 2, "shade": 1.0})

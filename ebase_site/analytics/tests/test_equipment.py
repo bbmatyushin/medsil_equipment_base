@@ -1,10 +1,19 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.test import TestCase
 
 from analytics.filters import EquipmentFilters, Period
 from analytics.services.equipment import (
+    NO_ENGINEER_LABEL,
+    NO_SERVICE_TYPE_LABEL,
+    OTHER_SERVICE_TYPES_LABEL,
+    duration_stats,
+    engineer_load,
+    open_repairs,
+    planned_by_month,
+    repairs_kpis,
+    works_by_month,
     AGE_UNKNOWN_LABEL,
     OTHER_MANUFACTURERS_LABEL,
     data_gaps,
@@ -414,3 +423,191 @@ class ParkTests(TestCase):
         self.assertEqual(rows["old_open"]["count"], 1)
         self.assertEqual(rows["no_install"]["target"], "accounting")
         self.assertEqual(rows["old_open"]["target"], "service")
+
+
+class RepairsTests(TestCase):
+    """Блок «Ремонты» (за период)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = make_department("Больница", client=make_client("Клиника"))
+        cls.model = make_equipment("BC-5000")
+        cls.ours = make_device(cls.model, "A1")
+        make_install(cls.ours, cls.department, date(2020, 1, 1))
+        cls.theirs = make_device(cls.model, "B1", ours=False)
+        make_install(cls.theirs, cls.department, date(2020, 1, 1))
+        cls.maintenance = make_service_type("Тех. обслуживание", planned=True)
+        cls.repair = make_service_type("ремонт")
+
+    def _source(self):
+        return EquipmentSet.load()
+
+    def test_repairs_kpis_counts_and_deltas(self):
+        spare = make_replacement(self.model, "R1")
+        for day in (1, 2):
+            make_service(
+                self.ours,
+                date(2026, 3, day),
+                date(2026, 3, day),
+                service_type=self.maintenance,
+            )
+        make_service(
+            self.ours, date(2026, 4, 1), date(2026, 4, 3), service_type=self.repair
+        )
+        make_service(
+            self.ours,
+            date(2026, 5, 1),
+            date(2026, 5, 5),
+            service_type=self.repair,
+            replacement=spare,
+        )
+        make_service(self.theirs, date(2026, 6, 1), service_type=self.repair)
+        make_service(self.ours, date(2026, 7, 1), date(2026, 7, 1))  # без вида
+        make_service(
+            self.ours, date(2025, 3, 1), date(2025, 3, 1), service_type=self.maintenance
+        )
+        make_service(
+            self.ours, date(2025, 4, 1), date(2025, 4, 2), service_type=self.repair
+        )
+
+        kpis = repairs_kpis(YEAR_2026, TODAY, EquipmentFilters(), source=self._source())
+
+        current = kpis["current"]
+        self.assertEqual(current["total"], 6)
+        self.assertEqual(current["planned"], 2)
+        self.assertEqual(current["breakdowns"], 3)
+        self.assertEqual(current["replacement_share"], Decimal("33.3"))
+        self.assertEqual(current["median_days"], Decimal("4.0"))
+        self.assertEqual(kpis["previous"]["total"], 2)
+        self.assertEqual(kpis["delta_pct"]["total"], Decimal("200.0"))
+        self.assertEqual(kpis["delta_pct"]["planned"], Decimal("100.0"))
+        # доля с подменой — разность в процентных пунктах: 33,3 − 0,0
+        self.assertEqual(kpis["delta_pct"]["replacement_share"], Decimal("33.3"))
+        self.assertEqual(kpis["unknown_type"], 1)
+
+    def test_median_days_only_closed_breakdowns(self):
+        for beg, end in [
+            (date(2026, 3, 1), date(2026, 3, 3)),
+            (date(2026, 4, 1), date(2026, 4, 5)),
+            (date(2026, 5, 1), date(2026, 5, 10)),
+            (date(2026, 6, 1), None),
+        ]:
+            make_service(self.ours, beg, end, service_type=self.repair)
+        make_service(
+            self.ours,
+            date(2026, 7, 1),
+            date(2026, 7, 20),
+            service_type=self.maintenance,
+        )
+
+        kpis = repairs_kpis(YEAR_2026, TODAY, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(kpis["current"]["median_days"], Decimal("5.0"))
+        self.assertIsNone(kpis["previous"]["median_days"])
+        self.assertIsNone(kpis["previous"]["replacement_share"])
+
+    def test_open_repairs_window_and_future(self):
+        recent = make_service(self.ours, date(2026, 10, 1), service_type=self.repair)
+        edge = make_service(self.theirs, date(2025, 10, 16))
+        old = make_service(self.ours, date(2025, 10, 15))
+        make_service(self.ours, date(2026, 11, 1))  # начнётся позже
+        make_service(self.ours, date(2026, 9, 1), date(2026, 9, 2))  # закрыт
+
+        source = self._source()
+        result = open_repairs(TODAY, EquipmentFilters(), source=source)
+
+        self.assertEqual([row["id"] for row in result["rows"]], [edge.pk, recent.pk])
+        self.assertEqual([row["days"] for row in result["rows"]], [366, 16])
+        self.assertEqual(result["rows"][1]["service_type"], "ремонт")
+        self.assertEqual(result["rows"][0]["service_type"], NO_SERVICE_TYPE_LABEL)
+        self.assertEqual(result["rows"][1]["device"], "BC-5000 [A1]")
+        self.assertEqual(result["rows"][1]["department"], "Больница (Казань)")
+        self.assertEqual(result["old_count"], 1)
+        self.assertEqual(result["old_ids"], [str(old.pk)])
+        self.assertEqual(result["old_before"], date(2025, 10, 16))
+        kpis = repairs_kpis(YEAR_2026, TODAY, EquipmentFilters(), source=source)
+        self.assertEqual(kpis["open_now"], 2)
+
+    def test_works_by_month_groups_extra_types(self):
+        counts = {"T1": 6, "T2": 5, "T3": 4, "T4": 3, None: 2, "T6": 1, "T7": 1}
+        for name, count in counts.items():
+            service_type = make_service_type(name) if name else None
+            for _ in range(count):
+                make_service(self.ours, date(2026, 3, 5), service_type=service_type)
+
+        result = works_by_month(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(len(result["months"]), 12)
+        self.assertEqual(
+            [series["label"] for series in result["series"]],
+            ["T1", "T2", "T3", "T4", NO_SERVICE_TYPE_LABEL, OTHER_SERVICE_TYPES_LABEL],
+        )
+        self.assertEqual(result["series"][0]["data"][2], 6)
+        self.assertEqual(result["series"][-1]["data"][2], 2)
+        self.assertEqual(sum(result["series"][-1]["data"]), 2)
+
+    def test_planned_by_month_splits_supply_and_previous_year(self):
+        make_service(self.ours, date(2026, 3, 5), service_type=self.maintenance)
+        make_service(self.theirs, date(2026, 3, 20), service_type=self.maintenance)
+        make_service(None, date(2026, 4, 1), service_type=self.maintenance)
+        make_service(self.ours, date(2025, 3, 10), service_type=self.maintenance)
+        make_service(self.ours, date(2026, 3, 7), service_type=self.repair)
+
+        result = planned_by_month(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(result["ours"][2], 1)
+        self.assertEqual(result["others"][2], 1)
+        self.assertEqual(result["no_device"][3], 1)
+        self.assertEqual(result["previous"][2], 1)
+        self.assertEqual(sum(result["ours"]) + sum(result["others"]), 2)
+
+    def test_duration_buckets_and_by_type(self):
+        for days in (1, 3, 4, 14, 15, 31):
+            beg = date(2026, 3, 1)
+            make_service(
+                self.ours, beg, beg + timedelta(days=days - 1), service_type=self.repair
+            )
+        for days in (2, 4):
+            beg = date(2026, 5, 1)
+            make_service(
+                self.ours,
+                beg,
+                beg + timedelta(days=days - 1),
+                service_type=self.maintenance,
+            )
+        make_service(self.ours, date(2026, 6, 1), service_type=self.repair)
+
+        result = duration_stats(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(
+            [row["label"] for row in result["buckets"]],
+            ["1–3", "4–7", "8–14", "15–30", "31+"],
+        )
+        self.assertEqual([row["count"] for row in result["buckets"]], [2, 1, 1, 1, 1])
+        self.assertEqual(
+            [
+                (row["label"], row["count"], row["median"], row["max"])
+                for row in result["by_type"]
+            ],
+            [
+                ("ремонт", 6, Decimal("9.0"), 31),
+                ("Тех. обслуживание", 2, Decimal("3.0"), 4),
+            ],
+        )
+        self.assertEqual(result["open"], 1)
+
+    def test_engineer_load(self):
+        for day, name in [(2, "Петров"), (3, "Петров"), (4, "Сидоров")]:
+            make_service(self.ours, date(2026, 3, day), engineer=name)
+        make_service(self.ours, date(2026, 5, 1), engineer="Петров")
+        make_service(self.ours, date(2026, 4, 1))
+
+        result = engineer_load(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(
+            [(row["name"], row["total"]) for row in result["rows"]],
+            [("Петров", 3), (NO_ENGINEER_LABEL, 1), ("Сидоров", 1)],
+        )
+        self.assertEqual(result["rows"][0]["days"][2], 2)
+        self.assertEqual(result["rows"][0]["days"][4], 1)
+        self.assertEqual(result["max"], 2)

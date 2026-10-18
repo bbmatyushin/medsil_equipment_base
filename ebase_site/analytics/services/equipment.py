@@ -14,12 +14,14 @@
 дат и медианы — в Python, как в `services/trips.py`.
 """
 
+import statistics
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Prefetch
 
 from analytics.filters import EquipmentFilters, Period
+from analytics.services.finance import _bucket_by_month, _delta_pct
 from ebase.models import (
     EquipmentAccDepartment,
     EquipmentAccounting,
@@ -69,6 +71,18 @@ TOP_CLIENTS = 15
 
 # Незакрытый ремонт старше стольких дней считается «старым незакрытым»
 OPEN_REPAIR_DAYS = 365
+
+# Длительность ремонта: корзины (подпись, от, до) в днях, границы включаются
+DURATION_BUCKETS = (
+    ("1–3", 1, 3),
+    ("4–7", 4, 7),
+    ("8–14", 8, 14),
+    ("15–30", 15, 30),
+    ("31+", 31, None),
+)
+# Серий на графике «Работы по месяцам» не больше, чем цветов палитры charts.js
+MAX_MONTH_SERIES = 6
+REPAIR_KPI_KEYS = ("total", "planned", "breakdowns", "median_days", "replacement_share")
 
 
 # --- Правила и подписи ----------------------------------------------------------
@@ -544,3 +558,239 @@ def data_gaps(today: date, filters: EquipmentFilters, source=None) -> list[dict]
             "service",
         ),
     ]
+
+
+# --- Блок Б: ремонты (за период) -------------------------------------------------
+
+
+def _median(values) -> Decimal | None:
+    """Медиана с шагом 0,1; пусто — None."""
+    if not values:
+        return None
+    return Decimal(str(statistics.median(values))).quantize(TENTH, ROUND_HALF_UP)
+
+
+def _share_pct(part: int, whole: int) -> Decimal | None:
+    """Доля в процентах с шагом 0,1; при нулевом целом — None."""
+    if not whole:
+        return None
+    return (Decimal(part) * 100 / whole).quantize(TENTH, ROUND_HALF_UP)
+
+
+def _count_by_month(days, months: list[date]) -> list[int]:
+    """Число дат по месяцам (`months` — первые числа), вне месяцев — не считаются."""
+    return [int(value) for value in _bucket_by_month(((d, 1) for d in days), months)]
+
+
+def service_type_label(service) -> str:
+    """Вид работ ремонта."""
+    if service.service_type is None:
+        return NO_SERVICE_TYPE_LABEL
+    return service.service_type.name
+
+
+def _repair_values(services) -> dict:
+    """Показатели плиток по ремонтам одного периода."""
+    kinds = [work_kind(service) for service in services]
+    breakdowns = [s for s, kind in zip(services, kinds) if kind == WORK_BREAKDOWN]
+    durations = [repair_days(s) for s in breakdowns if s.end_dt is not None]
+    with_replacement = sum(1 for s in breakdowns if s.replacement_equipment_id)
+    return {
+        "total": len(services),
+        "planned": kinds.count(WORK_PLANNED),
+        "breakdowns": len(breakdowns),
+        "median_days": _median(durations),
+        "replacement_share": _share_pct(with_replacement, len(breakdowns)),
+    }
+
+
+def _open_split(services, today: date) -> tuple[list, list, date]:
+    """Незакрытые ремонты: открытые (не старше года, не в будущем) и старые."""
+    old_before = today - timedelta(days=OPEN_REPAIR_DAYS)
+    unclosed = [s for s in services if s.end_dt is None]
+    opened = [s for s in unclosed if old_before <= s.beg_dt <= today]
+    old = [s for s in unclosed if s.beg_dt < old_before]
+    return opened, old, old_before
+
+
+def repairs_kpis(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> dict:
+    """Плитки ремонтов за период и тот же период год назад.
+
+    Дельта доли поломок с подменой — в процентных пунктах, остальные — в %.
+    «В работе сейчас» (`open_now`) — на сегодня, период не учитывается.
+    """
+    source = _source(source)
+    services = source.services_in(period, filters)
+    current = _repair_values(services)
+    previous = _repair_values(source.services_in(period.previous_year(), filters))
+    delta = {
+        key: _delta_pct(current[key], previous[key])
+        for key in REPAIR_KPI_KEYS
+        if key != "replacement_share"
+    }
+    share, previous_share = current["replacement_share"], previous["replacement_share"]
+    delta["replacement_share"] = (
+        None if share is None or previous_share is None else share - previous_share
+    )
+    opened, _, _ = _open_split(source.services_of(filters), today)
+    return {
+        "current": current,
+        "previous": previous,
+        "delta_pct": delta,
+        "open_now": len(opened),
+        "unknown_type": sum(1 for s in services if work_kind(s) == WORK_UNKNOWN),
+    }
+
+
+def _department_of(source, service) -> str | None:
+    """Подразделение активного монтажа прибора ремонта."""
+    device = source.device_of(service)
+    install = active_install(device) if device is not None else None
+    return department_label(install.department) if install is not None else None
+
+
+def open_repairs(today: date, filters: EquipmentFilters, source=None) -> dict:
+    """Открытые ремонты (на сегодня) и число старых незакрытых."""
+    source = _source(source)
+    opened, old, old_before = _open_split(source.services_of(filters), today)
+    rows = []
+    for service in opened:
+        device = source.device_of(service)
+        replacement = service.replacement_equipment
+        rows.append(
+            {
+                "id": service.pk,
+                "device": device_label(device) if device else NO_DEVICE_LABEL,
+                "department": _department_of(source, service),
+                "service_type": service_type_label(service),
+                "beg_dt": service.beg_dt,
+                "days": (today - service.beg_dt).days + 1,
+                "replacement": replacement_label(replacement) if replacement else None,
+            }
+        )
+    rows.sort(key=lambda row: (-row["days"], row["device"]))
+    return {
+        "rows": rows,
+        "old_count": len(old),
+        "old_ids": [str(service.pk) for service in old],
+        "old_before": old_before,
+    }
+
+
+def works_by_month(period: Period, filters: EquipmentFilters, source=None) -> dict:
+    """Работы периода по месяцам и видам работ (не больше `MAX_MONTH_SERIES` серий)."""
+    source = _source(source)
+    months = period.months()
+    by_type = {}
+    for service in source.services_in(period, filters):
+        by_type.setdefault(service_type_label(service), []).append(service.beg_dt)
+    labels = sorted(by_type, key=lambda label: (-len(by_type[label]), label))
+    if len(labels) > MAX_MONTH_SERIES:
+        rest = [
+            day for label in labels[MAX_MONTH_SERIES - 1 :] for day in by_type[label]
+        ]
+        labels = labels[: MAX_MONTH_SERIES - 1]
+        by_type = {label: by_type[label] for label in labels}
+        by_type[OTHER_SERVICE_TYPES_LABEL] = rest
+        labels.append(OTHER_SERVICE_TYPES_LABEL)
+    return {
+        "months": months,
+        "series": [
+            {"label": label, "data": _count_by_month(by_type[label], months)}
+            for label in labels
+        ],
+    }
+
+
+def planned_by_month(period: Period, filters: EquipmentFilters, source=None) -> dict:
+    """ТО по месяцам: нами / не нами / без прибора и ТО того же месяца год назад."""
+    source = _source(source)
+    months = period.months()
+    groups = {"ours": [], "others": [], "no_device": []}
+    for service in source.services_in(period, filters):
+        if work_kind(service) != WORK_PLANNED:
+            continue
+        device = source.device_of(service)
+        if device is None:
+            key = "no_device"
+        else:
+            key = "ours" if device.is_our_supply else "others"
+        groups[key].append(service.beg_dt)
+    previous_period = period.previous_year()
+    previous = [
+        service.beg_dt
+        for service in source.services_in(previous_period, filters)
+        if work_kind(service) == WORK_PLANNED
+    ]
+    return {
+        "months": months,
+        **{key: _count_by_month(days, months) for key, days in groups.items()},
+        "previous": _count_by_month(previous, previous_period.months()),
+    }
+
+
+def _duration_bucket(days: int) -> str:
+    for label, _, high in DURATION_BUCKETS:
+        if high is None or days <= high:
+            return label
+
+
+def duration_stats(period: Period, filters: EquipmentFilters, source=None) -> dict:
+    """Длительность: корзины по закрытым поломкам, таблица по видам работ."""
+    source = _source(source)
+    services = source.services_in(period, filters)
+    buckets = {
+        label: {"label": label, "count": 0, "ids": []}
+        for label, _, _ in DURATION_BUCKETS
+    }
+    by_type = {}
+    for service in services:
+        days = repair_days(service)
+        if days is None:
+            continue
+        by_type.setdefault(service_type_label(service), []).append(days)
+        if work_kind(service) == WORK_BREAKDOWN:
+            bucket = buckets[_duration_bucket(days)]
+            bucket["count"] += 1
+            bucket["ids"].append(str(service.pk))
+    rows = [
+        {
+            "label": label,
+            "count": len(values),
+            "median": _median(values),
+            "max": max(values),
+        }
+        for label, values in by_type.items()
+    ]
+    rows.sort(key=lambda row: (-row["count"], row["label"]))
+    return {
+        "buckets": list(buckets.values()),
+        "by_type": rows,
+        "open": sum(1 for service in services if service.end_dt is None),
+    }
+
+
+def engineer_load(period: Period, filters: EquipmentFilters, source=None) -> dict:
+    """Число работ «инженер × месяц» периода.
+
+    Ключ `days` в строках — число работ: так строки подходят к
+    `_with_load_shades` из вкладки «Командировки».
+    """
+    source = _source(source)
+    months = period.months()
+    by_engineer = {}
+    for service in source.services_in(period, filters):
+        name = service.engineer.name if service.engineer else NO_ENGINEER_LABEL
+        by_engineer.setdefault(name, []).append(service.beg_dt)
+    rows = [
+        {"name": name, "days": _count_by_month(days, months), "total": len(days)}
+        for name, days in by_engineer.items()
+    ]
+    rows.sort(key=lambda row: (-row["total"], row["name"]))
+    return {
+        "months": months,
+        "rows": rows,
+        "max": max((count for row in rows for count in row["days"]), default=0),
+    }

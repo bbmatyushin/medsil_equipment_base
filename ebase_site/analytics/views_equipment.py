@@ -3,11 +3,12 @@
 from datetime import timedelta
 
 from .charts import chart_spec
-from .filters import EquipmentFilterForm
-from .links import changelist_url
+from .filters import EquipmentFilterForm, month_label
+from .links import change_url, changelist_url
 from .services import equipment
 from .templatetags.analytics_tags import number
 from .views import MAX_LINK_IDS, AnalyticsTabView, _horizontal_chart_height
+from .views_trips import _with_load_shades
 
 # Списки в админке: сюда ведут клики по виджетам
 ACCOUNTING = "ebase_equipmentaccounting"
@@ -16,6 +17,15 @@ REPLACEMENTS = "ebase_replacementequipment"
 
 OURS_LABEL = "Поставлено нами"
 OTHERS_LABEL = "Поставлено не нами"
+
+# Плитки «Ремонты»: ключ repairs_kpis, подпись, вид значения, «рост — плохо»
+REPAIR_TILES = [
+    ("total", "Всего работ", "count", False),
+    ("planned", "ТО проведено", "count", False),
+    ("breakdowns", "Поломок", "count", True),
+    ("median_days", "Медиана ремонта, дней", "count", True),
+    ("replacement_share", "Поломок с подменой", "percent", False),
+]
 
 # Запасные ссылки «Полноты данных», когда записей больше `MAX_LINK_IDS`:
 # фильтр списка, который показывает надмножество этих записей
@@ -200,6 +210,121 @@ def _park_context(source, filters, today) -> dict:
     }
 
 
+def _repairs_tiles(kpis: dict) -> list[dict]:
+    """Плитки ремонтов с дельтой к прошлому году и «В работе сейчас» (на сегодня)."""
+    tiles = [
+        {
+            "label": label,
+            "value": kpis["current"][key],
+            "delta": kpis["delta_pct"][key],
+            "inverse": inverse,
+            "kind": kind,
+            # доля в %, её дельта — в процентных пунктах
+            "pp": key == "replacement_share",
+            "snapshot": False,
+        }
+        for key, label, kind, inverse in REPAIR_TILES
+    ]
+    tiles.append(
+        {
+            "label": "В работе сейчас",
+            "value": kpis["open_now"],
+            "delta": None,
+            "inverse": False,
+            "kind": "count",
+            "pp": False,
+            "snapshot": True,
+        }
+    )
+    return tiles
+
+
+def _planned_chart(planned: dict) -> dict:
+    """ТО по месяцам: стек «нами / не нами» (и «Прибор не указан») и линия прошлого года."""
+    datasets = [
+        {"label": OURS_LABEL, "data": planned["ours"], "color": "c1"},
+        {"label": OTHERS_LABEL, "data": planned["others"], "color": "c2"},
+    ]
+    if sum(planned["no_device"]):
+        datasets.append(
+            {
+                "label": equipment.NO_DEVICE_LABEL,
+                "data": planned["no_device"],
+                "color": "c4",
+            }
+        )
+    datasets.append(
+        {
+            "label": "Прошлый год",
+            "data": planned["previous"],
+            "kind": "line",
+            "color": "c5",
+        }
+    )
+    return chart_spec(
+        "bar",
+        [month_label(month) for month in planned["months"]],
+        datasets,
+        fmt="count",
+        stacked=True,
+    )
+
+
+def _repairs_context(source, filters, period, today) -> dict:
+    """Блок «Ремонты»: плитки, работы и ТО по месяцам, длительность, открытые, инженеры."""
+    kpis = equipment.repairs_kpis(period, today, filters, source=source)
+    by_month = equipment.works_by_month(period, filters, source=source)
+    durations = equipment.duration_stats(period, filters, source=source)
+    opened = equipment.open_repairs(today, filters, source=source)
+    opened["rows"] = [
+        {**row, "url": change_url(SERVICES, row["id"])} for row in opened["rows"]
+    ]
+    charts = {
+        "works_by_month": chart_spec(
+            "bar",
+            [month_label(month) for month in by_month["months"]],
+            [
+                {"label": series["label"], "data": series["data"]}
+                for series in by_month["series"]
+            ],
+            fmt="count",
+            stacked=True,
+        ),
+        "planned_by_month": _planned_chart(
+            equipment.planned_by_month(period, filters, source=source)
+        ),
+        "durations": chart_spec(
+            "bar",
+            [row["label"] for row in durations["buckets"]],
+            [
+                {
+                    "label": "Поломок",
+                    "data": [row["count"] for row in durations["buckets"]],
+                    "color": "c1",
+                }
+            ],
+            fmt="count",
+            links=[ids_link(SERVICES, row["ids"]) for row in durations["buckets"]],
+        ),
+    }
+    return {
+        "repairs": kpis,
+        "repairs_tiles": _repairs_tiles(kpis),
+        "open_repairs": opened,
+        "old_open_url": ids_link(
+            SERVICES,
+            opened["old_ids"],
+            end_dt__isnull="True",
+            beg_dt__lt=opened["old_before"].isoformat(),
+        ),
+        "durations": durations,
+        "engineer_load": _with_load_shades(
+            equipment.engineer_load(period, filters, source=source)
+        ),
+        "charts": charts,
+    }
+
+
 class EquipmentView(AnalyticsTabView):
     """Вкладка «Оборудование»: парк, ремонты, надёжность, подменный фонд."""
 
@@ -211,11 +336,15 @@ class EquipmentView(AnalyticsTabView):
         context = super().get_context_data(**kwargs)
         filters = self.form.get_filters()
         today = context["today"]
+        period = context["period"]
         # данные загружаются один раз на всю страницу, виджеты отбирают из набора
         source = equipment.EquipmentSet.load()
 
         charts = {}
-        for block in (_park_context(source, filters, today),):
+        for block in (
+            _park_context(source, filters, today),
+            _repairs_context(source, filters, period, today),
+        ):
             charts.update(block.pop("charts"))
             context.update(block)
         context.update(filters=filters, charts=charts)
