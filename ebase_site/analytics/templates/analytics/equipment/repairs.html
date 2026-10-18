@@ -91,7 +91,7 @@
                     <tbody>
                         {% for row in open_repairs.rows %}
                             <tr>
-                                <td><a href="{{ row.url }}">{{ row.device }}</a></td>
+                                <td class="an-nowrap"><a href="{{ row.url }}">{{ row.device }}</a></td>
                                 <td>{{ row.department|default:"—" }}</td>
                                 <td>{{ row.service_type }}</td>
                                 <td class="num">{{ row.beg_dt|date:"d.m.Y" }}</td>

@@ -34,7 +34,7 @@
                     <tbody>
                         {% for row in fund_status %}
                             <tr{% if row.overdue %} class="an-tone-risk"{% endif %}>
-                                <td><a href="{{ row.replacement_url }}">{{ row.label }}</a></td>
+                                <td class="an-nowrap"><a href="{{ row.replacement_url }}">{{ row.label }}</a></td>
                                 <td>{{ row.department }}</td>
                                 <td class="num"><a href="{{ row.service_url }}">{{ row.since|date:"d.m.Y" }}</a></td>
                                 <td class="num">{{ row.days|number }}</td>
@@ -91,7 +91,7 @@
                     <tbody>
                         {% for row in shortage %}
                             <tr>
-                                <td>{{ row.label }}</td>
+                                <td class="an-nowrap">{{ row.label }}</td>
                                 <td class="num"><strong>{{ row.without|number }}</strong></td>
                                 <td class="num">{{ row.with|number }}</td>
                                 <td class="num">{{ row.median_days|number }}</td>

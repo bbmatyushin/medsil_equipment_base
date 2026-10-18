@@ -1684,3 +1684,31 @@ class EquipmentPageTests(TestCase):
         years = _timeline_header(Period(date(2020, 1, 1), date(2026, 12, 31)))
         self.assertEqual([item["label"] for item in years][:2], ["2020", "2021"])
         self.assertEqual(len(years), 7)
+
+    def test_reliability_cards_layout(self):
+        response = self._get()
+        html = response.content.decode()
+
+        def card(title):
+            return re.search(rf'<section class="([^"]+)">\s*<h2>{title}</h2>', html)
+
+        chart, problems = card("Поломок на прибор в год"), card("Проблемные приборы")
+        repeats, summary = card("Повторные ремонты"), card("Сводная по моделям")
+        # таблицы в 4+ колонки в половине ширины обрезаются — все карточки во всю ширину
+        self.assertEqual(chart.group(1), "an-card an-card--wide")
+        self.assertEqual(problems.group(1), "an-card an-card--wide")
+        self.assertEqual(repeats.group(1), "an-card an-card--wide")
+        self.assertEqual(summary.group(1), "an-card an-card--wide")
+        self.assertLess(chart.start(), problems.start())
+        self.assertLess(problems.start(), repeats.start())
+        self.assertContains(response, "прошлая поломка не закончилась к началу этой")
+
+    def test_model_names_do_not_wrap(self):
+        repair = make_service_type("ремонт")
+        device = self._installed("A1")
+        make_service(device, date(2026, 3, 1), date(2026, 3, 2), service_type=repair)
+        make_service(device, date(2026, 3, 20), service_type=repair)
+
+        response = self._get()
+
+        self.assertContains(response, '<td class="an-nowrap">BC-5000</td>', count=2)

@@ -484,6 +484,11 @@ html[data-theme="dark"] {
 
 /* --- Вкладка «Оборудование» -------------------------------------------------- */
 
+/* Названия моделей и приборов не переносятся («BC-|6200»): таблица прокручивается */
+.an-table td.an-nowrap {
+    white-space: nowrap;
+}
+
 /* «Где сейчас подменные»: ремонт закрыт, а прибор не вернули в офис */
 .an-table tr.an-tone-risk td {
     background: color-mix(in srgb, var(--an-negative) 14%, var(--an-surface));
