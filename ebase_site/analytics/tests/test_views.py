@@ -17,14 +17,21 @@ from analytics.tests.factories import (
     make_client,
     make_contract,
     make_department,
+    make_device,
     make_employee,
+    make_equipment,
+    make_install,
     make_payment,
     make_receipt,
+    make_replacement,
+    make_service,
+    make_service_type,
     make_shipment,
     make_trip,
 )
 from analytics.navigation import TABS, Tab, visible_tabs
 from analytics.views import MAX_LINK_IDS, _pareto_caption
+from analytics.views_equipment import ACCOUNTING, ids_link
 from analytics.views_trips import _ids_link
 from clients.models import Client
 from contracts.admin import format_money
@@ -1318,3 +1325,208 @@ class TripsPageTests(TestCase):
 
         dataset = response.context["charts"]["employee_days"]["datasets"][0]
         self.assertEqual(dataset["color"], "c6")
+
+
+# Графики вкладки «Оборудование» (дописываются по блокам)
+EQUIPMENT_CHART_KEYS = {
+    "installs_by_year",
+    "structure_directions",
+    "structure_manufacturers",
+    "structure_statuses",
+    "structure_regions",
+    "park_age",
+}
+
+
+class EquipmentPageTests(TestCase):
+    """Вкладка «Оборудование»: виджеты, подписи и ссылки в списки админки."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            "super", "super@example.com", "pass"
+        )
+        cls.clinic = make_client("Клиника")
+        cls.department = make_department("Больница", client=cls.clinic)
+        cls.model = make_equipment("BC-5000")
+
+    def setUp(self):
+        self.client.force_login(self.superuser)
+
+    def _get(self, params=None):
+        with _fixed_today():
+            response = self.client.get(reverse("analytics:equipment"), params or {})
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    @staticmethod
+    def _filter_spec(response, parameter_name):
+        return next(
+            spec
+            for spec in response.context["cl"].filter_specs
+            if getattr(spec, "parameter_name", None) == parameter_name
+        )
+
+    def _installed(self, serial, model=None, **kwargs):
+        device = make_device(model or self.model, serial, **kwargs)
+        make_install(device, self.department, date(2021, 5, 1))
+        return device
+
+    def test_equipment_page_empty_db(self):
+        response = self._get()
+
+        charts = response.context["charts"]
+        self.assertEqual(set(charts), EQUIPMENT_CHART_KEYS)
+        for key, spec in charts.items():
+            self.assertTrue(spec["empty"], key)
+        self.assertContains(response, "Нет данных")
+        self.assertNotContains(response, "None")
+
+    def test_equipment_page_bad_params(self):
+        self._installed("A1")
+
+        response = self._get(
+            {
+                "preset": "foo",
+                "direction": "x",
+                "manufacturer": "y",
+                "supply": "z",
+                "date_from": "abc",
+            }
+        )
+
+        self.assertEqual(response.context["filters"].supply, "all")
+
+    def test_equipment_page_with_incomplete_directory(self):
+        nameless = make_equipment(None, None, direction=None, manufacturer=None)
+        device = make_device(nameless, "sn1")
+        make_install(device, make_department("Без города", city=None), None)
+        make_service(device, date(2026, 3, 1))
+
+        response = self._get()
+
+        self.assertNotContains(response, "None")
+        self.assertEqual(
+            response.context["charts"]["structure_directions"]["labels"],
+            ["Направление не указано"],
+        )
+        self.assertEqual(
+            response.context["charts"]["structure_regions"]["labels"],
+            ["Город не указан"],
+        )
+
+    def test_park_tiles(self):
+        self._installed("A1", our_service=True)
+        self._installed("A2", ours=False)
+        make_device(self.model, "A3")
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile for tile in response.context["park_tiles"]}
+        self.assertEqual(tiles["Учтено приборов"]["value"], 3)
+        self.assertEqual(tiles["Учтено приборов"]["note"], "нами 2 · не нами 1")
+        self.assertEqual(tiles["Нет данных о монтаже"]["note"], "монтаж снят: 0")
+        self.assertEqual(tiles["С отметкой «Проведено ТО»"]["value"], 1)
+        self.assertContains(response, "5,5 лет")
+
+    def test_park_structure_link_opens_accounting_list(self):
+        self._installed("A1")
+        self._installed("A2")
+
+        response = self._get()
+
+        spec = response.context["charts"]["structure_directions"]
+        self.assertEqual(spec["labels"], ["Гематология"])
+        changelist = self.client.get(spec["links"][0])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 2)
+
+    def test_park_large_direction_links_to_sidebar_filter(self):
+        for number in range(MAX_LINK_IDS + 1):
+            self._installed(f"S{number}")
+
+        response = self._get()
+
+        url = response.context["charts"]["structure_directions"]["links"][0]
+        self.assertIn(f"med_direction={self.model.med_direction_id}", url)
+        changelist = self.client.get(url)
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(
+            self._filter_spec(changelist, "med_direction").value(),
+            str(self.model.med_direction_id),
+        )
+
+    def test_data_gap_link_uses_install_dt_filter(self):
+        for number in range(MAX_LINK_IDS + 1):
+            make_device(self.model, f"N{number}")
+
+        response = self._get()
+
+        row = next(
+            row for row in response.context["data_gaps"] if row["key"] == "no_install"
+        )
+        self.assertEqual(row["count"], MAX_LINK_IDS + 1)
+        self.assertTrue(row["superset"])
+        self.assertIn("install_dt=nulldt", row["url"])
+        changelist = self.client.get(row["url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(self._filter_spec(changelist, "install_dt").value(), "nulldt")
+
+    def test_data_gap_small_link_uses_ids(self):
+        device = make_device(self.model, "N1")
+
+        response = self._get()
+
+        row = next(
+            row for row in response.context["data_gaps"] if row["key"] == "no_install"
+        )
+        self.assertFalse(row["superset"])
+        changelist = self.client.get(row["url"])
+        self.assertEqual(
+            [obj.pk for obj in changelist.context["cl"].result_list], [device.pk]
+        )
+
+    def test_ids_link_limits(self):
+        self.assertIsNone(ids_link(ACCOUNTING, []))
+        fake_ids = [str(uuid.uuid4()) for _ in range(MAX_LINK_IDS + 1)]
+        url = ids_link(ACCOUNTING, fake_ids[:MAX_LINK_IDS])
+        query = parse_qs(urlsplit(url).query)
+        self.assertEqual(len(query["id__in"][0].split(",")), MAX_LINK_IDS)
+        self.assertIsNone(ids_link(ACCOUNTING, fake_ids))
+        self.assertIn(
+            "med_direction=7", ids_link(ACCOUNTING, fake_ids, med_direction=7)
+        )
+
+    def test_equipment_page_query_count_is_small_and_constant(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        repair = make_service_type("ремонт")
+        spare = make_replacement(self.model, "R0")
+
+        def populate(prefix):
+            for number in range(3):
+                device = self._installed(f"{prefix}{number}")
+                make_service(
+                    device,
+                    date(2026, 3, number + 1),
+                    date(2026, 3, number + 5),
+                    service_type=repair,
+                    engineer="Петров",
+                    replacement=spare,
+                )
+
+        def count():
+            with _fixed_today(), CaptureQueriesContext(connection) as ctx:
+                response = self.client.get(reverse("analytics:equipment"))
+            self.assertEqual(response.status_code, 200)
+            return len(ctx.captured_queries)
+
+        populate("Q")
+        before = count()
+        populate("P")
+        make_replacement(make_equipment("CL-900", direction="Биохимия"), "R1")
+        after = count()
+
+        self.assertLessEqual(before, 30)
+        self.assertEqual(before, after)

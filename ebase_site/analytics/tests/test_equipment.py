@@ -1,9 +1,18 @@
 from datetime import date
+from decimal import Decimal
 
 from django.test import TestCase
 
 from analytics.filters import EquipmentFilters, Period
 from analytics.services.equipment import (
+    AGE_UNKNOWN_LABEL,
+    OTHER_MANUFACTURERS_LABEL,
+    data_gaps,
+    installs_by_year,
+    park_age,
+    park_kpis,
+    park_structure,
+    top_clients,
     NO_CITY_LABEL,
     NO_CLIENT_LABEL,
     NO_MODEL_NAME_LABEL,
@@ -241,3 +250,167 @@ class EquipmentRulesTests(TestCase):
             for service in source.services:
                 work_kind(service)
                 source.device_of(service)
+
+
+class ParkTests(TestCase):
+    """Блок «Парк оборудования» (на сегодня)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.clinic = make_client("Клиника")
+        cls.department = make_department("Больница", client=cls.clinic)
+        cls.model = make_equipment("BC-5000")
+        # A — у клиента с 2020-03-01, нами; B — у клиента без даты, не нами;
+        # C — монтаж снят; D — без монтажа
+        cls.a = make_device(cls.model, "A", our_service=True, status="работает")
+        make_install(cls.a, cls.department, date(2020, 3, 1), engineer="Петров")
+        cls.b = make_device(cls.model, "B", ours=False)
+        make_install(cls.b, cls.department, None)
+        cls.c = make_device(cls.model, "C")
+        make_install(cls.c, cls.department, date(2019, 5, 1), active=False)
+        cls.d = make_device(cls.model, "D")
+
+    def _source(self):
+        return EquipmentSet.load()
+
+    def test_park_kpis(self):
+        kpis = park_kpis(TODAY, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(kpis["total"], 4)
+        self.assertEqual(kpis["ours"], 3)
+        self.assertEqual(kpis["others"], 1)
+        self.assertEqual(kpis["at_client"], 2)
+        self.assertEqual(kpis["no_install"], 1)
+        self.assertEqual(kpis["removed"], 1)
+        self.assertEqual(kpis["clients"], 1)
+        self.assertEqual(kpis["avg_age"], Decimal("6.6"))
+        self.assertEqual(kpis["our_service"], 1)
+
+    def test_park_kpis_supply_filter(self):
+        kpis = park_kpis(
+            TODAY, EquipmentFilters(supply="others"), source=self._source()
+        )
+
+        self.assertEqual(kpis["total"], 1)
+        self.assertEqual(kpis["at_client"], 1)
+        self.assertIsNone(kpis["avg_age"])
+
+    def test_installs_by_year_fills_gaps_and_accumulates(self):
+        e = make_device(self.model, "E", ours=False)
+        make_install(e, self.department, date(2022, 6, 1))
+
+        result = installs_by_year(EquipmentFilters(), source=self._source())
+
+        self.assertEqual(result["years"], [2019, 2020, 2021, 2022])
+        self.assertEqual(result["ours"], [1, 1, 0, 0])
+        self.assertEqual(result["others"], [0, 0, 0, 1])
+        self.assertEqual(result["cumulative"], [1, 2, 2, 3])
+        self.assertEqual(result["no_date"], 1)
+
+    def test_park_structure_splits_supply(self):
+        structure = park_structure(EquipmentFilters(), source=self._source())
+
+        directions = structure["directions"]
+        self.assertEqual(len(directions), 1)
+        self.assertEqual(directions[0]["label"], "Гематология")
+        self.assertEqual(directions[0]["key"], self.model.med_direction_id)
+        self.assertEqual((directions[0]["ours"], directions[0]["others"]), (1, 1))
+        self.assertEqual(set(directions[0]["ids"]), {str(self.a.pk), str(self.b.pk)})
+        statuses = {row["label"]: row for row in structure["statuses"]}
+        self.assertEqual(statuses["работает"]["key"], "работает")
+        self.assertIsNone(statuses["Статус не указан"]["key"])
+        self.assertEqual([row["label"] for row in structure["regions"]], ["Татарстан"])
+
+    def test_park_structure_groups_rest_of_manufacturers(self):
+        for number in range(11):
+            model = make_equipment(
+                f"Модель {number}", manufacturer=f"Завод {number:02}"
+            )
+            device = make_device(model, f"M{number}")
+            make_install(device, self.department, date(2021, 1, 1))
+        no_region = make_department("Поликлиника", city=make_city("Казань", None))
+        device = make_device(self.model, "F")
+        make_install(device, no_region, date(2021, 1, 1))
+
+        structure = park_structure(EquipmentFilters(), source=self._source())
+
+        manufacturers = structure["manufacturers"]
+        self.assertEqual(len(manufacturers), 11)
+        self.assertEqual(manufacturers[0]["label"], "Mindray")
+        self.assertEqual(manufacturers[0]["total"], 3)
+        self.assertEqual(manufacturers[-1]["label"], OTHER_MANUFACTURERS_LABEL)
+        self.assertIsNone(manufacturers[-1]["key"])
+        self.assertEqual(manufacturers[-1]["total"], 2)
+        self.assertEqual(sum(row["total"] for row in manufacturers), 14)
+        regions = {row["label"]: row["total"] for row in structure["regions"]}
+        self.assertEqual(regions["Казань (регион не указан)"], 1)
+
+    def test_park_age_buckets(self):
+        biochemistry = make_equipment("CL-900", direction="Биохимия")
+        for serial, install_dt in [
+            ("G1", date(2026, 4, 16)),  # полгода
+            ("G2", date(2024, 10, 16)),  # 2 года
+            ("G3", date(2022, 10, 16)),  # 4 года
+            ("G4", date(2019, 10, 16)),  # 7 лет
+            ("G5", date(2014, 10, 16)),  # 12 лет
+            ("G6", None),
+        ]:
+            make_install(make_device(biochemistry, serial), self.department, install_dt)
+
+        rows = park_age(
+            TODAY,
+            EquipmentFilters(direction=biochemistry.med_direction),
+            source=self._source(),
+        )
+
+        self.assertEqual(
+            [row["label"] for row in rows],
+            ["<1", "1–3", "3–5", "5–10", "10+ лет", AGE_UNKNOWN_LABEL],
+        )
+        self.assertEqual([row["count"] for row in rows], [1, 1, 1, 1, 1, 1])
+
+    def test_top_clients(self):
+        other_client = make_client("Лаборатория")
+        lab = make_department("Лаборатория 1", client=other_client)
+        second_model = make_equipment("CL-900", direction="Биохимия")
+        for serial in ("L1", "L2"):
+            make_install(make_device(second_model, serial), lab, date(2021, 1, 1))
+        make_install(make_device(self.model, "L3", ours=False), lab, date(2021, 1, 1))
+
+        rows = top_clients(EquipmentFilters(), source=self._source())
+
+        self.assertEqual(
+            [(row["name"], row["devices"], row["ours"], row["models"]) for row in rows],
+            [("Лаборатория", 3, 2, 2), ("Клиника", 2, 1, 1)],
+        )
+        self.assertEqual(len(rows[0]["ids"]), 3)
+
+    def test_data_gaps(self):
+        make_service(self.a, date(2025, 1, 10))  # без вида и без окончания, старый
+        make_service(self.a, date(2026, 9, 1), service_type=make_service_type("ремонт"))
+
+        rows = {
+            row["key"]: row
+            for row in data_gaps(TODAY, EquipmentFilters(), source=self._source())
+        }
+
+        self.assertEqual(
+            list(rows),
+            [
+                "no_install",
+                "no_install_date",
+                "no_status",
+                "no_engineer",
+                "no_service_type",
+                "old_open",
+            ],
+        )
+        self.assertEqual(rows["no_install"]["count"], 1)
+        self.assertEqual(rows["no_install"]["ids"], [str(self.d.pk)])
+        self.assertEqual(rows["no_install_date"]["count"], 1)
+        self.assertEqual(rows["no_status"]["count"], 3)
+        self.assertEqual(rows["no_engineer"]["count"], 1)
+        self.assertEqual(rows["no_service_type"]["count"], 1)
+        self.assertEqual(rows["old_open"]["count"], 1)
+        self.assertEqual(rows["no_install"]["target"], "accounting")
+        self.assertEqual(rows["old_open"]["target"], "service")

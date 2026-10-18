@@ -1,1 +1,106 @@
 {% load analytics_tags %}
+<section class="an-tiles" aria-label="Парк оборудования на сегодня">
+    {% for tile in park_tiles %}
+        <div class="an-tile">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            {% if tile.kind == "years" and tile.value is not None %}
+                <p class="an-tile-value">{{ tile.value|number }} лет</p>
+            {% else %}
+                <p class="an-tile-value">{{ tile.value|number }}</p>
+            {% endif %}
+            {% if tile.note %}<p class="an-tile-note">{{ tile.note }}</p>{% endif %}
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link">Блок «Парк» — на сегодня, период не учитывается. Прибор «у клиента», если у него есть монтаж с отметкой «У клиента»; без записей о монтаже — данные ещё не внесены.</p>
+
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Установки по годам</h2>
+        <p class="an-card-note">Все монтажи по году даты монтажа, включая снятые; линия — всего установлено нарастающим итогом.{% if installs_no_date %} Без даты монтажа: {{ installs_no_date|number }}.{% endif %}</p>
+        {% include "analytics/includes/chart.html" with spec=charts.installs_by_year chart_id="chart-eq-installs" title="Установки оборудования по годам" empty_text="Нет данных" only %}
+    </section>
+
+    <section class="an-card">
+        <h2>Возраст парка</h2>
+        <p class="an-card-note">Приборы у клиентов по возрасту от даты монтажа. Клик — приборы корзины.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.park_age chart_id="chart-eq-age" title="Возраст парка" empty_text="Нет данных" only %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Структура парка</h2>
+        <p class="an-card-note">Приборы у клиентов, поставленные нами и не нами. Клик — приборы в «1. Учёт оборудования».</p>
+        <div class="an-split an-split--even">
+            <div>
+                <h3 class="an-subtitle">По направлениям</h3>
+                {% include "analytics/includes/chart.html" with spec=charts.structure_directions chart_id="chart-eq-directions" title="Парк по направлениям" height=structure_heights.directions empty_text="Нет данных" only %}
+            </div>
+            <div>
+                <h3 class="an-subtitle">По производителям</h3>
+                {% include "analytics/includes/chart.html" with spec=charts.structure_manufacturers chart_id="chart-eq-manufacturers" title="Парк по производителям" height=structure_heights.manufacturers empty_text="Нет данных" only %}
+            </div>
+            <div>
+                <h3 class="an-subtitle">По статусам</h3>
+                {% include "analytics/includes/chart.html" with spec=charts.structure_statuses chart_id="chart-eq-statuses" title="Парк по статусам" height=structure_heights.statuses empty_text="Нет данных" only %}
+            </div>
+            <div>
+                <h3 class="an-subtitle">По регионам</h3>
+                {% include "analytics/includes/chart.html" with spec=charts.structure_regions chart_id="chart-eq-regions" title="Парк по регионам" height=structure_heights.regions empty_text="Нет данных" only %}
+            </div>
+        </div>
+    </section>
+
+    <section class="an-card">
+        <h2>Клиенты с наибольшим парком</h2>
+        <p class="an-card-note">Приборы у клиентов. Клик — приборы клиента.</p>
+        {% if top_clients %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Клиент</th>
+                            <th scope="col" class="num">Приборов</th>
+                            <th scope="col" class="num">Из них нами</th>
+                            <th scope="col" class="num">Моделей</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in top_clients %}
+                            <tr>
+                                <td>{% if row.url %}<a href="{{ row.url }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</td>
+                                <td class="num">{{ row.devices|number }}</td>
+                                <td class="num">{{ row.ours|number }}</td>
+                                <td class="num">{{ row.models|number }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Полнота данных</h2>
+        <p class="an-card-note">Что не внесено в учёт и ремонты (вся история). Клик — записи, которые нужно дозаполнить.</p>
+        <div class="an-table-wrap">
+            <table class="an-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Показатель</th>
+                        <th scope="col" class="num">Записей</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data_gaps %}
+                        <tr>
+                            <td>{% if row.url %}<a href="{{ row.url }}">{{ row.label }}</a>{% if row.superset %} <span class="an-note">(откроется более широкий список)</span>{% endif %}{% else %}{{ row.label }}{% endif %}</td>
+                            <td class="num">{{ row.count|number }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
