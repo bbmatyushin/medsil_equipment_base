@@ -1,4 +1,4 @@
-{% load analytics_tags %}
+{% load static analytics_tags %}
 <p class="an-registry-link">Считаются только поломки — работы, вид которых не отмечен «Плановое ТО» в справочнике; ТО и работы без вида работ не входят.</p>
 
 <div class="an-charts">
@@ -86,7 +86,7 @@
         <h2>Сводная по моделям</h2>
         <p class="an-card-note">Парк — на сегодня, ТО и поломки — за период; «на прибор в год» — как на графике (по поломкам приборов у клиентов), но для всех моделей; «Поломок» — все поломки модели; медиана — по закрытым поломкам. Подменные — в фонде, рабочих из всех.</p>
         {% if models_summary %}
-            <div class="an-table-wrap">
+            <div class="an-table-wrap an-table-wrap--scroll" data-an-max-rows="15">
                 <table class="an-table">
                     <thead>
                         <tr>
@@ -105,7 +105,7 @@
                     <tbody>
                         {% for row in models_summary %}
                             <tr>
-                                <td class="an-nowrap">{{ row.label }}</td>
+                                <td class="an-nowrap an-model-cell">{{ row.label }}</td>
                                 <td>{{ row.manufacturer }}</td>
                                 <td>{{ row.direction }}</td>
                                 <td class="num">{{ row.at_client|number }}</td>
@@ -125,3 +125,4 @@
         {% endif %}
     </section>
 </div>
+<script src="{% static 'analytics/js/summary-table.js' %}" defer></script>

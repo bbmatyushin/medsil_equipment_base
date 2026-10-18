@@ -1703,7 +1703,7 @@ class EquipmentPageTests(TestCase):
         self.assertLess(problems.start(), repeats.start())
         self.assertContains(response, "прошлая поломка не закончилась к началу этой")
 
-    def test_model_names_do_not_wrap(self):
+    def test_model_names_wrap_only_in_models_summary(self):
         repair = make_service_type("ремонт")
         device = self._installed("A1")
         make_service(device, date(2026, 3, 1), date(2026, 3, 2), service_type=repair)
@@ -1711,7 +1711,18 @@ class EquipmentPageTests(TestCase):
 
         response = self._get()
 
-        self.assertContains(response, '<td class="an-nowrap">BC-5000</td>', count=2)
+        # в «Проблемных приборах» названия не переносятся, в «Сводной по моделям» — переносятся
+        self.assertContains(response, '<td class="an-nowrap">BC-5000</td>', count=1)
+        self.assertContains(
+            response, '<td class="an-nowrap an-model-cell">BC-5000</td>', count=1
+        )
+
+    def test_models_summary_scrolls_after_15_rows(self):
+        self._installed("A1")
+
+        response = self._get()
+
+        self.assertContains(response, 'data-an-max-rows="15"')
 
     def test_reliability_note_counts_breakdowns_outside_park(self):
         repair = make_service_type("ремонт")
