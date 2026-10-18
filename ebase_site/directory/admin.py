@@ -77,13 +77,20 @@ class PositionAdmin(MainModelAdmin):
 
 @admin.register(ServiceType)
 class ServiceTypeAdmin(MainModelAdmin):
-    list_display = ('id', 'name',)
+    list_display = ('id', 'name', 'is_planned_maintenance')
     list_display_links = ('name',)
+    list_editable = ('is_planned_maintenance',)
     search_fields = ('name',)
     ordering = ('name',)
 
     fieldsets = (
-        ('Новый тип ремоната / вида работ', {'fields': ('name',)}),
+        (
+            'Новый тип ремоната / вида работ',
+            {
+                'fields': ('name', 'is_planned_maintenance'),
+                'description': PLANNED_MAINTENANCE_HELP,
+            },
+        ),
     )
 
 

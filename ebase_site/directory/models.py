@@ -214,11 +214,26 @@ class Position(models.Model):
         return f'<Position {self.name=!r}>'
 
 
+# Пояснение к флагу «Плановое ТО»: подсказка поля и описание блока в карточке
+PLANNED_MAINTENANCE_HELP = (
+    'Отметьте, если это плановое техническое обслуживание. '
+    'В разделе «Аналитика» → «Оборудование» такие работы считаются ТО '
+    '(плитка «ТО проведено», график ТО по месяцам), а не поломками: '
+    'они не входят в надёжность моделей и повторные ремонты. '
+    'Виды работ без отметки считаются ремонтами.'
+)
+
+
 class ServiceType(models.Model):
     """Типы ремонта / Виды работ"""
     name = models.CharField(
         max_length=100, null=False, blank=False, verbose_name='Тип ремонта',
         db_comment='Тип ремонта', unique=True,
+    )
+    is_planned_maintenance = models.BooleanField(
+        default=False, verbose_name='Плановое ТО',
+        db_comment='True — вид работ считается плановым ТО, а не поломкой (раздел «Аналитика»)',
+        help_text=PLANNED_MAINTENANCE_HELP,
     )
 
     class Meta:
