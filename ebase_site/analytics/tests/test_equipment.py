@@ -1,10 +1,18 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.test import TestCase
+from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase
 
 from analytics.filters import EquipmentFilters, Period
 from analytics.services.equipment import (
+    fund_kpis,
+    issue_interval,
+    issue_timeline,
+    replacement_location,
+    replacement_shortage,
+    replacements_at_clients,
     effective_days,
     models_summary,
     problem_devices,
@@ -57,6 +65,8 @@ from analytics.tests.factories import (
     make_service,
     make_service_type,
 )
+
+from ebase.models import ReplacementEquipment
 
 TODAY = date(2026, 10, 16)
 YEAR_2026 = Period(date(2026, 1, 1), date(2026, 12, 31))
@@ -796,3 +806,242 @@ class ReliabilityTests(TestCase):
         self.assertIsNone(second["per_unit_year"])
         self.assertEqual(second["manufacturer"], "Производитель не указан")
         self.assertEqual(second["direction"], "Направление не указано")
+
+
+class FundTests(TestCase):
+    """Блок «Подменный фонд»: где подменные, хронология выдач, нехватка подмены."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = make_department("Больница", client=make_client("Клиника"))
+        cls.model = make_equipment("BC-5000")
+        cls.device = make_device(cls.model, "A1")
+        make_install(cls.device, cls.department, date(2020, 1, 1))
+        cls.not_installed = make_device(cls.model, "B1")
+        cls.repair = make_service_type("ремонт")
+
+    def _source(self):
+        return EquipmentSet.load()
+
+    def _loaded(self, source, replacement):
+        return next(item for item in source.replacements if item.pk == replacement.pk)
+
+    def test_location_matches_admin_transferred_to(self):
+        at_client = make_replacement(self.model, "R1")
+        make_service(self.device, date(2025, 1, 1), replacement=at_client)  # старая
+        make_service(self.device, date(2026, 9, 1), replacement=at_client)
+        returned = make_replacement(self.model, "R2")
+        make_service(self.device, date(2026, 9, 1), replacement=returned, returned=True)
+        no_install = make_replacement(self.model, "R3")
+        make_service(self.not_installed, date(2026, 9, 1), replacement=no_install)
+        never = make_replacement(self.model, "R4")
+
+        source = self._source()
+        model_admin = admin.site._registry[ReplacementEquipment]
+        request = RequestFactory().get("/")
+        request.user = get_user_model().objects.create_superuser("super", "s@e.ru", "p")
+        admin_rows = {obj.pk: obj for obj in model_admin.get_queryset(request)}
+
+        for replacement in (at_client, returned, no_install, never):
+            location = replacement_location(self._loaded(source, replacement), source)
+            in_office = (
+                model_admin.transferred_to(admin_rows[replacement.pk]) == "В офисе"
+            )
+            self.assertEqual(
+                location["at_client"], not in_office, replacement.serial_number
+            )
+        location = replacement_location(self._loaded(source, at_client), source)
+        self.assertEqual(location["department"], "Больница (Казань)")
+        self.assertEqual(location["service"].beg_dt, date(2026, 9, 1))
+
+    def test_overdue_first(self):
+        overdue = make_replacement(self.model, "R1")
+        make_service(
+            self.device, date(2026, 8, 20), date(2026, 9, 1), replacement=overdue
+        )
+        still_open = make_replacement(self.model, "R2")
+        make_service(self.device, date(2026, 10, 1), replacement=still_open)
+
+        rows = replacements_at_clients(TODAY, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(
+            [(row["label"], row["overdue"], row["days"]) for row in rows],
+            [("BC-5000 [R1]", True, 58), ("BC-5000 [R2]", False, 16)],
+        )
+        self.assertEqual(rows[0]["end_dt"], date(2026, 9, 1))
+        self.assertTrue(rows[0]["repair_closed"])
+
+    def test_issue_interval_rules(self):
+        spare = make_replacement(self.model, "R1")
+        last_open = make_service(self.device, date(2026, 9, 1), replacement=spare)
+        last_returned = make_service(
+            self.device,
+            date(2026, 9, 1),
+            date(2026, 9, 10),
+            replacement=spare,
+            returned=True,
+        )
+        last_not_returned = make_service(
+            self.device, date(2026, 9, 1), date(2026, 9, 10), replacement=spare
+        )
+        early_open = make_service(self.device, date(2026, 4, 1), replacement=spare)
+        early_long = make_service(
+            self.device, date(2026, 4, 1), date(2026, 6, 1), replacement=spare
+        )
+        following = make_service(self.device, date(2026, 5, 10), replacement=spare)
+
+        self.assertEqual(
+            issue_interval(last_open, None, TODAY), (date(2026, 9, 1), TODAY)
+        )
+        self.assertEqual(
+            issue_interval(last_returned, None, TODAY),
+            (date(2026, 9, 1), date(2026, 9, 10)),
+        )
+        self.assertEqual(
+            issue_interval(last_not_returned, None, TODAY), (date(2026, 9, 1), TODAY)
+        )
+        # ранние выдачи без «Вернули в офис» не тянутся до сегодня
+        self.assertEqual(
+            issue_interval(early_open, following, TODAY),
+            (date(2026, 4, 1), date(2026, 5, 9)),
+        )
+        self.assertEqual(
+            issue_interval(early_long, following, TODAY),
+            (date(2026, 4, 1), date(2026, 5, 9)),
+        )
+
+    def test_timeline_clipped_to_period_and_today(self):
+        spare = make_replacement(self.model, "R1")
+        service = make_service(self.device, date(2025, 12, 20), replacement=spare)
+        make_replacement(self.model, "R0")  # без выдач — строка без полос
+
+        timeline = issue_timeline(
+            YEAR_2026, TODAY, EquipmentFilters(), source=self._source()
+        )
+
+        self.assertEqual(len(timeline["months"]), 12)
+        rows = {row["label"]: row for row in timeline["rows"]}
+        self.assertEqual(list(rows), ["BC-5000 [R0]", "BC-5000 [R1]"])
+        self.assertEqual(rows["BC-5000 [R0]"]["bars"], [])
+        self.assertEqual(rows["BC-5000 [R0]"]["days"], 0)
+        bar = rows["BC-5000 [R1]"]["bars"][0]
+        self.assertEqual(bar["service_id"], service.pk)
+        self.assertEqual((bar["start"], bar["end"]), (date(2025, 12, 20), TODAY))
+        self.assertEqual(bar["left_pct"], 0.0)
+        self.assertEqual(bar["width_pct"], round(289 / 365 * 100, 2))
+        self.assertEqual(rows["BC-5000 [R1]"]["days"], 289)
+
+    def test_timeline_overlapping_issues_counted_once(self):
+        spare = make_replacement(self.model, "R1")
+        make_service(
+            self.device, date(2026, 3, 1), date(2026, 3, 10), replacement=spare
+        )
+        make_service(
+            self.device,
+            date(2026, 3, 5),
+            date(2026, 3, 12),
+            replacement=spare,
+            returned=True,
+        )
+
+        row = issue_timeline(
+            YEAR_2026, TODAY, EquipmentFilters(), source=self._source()
+        )["rows"][0]
+
+        # первая выдача обрезана днём перед второй: 1–4 марта, вторая — 5–12 марта
+        self.assertEqual(row["days"], 12)
+        self.assertEqual(len(row["bars"]), 2)
+
+    def test_timeline_future_period_empty(self):
+        spare = make_replacement(self.model, "R1")
+        make_service(self.device, date(2026, 9, 1), replacement=spare)
+
+        timeline = issue_timeline(
+            Period(date(2027, 1, 1), date(2027, 12, 31)),
+            TODAY,
+            EquipmentFilters(),
+            source=self._source(),
+        )
+
+        self.assertEqual(timeline["rows"][0]["bars"], [])
+        self.assertEqual(timeline["rows"][0]["days"], 0)
+
+    def test_shortage(self):
+        spare = make_replacement(self.model, "R1")
+        make_replacement(self.model, "R2", state="not_working")
+        make_replacement(make_equipment("BC-6000"), "R3")  # то же направление
+        for beg, end in [
+            (date(2026, 3, 1), date(2026, 3, 4)),
+            (date(2026, 4, 1), date(2026, 4, 10)),
+        ]:
+            make_service(self.device, beg, end, service_type=self.repair)
+        make_service(
+            self.device, date(2026, 5, 1), service_type=self.repair, replacement=spare
+        )
+        no_direction = make_equipment("Прибор", direction=None)
+        make_service(
+            make_device(no_direction, "C1"), date(2026, 6, 1), service_type=self.repair
+        )
+
+        rows = replacement_shortage(
+            YEAR_2026, EquipmentFilters(), source=self._source()
+        )
+
+        self.assertEqual(
+            [
+                (
+                    row["label"],
+                    row["without"],
+                    row["with"],
+                    row["median_days"],
+                    row["fund_model"],
+                    row["fund_direction"],
+                )
+                for row in rows
+            ],
+            [
+                ("BC-5000", 2, 1, Decimal("7.0"), 1, 2),
+                ("Прибор", 1, 0, None, 0, None),
+            ],
+        )
+
+    def test_fund_kpis_supply_filter_ignored(self):
+        biochemistry = make_equipment("CL-900", direction="Биохимия")
+        on_loan = make_replacement(self.model, "R1")
+        make_service(self.device, date(2026, 9, 1), replacement=on_loan)
+        make_service(self.device, date(2025, 3, 1), replacement=on_loan, returned=True)
+        make_replacement(self.model, "R2", state="not_working")
+        make_replacement(biochemistry, "R3")
+        source = self._source()
+
+        kpis = fund_kpis(YEAR_2026, TODAY, EquipmentFilters(), source=source)
+
+        self.assertEqual(
+            (
+                kpis["total"],
+                kpis["working"],
+                kpis["not_working"],
+                kpis["at_client"],
+                kpis["in_office"],
+            ),
+            (3, 2, 1, 1, 2),
+        )
+        self.assertEqual(
+            (kpis["issues"]["current"], kpis["issues"]["previous"]), (1, 1)
+        )
+        self.assertEqual(kpis["issues"]["delta_pct"], Decimal("0.0"))
+        self.assertEqual(
+            fund_kpis(YEAR_2026, TODAY, EquipmentFilters(supply="ours"), source=source)[
+                "total"
+            ],
+            3,
+        )
+        self.assertEqual(
+            fund_kpis(
+                YEAR_2026,
+                TODAY,
+                EquipmentFilters(direction=biochemistry.med_direction),
+                source=source,
+            )["total"],
+            1,
+        )

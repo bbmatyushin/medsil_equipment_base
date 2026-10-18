@@ -1026,3 +1026,216 @@ def models_summary(
         )
     result.sort(key=lambda row: (-row["breakdowns"], -row["at_client"], row["label"]))
     return result
+
+
+# --- Блок Г: подменный фонд ---------------------------------------------------
+
+REPLACEMENT_WORKING = "working"
+
+
+def replacement_location(replacement, source: EquipmentSet) -> dict:
+    """Где подменный прибор сейчас — как колонка «Передано» в админке.
+
+    Берётся последняя выдача (по дате начала ремонта и дате создания): прибор
+    у клиента, если в ней нет отметки «Вернули в офис» и у ремонтируемого
+    прибора есть активный монтаж; иначе — в офисе.
+    """
+    issues = source.issues_of(replacement)
+    if not issues:
+        return {"at_client": False, "service": None, "department": None}
+    last = issues[-1]
+    device = source.device_of(last)
+    install = active_install(device) if device is not None else None
+    at_client = not last.returned_to_office and install is not None
+    return {
+        "at_client": at_client,
+        "service": last,
+        "department": department_label(install.department) if at_client else None,
+    }
+
+
+def _issues_in(source, replacements, period: Period) -> int:
+    """Выдачи подменных `replacements` в ремонты с датой начала в периоде."""
+    ids = {replacement.pk for replacement in replacements}
+    return sum(
+        1
+        for service in source.services
+        if service.replacement_equipment_id in ids
+        and period.date_from <= service.beg_dt <= period.date_to
+    )
+
+
+def fund_kpis(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> dict:
+    """Плитки фонда: всего, рабочих, нерабочих, у клиентов, в офисе (на сегодня)
+    и выдачи за период с дельтой к прошлому году. «Поставка» не действует."""
+    source = _source(source)
+    replacements = source.replacements_of(filters)
+    at_client = sum(
+        1
+        for replacement in replacements
+        if replacement_location(replacement, source)["at_client"]
+    )
+    working = sum(1 for r in replacements if r.state == REPLACEMENT_WORKING)
+    current = _issues_in(source, replacements, period)
+    previous = _issues_in(source, replacements, period.previous_year())
+    return {
+        "total": len(replacements),
+        "working": working,
+        "not_working": len(replacements) - working,
+        "at_client": at_client,
+        "in_office": len(replacements) - at_client,
+        "issues": {
+            "current": current,
+            "previous": previous,
+            "delta_pct": _delta_pct(current, previous),
+        },
+    }
+
+
+def replacements_at_clients(
+    today: date, filters: EquipmentFilters, source=None
+) -> list[dict]:
+    """Подменные приборы у клиентов: сверху — ремонт закрыт, а прибор не вернули."""
+    source = _source(source)
+    rows = []
+    for replacement in source.replacements_of(filters):
+        location = replacement_location(replacement, source)
+        if not location["at_client"]:
+            continue
+        service = location["service"]
+        rows.append(
+            {
+                "replacement_id": replacement.pk,
+                "label": replacement_label(replacement),
+                "department": location["department"],
+                "since": service.beg_dt,
+                "days": max((today - service.beg_dt).days + 1, 1),
+                "service_id": service.pk,
+                "repair_closed": service.end_dt is not None,
+                "end_dt": service.end_dt,
+                "overdue": service.end_dt is not None,
+            }
+        )
+    rows.sort(key=lambda row: (not row["overdue"], -row["days"], row["label"]))
+    return rows
+
+
+def issue_interval(service, next_issue, today: date) -> tuple[date, date]:
+    """Даты выдачи подменного прибора в ремонт `service`.
+
+    Последняя выдача: не вернули или ремонт не закрыт — до сегодня, иначе до end_dt.
+    Ранняя выдача: до end_dt, но не позже дня перед следующей выдачей (старые
+    ремонты без отметки «Вернули в офис» не тянутся до сегодня).
+    """
+    start = service.beg_dt
+    if next_issue is None:
+        closed = service.end_dt is not None and service.returned_to_office
+        end = service.end_dt if closed else today
+    else:
+        cap = next_issue.beg_dt - timedelta(days=1)
+        end = min(service.end_dt or cap, cap)
+    return start, max(end, start)
+
+
+def issue_timeline(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> dict:
+    """Выдачи каждого подменного прибора в ремонты, видимые в периоде (до сегодня).
+
+    Полоса — часть выдачи внутри периода: `left_pct` и `width_pct` — её начало
+    и длина в процентах периода; `days` — дни на выдаче в периоде без повторов.
+    """
+    source = _source(source)
+    period_days = (period.date_to - period.date_from).days + 1
+    visible_until = min(period.date_to, today)
+    rows = []
+    for replacement in source.replacements_of(filters):
+        issues = source.issues_of(replacement)
+        bars, days = [], set()
+        for index, service in enumerate(issues):
+            next_issue = issues[index + 1] if index + 1 < len(issues) else None
+            start, end = issue_interval(service, next_issue, today)
+            visible_start = max(start, period.date_from)
+            visible_end = min(end, visible_until)
+            if visible_end < visible_start:
+                continue
+            length = (visible_end - visible_start).days + 1
+            bars.append(
+                {
+                    "service_id": service.pk,
+                    "start": start,
+                    "end": end,
+                    "left_pct": round(
+                        (visible_start - period.date_from).days / period_days * 100, 2
+                    ),
+                    "width_pct": round(length / period_days * 100, 2),
+                }
+            )
+            days.update(visible_start + timedelta(days=n) for n in range(length))
+        rows.append(
+            {
+                "replacement_id": replacement.pk,
+                "label": replacement_label(replacement),
+                "bars": bars,
+                "days": len(days),
+            }
+        )
+    rows.sort(key=lambda row: row["label"])
+    return {"months": period.months(), "rows": rows}
+
+
+def replacement_shortage(
+    period: Period, filters: EquipmentFilters, source=None
+) -> list[dict]:
+    """Поломки периода по моделям: без подмены и с подменой, сколько подменных есть.
+
+    Подменные считаются рабочие, без фильтров: этой модели и того же направления.
+    """
+    source = _source(source)
+    working = [r for r in source.replacements if r.state == REPLACEMENT_WORKING]
+    rows = {}
+    for service in source.services_in(period, filters):
+        device = source.device_of(service)
+        if device is None or work_kind(service) != WORK_BREAKDOWN:
+            continue
+        equipment = device.equipment
+        row = rows.setdefault(
+            equipment.pk,
+            {
+                "equipment_id": equipment.pk,
+                "label": model_label(equipment),
+                "direction_id": equipment.med_direction_id,
+                "without": 0,
+                "with": 0,
+                "durations": [],
+            },
+        )
+        row["with" if service.replacement_equipment_id else "without"] += 1
+        if service.end_dt is not None:
+            row["durations"].append(repair_days(service))
+    result = []
+    for row in rows.values():
+        direction_id = row.pop("direction_id")
+        durations = row.pop("durations")
+        result.append(
+            {
+                **row,
+                "median_days": _median(durations),
+                "fund_model": sum(
+                    1 for r in working if r.equipment_id == row["equipment_id"]
+                ),
+                "fund_direction": (
+                    None
+                    if direction_id is None
+                    else sum(
+                        1
+                        for r in working
+                        if r.equipment.med_direction_id == direction_id
+                    )
+                ),
+            }
+        )
+    result.sort(key=lambda row: (-row["without"], -row["with"], row["label"]))
+    return result

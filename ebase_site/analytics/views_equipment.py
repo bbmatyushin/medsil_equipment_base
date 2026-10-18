@@ -1,6 +1,6 @@
 """Вкладка «Оборудование» раздела «Аналитика»."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from .charts import chart_spec
 from .filters import EquipmentFilterForm, month_label
@@ -26,6 +26,9 @@ REPAIR_TILES = [
     ("median_days", "Медиана ремонта, дней", "count", True),
     ("replacement_share", "Поломок с подменой", "percent", False),
 ]
+
+# Больше стольких месяцев в периоде — шкала хронологии выдач по годам
+MAX_TIMELINE_MONTHS = 24
 
 # Запасные ссылки «Полноты данных», когда записей больше `MAX_LINK_IDS`:
 # фильтр списка, который показывает надмножество этих записей
@@ -369,6 +372,86 @@ def _reliability_context(source, filters, period, today) -> dict:
     }
 
 
+def _timeline_header(period) -> list[dict]:
+    """Шкала хронологии: отрезки месяцев (или лет) с долей периода в процентах."""
+    total_days = (period.date_to - period.date_from).days + 1
+    months = period.months()
+    by_year = len(months) > MAX_TIMELINE_MONTHS
+    starts = (
+        [
+            date(year, 1, 1)
+            for year in range(period.date_from.year, period.date_to.year + 1)
+        ]
+        if by_year
+        else months
+    )
+    segments = []
+    for index, start in enumerate(starts):
+        segment_from = max(start, period.date_from)
+        if index + 1 < len(starts):
+            segment_to = starts[index + 1] - timedelta(days=1)
+        else:
+            segment_to = period.date_to
+        days = (segment_to - segment_from).days + 1
+        segments.append(
+            {
+                "label": str(start.year) if by_year else month_label(start),
+                "width_pct": round(days / total_days * 100, 2),
+            }
+        )
+    return segments
+
+
+def _fund_tiles(kpis: dict) -> list[dict]:
+    """Плитки фонда: на сегодня и «Выдач за период» с дельтой к прошлому году."""
+    tiles = [
+        {"label": label, "value": kpis[key], "delta": None, "snapshot": True}
+        for key, label in (
+            ("total", "В фонде"),
+            ("working", "Рабочих"),
+            ("not_working", "Нерабочих"),
+            ("at_client", "У клиентов"),
+            ("in_office", "В офисе"),
+        )
+    ]
+    tiles.append(
+        {
+            "label": "Выдач за период",
+            "value": kpis["issues"]["current"],
+            "delta": kpis["issues"]["delta_pct"],
+            "snapshot": False,
+        }
+    )
+    return tiles
+
+
+def _fund_context(source, filters, period, today) -> dict:
+    """Блок «Подменный фонд»: плитки, где сейчас, хронология выдач, нехватка подмены."""
+    kpis = equipment.fund_kpis(period, today, filters, source=source)
+    timeline = equipment.issue_timeline(period, today, filters, source=source)
+    for row in timeline["rows"]:
+        row["bars"] = [
+            {**bar, "url": change_url(SERVICES, bar["service_id"])}
+            for bar in row["bars"]
+        ]
+    timeline["header"] = _timeline_header(period)
+    return {
+        "fund": kpis,
+        "fund_tiles": _fund_tiles(kpis),
+        "fund_status": [
+            {
+                **row,
+                "service_url": change_url(SERVICES, row["service_id"]),
+                "replacement_url": change_url(REPLACEMENTS, row["replacement_id"]),
+            }
+            for row in equipment.replacements_at_clients(today, filters, source=source)
+        ],
+        "timeline": timeline,
+        "shortage": equipment.replacement_shortage(period, filters, source=source),
+        "charts": {},
+    }
+
+
 class EquipmentView(AnalyticsTabView):
     """Вкладка «Оборудование»: парк, ремонты, надёжность, подменный фонд."""
 
@@ -389,6 +472,7 @@ class EquipmentView(AnalyticsTabView):
             _park_context(source, filters, today),
             _repairs_context(source, filters, period, today),
             _reliability_context(source, filters, period, today),
+            _fund_context(source, filters, period, today),
         ):
             charts.update(block.pop("charts"))
             context.update(block)

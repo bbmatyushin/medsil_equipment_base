@@ -481,3 +481,91 @@ html[data-theme="dark"] {
         padding: 12px;
     }
 }
+
+/* --- Вкладка «Оборудование» -------------------------------------------------- */
+
+/* «Где сейчас подменные»: ремонт закрыт, а прибор не вернули в офис */
+.an-table tr.an-tone-risk td {
+    background: color-mix(in srgb, var(--an-negative) 14%, var(--an-surface));
+}
+
+/* «Хронология выдач»: строка — подменный прибор, полоса — выдача в ремонт.
+   Положение и длина полосы — inline-стиль в процентах периода (считает view). */
+.an-timeline {
+    display: grid;
+    grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) 4rem;
+    gap: 6px 12px;
+    align-items: center;
+}
+
+.an-timeline-label {
+    overflow: hidden;
+    color: var(--an-ink);
+    font-size: 0.8125rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.an-timeline-head {
+    display: flex;
+    overflow: hidden;
+    color: var(--an-text);
+    font-size: 0.6875rem;
+}
+
+.an-timeline-head span {
+    flex: none;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding-left: 2px;
+    border-left: 1px solid var(--an-grid);
+    white-space: nowrap;
+}
+
+.an-timeline-track {
+    position: relative;
+    height: 18px;
+    border: 1px solid var(--an-border);
+    border-radius: 4px;
+    background: var(--an-surface);
+}
+
+.an-timeline-bar {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    min-width: 3px;
+    border-radius: 3px;
+    background: var(--an-c1);
+}
+
+.an-timeline-bar:hover,
+.an-timeline-bar:focus {
+    outline: 2px solid var(--an-ink);
+    outline-offset: 1px;
+}
+
+.an-timeline-days {
+    color: var(--an-text);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+@media (max-width: 767px) {
+    /* название и дни — строкой, дорожка — под ними на всю ширину;
+       dense ставит дни рядом с названием, а не после дорожки */
+    .an-timeline {
+        grid-template-columns: minmax(0, 1fr) 3rem;
+        grid-auto-flow: row dense;
+    }
+
+    .an-timeline-head,
+    .an-timeline-track {
+        grid-column: 1 / -1;
+    }
+
+    .an-timeline-corner {
+        display: none;
+    }
+}

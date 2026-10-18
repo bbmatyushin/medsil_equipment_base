@@ -1,1 +1,109 @@
 {% load analytics_tags %}
+<section class="an-tiles" aria-label="Подменный фонд">
+    {% for tile in fund_tiles %}
+        <div class="an-tile">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            <p class="an-tile-value">{{ tile.value|number }}</p>
+            {% if tile.snapshot %}
+                <p class="an-tile-note">на сегодня</p>
+            {% else %}
+                <p class="an-tile-delta {{ tile.delta|delta_class }}">{{ tile.delta|delta }}</p>
+                <p class="an-tile-note">к {{ previous_period.date_from|date:"d.m.Y" }} — {{ previous_period.date_to|date:"d.m.Y" }}</p>
+            {% endif %}
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link">Фильтр «Поставка» на подменный фонд не действует. Подменный прибор у клиента, если в последнем ремонте, куда его выдали, нет отметки «Вернули в офис» (как колонка «Передано» в списке подменного оборудования).</p>
+
+<div class="an-charts">
+    <section class="an-card an-card--wide">
+        <h2>Где сейчас подменные</h2>
+        <p class="an-card-note">На сегодня. Сверху — ремонт уже закрыт, а прибор не вернули в офис. Клик по прибору — его карточка, по дате — карточка ремонта.</p>
+        {% if fund_status %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Подменный прибор</th>
+                            <th scope="col">Подразделение</th>
+                            <th scope="col" class="num">С какой даты</th>
+                            <th scope="col" class="num">Дней</th>
+                            <th scope="col">Ремонт</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in fund_status %}
+                            <tr{% if row.overdue %} class="an-tone-risk"{% endif %}>
+                                <td><a href="{{ row.replacement_url }}">{{ row.label }}</a></td>
+                                <td>{{ row.department }}</td>
+                                <td class="num"><a href="{{ row.service_url }}">{{ row.since|date:"d.m.Y" }}</a></td>
+                                <td class="num">{{ row.days|number }}</td>
+                                <td>{% if row.overdue %}<strong>ремонт закрыт {{ row.end_dt|date:"d.m" }}, прибор не вернули в офис</strong>{% else %}в работе{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Все подменные приборы в офисе</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Хронология выдач</h2>
+        <p class="an-card-note">Полоса — выдача подменного прибора в ремонт: от даты начала ремонта до окончания, а если ремонт не закрыт или прибор не вернули — до сегодня. Справа — дней на выдаче за период. Клик по полосе — карточка ремонта.</p>
+        {% if timeline.rows %}
+            <div class="an-timeline">
+                <span class="an-timeline-corner"></span>
+                <div class="an-timeline-head" aria-hidden="true">
+                    {% for segment in timeline.header %}<span style="width: {{ segment.width_pct|stringformat:".2f" }}%">{{ segment.label }}</span>{% endfor %}
+                </div>
+                <span class="an-timeline-days an-timeline-corner">Дней</span>
+                {% for row in timeline.rows %}
+                    <span class="an-timeline-label">{{ row.label }}</span>
+                    <div class="an-timeline-track">
+                        {% for bar in row.bars %}<a class="an-timeline-bar" href="{{ bar.url }}" style="left: {{ bar.left_pct|stringformat:".2f" }}%; width: {{ bar.width_pct|stringformat:".2f" }}%" title="{{ bar.start|date:"d.m.Y" }} — {{ bar.end|date:"d.m.Y" }}" aria-label="Выдача {{ bar.start|date:"d.m.Y" }} — {{ bar.end|date:"d.m.Y" }}"></a>{% endfor %}
+                    </div>
+                    <span class="an-timeline-days">{{ row.days|number }}</span>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Нехватка подмены</h2>
+        <p class="an-card-note">Поломки периода по моделям ремонтируемых приборов: сколько ремонтов прошло без подменного прибора и сколько рабочих подменных есть в фонде (этой модели и того же направления, без фильтров вкладки). Сверху — модели, где подмены не хватало чаще.</p>
+        {% if shortage %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Модель</th>
+                            <th scope="col" class="num">Без подмены</th>
+                            <th scope="col" class="num">С подменой</th>
+                            <th scope="col" class="num">Медиана ремонта, дней</th>
+                            <th scope="col" class="num">Подменных этой модели</th>
+                            <th scope="col" class="num">Подменных направления</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in shortage %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td class="num"><strong>{{ row.without|number }}</strong></td>
+                                <td class="num">{{ row.with|number }}</td>
+                                <td class="num">{{ row.median_days|number }}</td>
+                                <td class="num">{{ row.fund_model|number }}</td>
+                                <td class="num">{{ row.fund_direction|number }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет поломок за выбранный период</p>
+        {% endif %}
+    </section>
+</div>

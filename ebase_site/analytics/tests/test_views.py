@@ -29,10 +29,17 @@ from analytics.tests.factories import (
     make_shipment,
     make_trip,
 )
+from analytics.filters import Period
 from analytics.navigation import TABS, Tab, visible_tabs
 from analytics.views import MAX_LINK_IDS, _pareto_caption
 from analytics.links import change_url
-from analytics.views_equipment import ACCOUNTING, SERVICES, ids_link
+from analytics.views_equipment import (
+    ACCOUNTING,
+    REPLACEMENTS,
+    SERVICES,
+    _timeline_header,
+    ids_link,
+)
 from analytics.views_trips import _ids_link
 from clients.models import Client
 from contracts.admin import format_money
@@ -1623,3 +1630,57 @@ class EquipmentPageTests(TestCase):
         problem = response.context["problem_devices"][0]
         self.assertEqual(problem["url"], change_url(ACCOUNTING, device.pk))
         self.assertContains(response, "Сводная по моделям")
+
+    def test_fund_status_overdue_row_highlighted(self):
+        device = self._installed("A1")
+        spare = make_replacement(self.model, "R1")
+        service = make_service(
+            device, date(2026, 8, 20), date(2026, 9, 1), replacement=spare
+        )
+
+        response = self._get()
+
+        row = response.context["fund_status"][0]
+        self.assertTrue(row["overdue"])
+        self.assertEqual(row["service_url"], change_url(SERVICES, service.pk))
+        self.assertEqual(row["replacement_url"], change_url(REPLACEMENTS, spare.pk))
+        self.assertContains(response, 'class="an-tone-risk"')
+        self.assertContains(response, "ремонт закрыт 01.09, прибор не вернули в офис")
+
+    def test_fund_tiles(self):
+        device = self._installed("A1")
+        spare = make_replacement(self.model, "R1")
+        make_replacement(self.model, "R2", state="not_working")
+        make_service(device, date(2026, 9, 1), replacement=spare)
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile for tile in response.context["fund_tiles"]}
+        self.assertEqual(tiles["В фонде"]["value"], 2)
+        self.assertEqual(tiles["Нерабочих"]["value"], 1)
+        self.assertEqual(tiles["У клиентов"]["value"], 1)
+        self.assertEqual(tiles["Выдач за период"]["value"], 1)
+        self.assertIsNone(tiles["Выдач за период"]["delta"])
+        self.assertContains(
+            response, "Фильтр «Поставка» на подменный фонд не действует"
+        )
+
+    def test_timeline_bar_links_to_service(self):
+        device = self._installed("A1")
+        spare = make_replacement(self.model, "R1")
+        service = make_service(device, date(2026, 3, 1), replacement=spare)
+
+        response = self._get()
+
+        bar = response.context["timeline"]["rows"][0]["bars"][0]
+        self.assertEqual(bar["url"], change_url(SERVICES, service.pk))
+        self.assertContains(response, 'class="an-timeline-bar"')
+
+    def test_timeline_header_months_or_years(self):
+        months = _timeline_header(Period(date(2026, 1, 1), date(2026, 12, 31)))
+        self.assertEqual(len(months), 12)
+        self.assertEqual(months[0]["label"], "янв 2026")
+        self.assertAlmostEqual(sum(item["width_pct"] for item in months), 100, places=1)
+        years = _timeline_header(Period(date(2020, 1, 1), date(2026, 12, 31)))
+        self.assertEqual([item["label"] for item in years][:2], ["2020", "2021"])
+        self.assertEqual(len(years), 7)
