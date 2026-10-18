@@ -20,6 +20,7 @@ class Tab:
 TABS = [
     Tab("finance", "Финансы", "analytics.view_finance", "analytics:finance"),
     Tab("trips", "Командировки", "analytics.view_trips", "analytics:trips"),
+    Tab("equipment", "Оборудование", "analytics.view_equipment", "analytics:equipment"),
 ]
 
 

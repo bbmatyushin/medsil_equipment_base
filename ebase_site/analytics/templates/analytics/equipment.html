@@ -1,0 +1,16 @@
+{% extends "analytics/base.html" %}
+{% load analytics_tags %}
+
+{% block analytics_content %}
+<h2 class="an-section-title">Парк оборудования</h2>
+{% include "analytics/equipment/park.html" %}
+
+<h2 class="an-section-title">Ремонты</h2>
+{% include "analytics/equipment/repairs.html" %}
+
+<h2 class="an-section-title">Надёжность моделей</h2>
+{% include "analytics/equipment/reliability.html" %}
+
+<h2 class="an-section-title">Подменный фонд</h2>
+{% include "analytics/equipment/fund.html" %}
+{% endblock %}

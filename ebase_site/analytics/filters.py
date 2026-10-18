@@ -8,6 +8,7 @@ from django import forms
 
 from business_trip.xlsx_report import employee_fio
 from clients.models import Client
+from directory.models import Manufacturer, MedDirection
 from users.models import CompanyUser
 
 MONTH_ABBR = [
@@ -38,6 +39,14 @@ DEFAULT_PRESET = "year"
 # Направления вкладки «Командировки»: по городам или по регионам
 TRIP_GROUPS = [("city", "Города"), ("region", "Регионы")]
 DEFAULT_GROUP = "city"
+
+# Вкладка «Оборудование»: какие приборы считать по признаку «Поставлен нами»
+SUPPLY_CHOICES = [
+    ("all", "Все"),
+    ("ours", "Поставлено нами"),
+    ("others", "Поставлено не нами"),
+]
+DEFAULT_SUPPLY = "all"
 
 # Допустимые годы для своего периода: вне границ shift_year/months упадут или раздуются
 MIN_YEAR = 1900
@@ -186,3 +195,67 @@ class TripsFilterForm(PeriodForm):
     def get_group(self) -> str:
         """«city» или «region»; мусор -> города."""
         return self._cleaned().get("group") or DEFAULT_GROUP
+
+
+@dataclass(frozen=True)
+class EquipmentFilters:
+    """Фильтры вкладки «Оборудование» (кроме периода).
+
+    Направление и производитель отбирают модели приборов (и подменного
+    фонда), `supply` — приборы по признаку «Поставлен нами»: "all" | "ours" |
+    "others". На подменный фонд `supply` не действует.
+    """
+
+    direction: MedDirection | None = None
+    manufacturer: Manufacturer | None = None
+    supply: str = DEFAULT_SUPPLY
+
+    @property
+    def is_empty(self) -> bool:
+        """Все фильтры — по умолчанию (ничего не отбирают)."""
+        return (
+            self.direction is None
+            and self.manufacturer is None
+            and self.supply == DEFAULT_SUPPLY
+        )
+
+
+class NameChoiceField(forms.ModelChoiceField):
+    """Выбор по названию: `str(Manufacturer)` падает без города и делает запрос."""
+
+    def label_from_instance(self, obj) -> str:
+        return obj.name
+
+
+class EquipmentFilterForm(PeriodForm):
+    """Фильтры вкладки «Оборудование»: период, направление, производитель, поставка.
+
+    В списках — только направления и производители, у которых есть модели.
+    """
+
+    direction = forms.ModelChoiceField(
+        MedDirection.objects.filter(equipment_med_equipment__isnull=False)
+        .distinct()
+        .order_by("name"),
+        required=False,
+        label="Направление",
+        empty_label="Все направления",
+    )
+    manufacturer = NameChoiceField(
+        Manufacturer.objects.filter(equipment_manufacturer__isnull=False)
+        .distinct()
+        .order_by("name"),
+        required=False,
+        label="Производитель",
+        empty_label="Все производители",
+    )
+    supply = forms.ChoiceField(choices=SUPPLY_CHOICES, required=False, label="Поставка")
+
+    def get_filters(self) -> EquipmentFilters:
+        """Выбранные фильтры; мусор в любом параметре -> его значение по умолчанию."""
+        cleaned = self._cleaned()
+        return EquipmentFilters(
+            direction=cleaned.get("direction"),
+            manufacturer=cleaned.get("manufacturer"),
+            supply=cleaned.get("supply") or DEFAULT_SUPPLY,
+        )

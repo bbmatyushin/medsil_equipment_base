@@ -17,6 +17,7 @@ class AnalyticsAccess(models.Model):
         permissions = (
             ("view_finance", "Аналитика: Финансы"),
             ("view_trips", "Аналитика: Командировки"),
+            ("view_equipment", "Аналитика: Оборудование"),
         )
         verbose_name = "Доступ к аналитике"
         verbose_name_plural = "Доступ к аналитике"

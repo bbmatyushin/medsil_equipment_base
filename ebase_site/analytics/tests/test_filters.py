@@ -5,10 +5,13 @@ from django.utils import translation
 
 from clients.models import Client
 from contracts.models import Contract
-from directory.models import City
+from directory.models import City, Manufacturer, MedDirection
+from ebase.models import Equipment
 from business_trip.models import BusinessTrip
 from users.models import CompanyUser
 from analytics.filters import (
+    EquipmentFilterForm,
+    EquipmentFilters,
     FinanceFilterForm,
     TripsFilterForm,
     Period,
@@ -318,3 +321,61 @@ class TripsFilterFormTests(TestCase):
             field.label_from_instance(self.traveller), "Иванов Иван Иванович"
         )
         self.assertEqual(field.label_from_instance(self.no_fio), "petrov")
+
+
+class EquipmentFilterFormTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.hematology = MedDirection.objects.create(name="Гематология")
+        cls.unused_direction = MedDirection.objects.create(name="ИФА")
+        # город и страна явно пустые: иначе модель берёт по умолчанию «Не указан»/«Россия»
+        cls.mindray = Manufacturer.objects.create(
+            name="Mindray", city=None, country=None
+        )
+        cls.unused_manufacturer = Manufacturer.objects.create(
+            name="Sysmex", city=None, country=None
+        )
+        Equipment.objects.create(
+            full_name="BC-5000",
+            med_direction=cls.hematology,
+            manufacturer=cls.mindray,
+        )
+
+    def test_equipment_form_defaults(self):
+        form = EquipmentFilterForm(data={})
+        self.assertEqual(form.get_filters(), EquipmentFilters())
+        self.assertTrue(form.get_filters().is_empty)
+        self.assertEqual(form.get_period(TODAY), YEAR_2026)
+
+    def test_equipment_form_values(self):
+        form = EquipmentFilterForm(
+            data={
+                "direction": str(self.hematology.pk),
+                "manufacturer": str(self.mindray.pk),
+                "supply": "ours",
+            }
+        )
+        filters = form.get_filters()
+        self.assertEqual(filters.direction, self.hematology)
+        self.assertEqual(filters.manufacturer, self.mindray)
+        self.assertEqual(filters.supply, "ours")
+        self.assertFalse(filters.is_empty)
+
+    def test_equipment_form_garbage_falls_back(self):
+        form = EquipmentFilterForm(
+            data={"direction": "abc", "manufacturer": "not-a-uuid", "supply": "foo"}
+        )
+        self.assertEqual(form.get_filters(), EquipmentFilters())
+
+    def test_equipment_form_lists_only_used_directories(self):
+        form = EquipmentFilterForm(data={})
+        self.assertEqual(list(form.fields["direction"].queryset), [self.hematology])
+        self.assertEqual(list(form.fields["manufacturer"].queryset), [self.mindray])
+
+    def test_equipment_form_manufacturer_label_is_name(self):
+        # str(Manufacturer) падает без города: в списке — только название
+        form = EquipmentFilterForm(data={})
+        self.assertEqual(
+            [label for _, label in form.fields["manufacturer"].choices],
+            ["Все производители", "Mindray"],
+        )

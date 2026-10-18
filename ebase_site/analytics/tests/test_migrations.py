@@ -17,6 +17,16 @@ OLD_UNUSED_PERMISSIONS = {
 }
 
 
+def _permissions_before_0005():
+    """Права как до миграции 0005: без view_equipment.
+
+    В тестах миграции выключены и права создаются по текущей модели.
+    """
+    Permission.objects.filter(
+        content_type__app_label="analytics", codename="view_equipment"
+    ).delete()
+
+
 def _permissions_before_0004():
     """Права как до миграции 0004: четыре права вкладок, без view_trips.
 
@@ -33,6 +43,7 @@ def _permissions_before_0004():
     Permission.objects.filter(
         content_type__app_label="analytics", codename="view_trips"
     ).delete()
+    _permissions_before_0005()
 
 
 class StatisticsGroupMigrationTests(TestCase):
@@ -44,7 +55,7 @@ class StatisticsGroupMigrationTests(TestCase):
         )
         self.assertEqual(
             codenames,
-            {"view_finance", "view_trips"},
+            {"view_finance", "view_trips", "view_equipment"},
         )
 
     def test_group_gets_all_permissions_and_active_staff_only(self):
@@ -242,3 +253,64 @@ class TripsTabMigrationTests(TestCase):
         self.migration.add_trips_tab(django_apps, None)
 
         self.assertEqual(set(self._names()), {"view_finance", "view_trips"})
+
+
+class EquipmentTabMigrationTests(TestCase):
+    """Миграция 0005: право «Оборудование» и его выдача группе «Аналитика»."""
+
+    def setUp(self):
+        self.migration = importlib.import_module(
+            "analytics.migrations.0005_equipment_tab"
+        )
+        _permissions_before_0005()
+
+    @staticmethod
+    def _codenames():
+        return set(
+            Permission.objects.filter(content_type__app_label="analytics").values_list(
+                "codename", flat=True
+            )
+        )
+
+    def test_creates_permission_and_grants_group(self):
+        group = Group.objects.create(name="Аналитика")
+        staff = User.objects.create_user("staff", password="p", is_staff=True)
+        group.user_set.add(staff)
+
+        self.migration.add_equipment_tab(django_apps, None)
+
+        perm = Permission.objects.get(
+            content_type__app_label="analytics", codename="view_equipment"
+        )
+        self.assertEqual(perm.name, "Аналитика: Оборудование")
+        self.assertTrue(group.permissions.filter(pk=perm.pk).exists())
+        self.assertTrue(
+            User.objects.get(pk=staff.pk).has_perm("analytics.view_equipment")
+        )
+
+    def test_without_group_creates_permission_only(self):
+        self.migration.add_equipment_tab(django_apps, None)
+
+        self.assertIn("view_equipment", self._codenames())
+        self.assertEqual(Group.objects.count(), 0)
+
+    def test_is_idempotent(self):
+        group = Group.objects.create(name="Аналитика")
+
+        self.migration.add_equipment_tab(django_apps, None)
+        self.migration.add_equipment_tab(django_apps, None)
+
+        self.assertEqual(
+            self._codenames(), {"view_finance", "view_trips", "view_equipment"}
+        )
+        self.assertEqual(
+            list(group.permissions.values_list("codename", flat=True)),
+            ["view_equipment"],
+        )
+
+    def test_reverse_removes_permission(self):
+        self.migration.add_equipment_tab(django_apps, None)
+
+        self.migration.remove_equipment_tab(django_apps, None)
+
+        self.assertEqual(self._codenames(), {"view_finance", "view_trips"})
