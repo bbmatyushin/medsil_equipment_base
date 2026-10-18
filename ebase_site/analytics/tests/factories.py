@@ -16,7 +16,22 @@ from business_trip.models import (
 )
 from clients.models import Client, Department
 from contracts.models import Contract, Payment
-from directory.models import City, ServiceType, Unit
+from directory.models import (
+    City,
+    Engineer,
+    EquipmentStatus,
+    Manufacturer,
+    MedDirection,
+    ServiceType,
+    Unit,
+)
+from ebase.models import (
+    Equipment,
+    EquipmentAccDepartment,
+    EquipmentAccounting,
+    ReplacementEquipment,
+    Service,
+)
 from spare_part.models import SparePart, SparePartShipmentM2M, SparePartShipmentV2
 from users.models import CompanyUser
 
@@ -144,4 +159,115 @@ def make_receipt(employee, receipt_date, amount) -> MoneyReceipt:
     """Поступление ДС сотруднику."""
     return MoneyReceipt.objects.create(
         employee=employee, receipt_date=receipt_date, amount=amount
+    )
+
+
+# --- Оборудование -------------------------------------------------------------
+
+
+def make_service_type(name, planned=False) -> ServiceType:
+    """Вид работ; флаг «Плановое ТО» выставляется и у существующего вида."""
+    service_type, _ = ServiceType.objects.get_or_create(name=name)
+    if service_type.is_planned_maintenance != planned:
+        service_type.is_planned_maintenance = planned
+        service_type.save(update_fields=["is_planned_maintenance"])
+    return service_type
+
+
+def make_equipment(
+    full_name="Анализатор",
+    short_name=None,
+    direction="Гематология",
+    manufacturer="Mindray",
+) -> Equipment:
+    """Модель оборудования. `direction=None` / `manufacturer=None` — без них.
+
+    Производитель создаётся без города и страны: иначе модель берёт значения
+    по умолчанию («Не указан», «Россия»), которых в тестовой БД нет.
+    """
+    med_direction = None
+    if direction is not None:
+        med_direction, _ = MedDirection.objects.get_or_create(name=direction)
+    maker = None
+    if manufacturer is not None:
+        maker = Manufacturer.objects.filter(name=manufacturer).first()
+        if maker is None:
+            maker = Manufacturer.objects.create(
+                name=manufacturer, city=None, country=None
+            )
+    return Equipment.objects.create(
+        full_name=full_name,
+        short_name=short_name,
+        med_direction=med_direction,
+        manufacturer=maker,
+    )
+
+
+def make_device(
+    equipment, serial, *, ours=True, our_service=False, status=None
+) -> EquipmentAccounting:
+    """Прибор в «1. Учёт оборудования»; `status` — имя статуса или None."""
+    equipment_status = None
+    if status is not None:
+        equipment_status, _ = EquipmentStatus.objects.get_or_create(name=status)
+    return EquipmentAccounting.objects.create(
+        equipment=equipment,
+        serial_number=serial,
+        is_our_supply=ours,
+        is_our_service=our_service,
+        equipment_status=equipment_status,
+    )
+
+
+def _engineer(name) -> Engineer | None:
+    if name is None:
+        return None
+    engineer, _ = Engineer.objects.get_or_create(name=name)
+    return engineer
+
+
+def make_install(
+    device, department, install_dt=None, *, active=True, engineer=None
+) -> EquipmentAccDepartment:
+    """Монтаж прибора в подразделении; `engineer` — имя инженера или None."""
+    return EquipmentAccDepartment.objects.create(
+        equipment_accounting=device,
+        department=department,
+        install_dt=install_dt,
+        is_active=active,
+        engineer=_engineer(engineer),
+    )
+
+
+def make_service(
+    device,
+    beg,
+    end=None,
+    *,
+    service_type=None,
+    engineer=None,
+    replacement=None,
+    returned=False,
+) -> Service:
+    """Ремонт (работа) прибора; `device=None` — ремонт без прибора.
+
+    `service_type` — вид работ (объект) или None, `engineer` — имя инженера.
+    """
+    user, _ = CompanyUser.objects.get_or_create(username="test_service_user")
+    return Service.objects.create(
+        equipment_accounting=device,
+        beg_dt=beg,
+        end_dt=end,
+        service_type=service_type,
+        engineer=_engineer(engineer),
+        replacement_equipment=replacement,
+        returned_to_office=returned,
+        user=user,
+    )
+
+
+def make_replacement(equipment, serial, *, state="working") -> ReplacementEquipment:
+    """Подменный прибор; `state` — "working" или "not_working"."""
+    return ReplacementEquipment.objects.create(
+        equipment=equipment, serial_number=serial, state=state
     )
