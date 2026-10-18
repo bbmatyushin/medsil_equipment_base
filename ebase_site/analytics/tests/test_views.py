@@ -1339,6 +1339,7 @@ EQUIPMENT_CHART_KEYS = {
     "works_by_month",
     "planned_by_month",
     "durations",
+    "reliability",
 }
 
 
@@ -1590,3 +1591,35 @@ class EquipmentPageTests(TestCase):
         row = response.context["engineer_load"]["rows"][0]
         self.assertEqual(row["name"], "Петров")
         self.assertEqual(row["cells"][2], {"days": 2, "shade": 1.0})
+
+    def test_reliability_chart_links_to_services(self):
+        repair = make_service_type("ремонт")
+        devices = [self._installed(f"M{number}") for number in range(3)]
+        make_service(devices[0], date(2026, 3, 1), service_type=repair)
+        make_service(devices[1], date(2026, 4, 1), service_type=repair)
+
+        response = self._get()
+
+        spec = response.context["charts"]["reliability"]
+        self.assertEqual(spec["labels"], ["BC-5000"])
+        self.assertEqual(spec["format"], "decimal")
+        changelist = self.client.get(spec["links"][0])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 2)
+
+    def test_reliability_tables_link_to_cards(self):
+        repair = make_service_type("ремонт")
+        device = self._installed("P1")
+        first = make_service(
+            device, date(2026, 3, 1), date(2026, 3, 2), service_type=repair
+        )
+        second = make_service(device, date(2026, 3, 20), service_type=repair)
+
+        response = self._get()
+
+        repeat = response.context["repeats"]["rows"][0]
+        self.assertEqual(repeat["previous_url"], change_url(SERVICES, first.pk))
+        self.assertEqual(repeat["current_url"], change_url(SERVICES, second.pk))
+        problem = response.context["problem_devices"][0]
+        self.assertEqual(problem["url"], change_url(ACCOUNTING, device.pk))
+        self.assertContains(response, "Сводная по моделям")

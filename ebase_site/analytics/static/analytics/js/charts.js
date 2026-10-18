@@ -22,6 +22,7 @@
         maximumFractionDigits: 1,
     });
     const PERCENT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+    const DECIMAL = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
     // Полное значение для подсказок: деньги без копеек, проценты с одним знаком
     function formatValue(value, fmt) {
@@ -33,6 +34,9 @@
         }
         if (fmt === "count") {
             return INTEGER.format(value);
+        }
+        if (fmt === "decimal") {
+            return DECIMAL.format(value);
         }
         if (fmt === "money_short") {
             return COMPACT.format(value) + " ₽";

@@ -9,7 +9,7 @@ View собирает спецификацию через `chart_spec()`, шаб
 import math
 
 KINDS = ("bar", "line", "scatter", "doughnut")
-FORMATS = ("money", "money_short", "count", "percent")
+FORMATS = ("money", "money_short", "count", "decimal", "percent")
 AXES = ("y", "y2")
 # Цвет серии вместо очередного цвета палитры: смысловой («плюс/минус») или
 # слот палитры по имени (c1–c6, переменные --an-c1…--an-c6 в analytics.css)
@@ -122,8 +122,9 @@ def chart_spec(
       У scatter `data` — точки `{"x", "y", "label", "url", "r"?}`; `sign_colors`
       у scatter красит точки по знаку `y`. `color` ("positive" | "negative" | "c1"…"c6") —
       смысловой цвет или слот палитры вместо очередного цвета палитры.
-    - `fmt`: формат значений ("money" | "money_short" | "count" | "percent");
-      у scatter — ось Y. "money_short" — деньги сокращённо («342 тыс. ₽») и в подсказке.
+    - `fmt`: формат значений ("money" | "money_short" | "count" | "decimal" | "percent");
+      у scatter — ось Y. "money_short" — деньги сокращённо («342 тыс. ₽») и в подсказке,
+      "decimal" — дробное число до сотых («0,63»), "count" — целое.
     - `x_fmt`: формат оси X у scatter (по умолчанию деньги), у остальных не используется.
     - `links[i]`: куда ведёт клик по i-й метке (None — никуда).
     - `value_labels`: подписать значения внутри столбцов (если помещаются).

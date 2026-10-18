@@ -1,1 +1,127 @@
 {% load analytics_tags %}
+<p class="an-registry-link">Считаются только поломки — работы, вид которых не отмечен «Плановое ТО» в справочнике; ТО и работы без вида работ не входят.</p>
+
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Поломок на прибор в год</h2>
+        <p class="an-card-note">Поломки периода (до сегодня) на прибор модели у клиентов сейчас, пересчёт на год; модели с {{ min_units }} и более приборами. Истории парка нет, поэтому знаменатель — текущий парк. Клик — ремонты модели.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.reliability chart_id="chart-eq-reliability" title="Поломок на прибор в год по моделям" height=reliability_height only %}
+    </section>
+
+    <section class="an-card">
+        <h2>Повторные ремонты</h2>
+        <p class="an-card-note">Поломка периода, у которой прошлая поломка того же прибора (за всю историю) закончилась не раньше чем за {{ repeat_windows.1 }} дней до её начала; без даты окончания прошлой — от даты её начала. Клик по дате — карточка ремонта.</p>
+        <div class="an-tiles">
+            {% for days, count in repeats.counts.items %}
+                <div class="an-tile an-tile--inverse">
+                    <p class="an-tile-label">Повтор за {{ days }} дн.</p>
+                    <p class="an-tile-value">{{ count|number }}</p>
+                </div>
+            {% endfor %}
+        </div>
+        {% if repeats.rows %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Прибор</th>
+                            <th scope="col">Подразделение</th>
+                            <th scope="col" class="num">Прошлая</th>
+                            <th scope="col" class="num">Эта</th>
+                            <th scope="col" class="num">Разрыв, дней</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in repeats.rows %}
+                            <tr>
+                                <td>{{ row.device }}</td>
+                                <td>{{ row.department|default:"—" }}</td>
+                                <td class="num"><a href="{{ row.previous_url }}">{{ row.previous_date|date:"d.m.Y" }}</a></td>
+                                <td class="num"><a href="{{ row.current_url }}">{{ row.current_date|date:"d.m.Y" }}</a></td>
+                                <td class="num">{{ row.gap_days|number }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет повторных ремонтов за выбранный период</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card">
+        <h2>Проблемные приборы</h2>
+        <p class="an-card-note">Вся история: приборы с двумя и более поломками, сверху — с наибольшим числом. Клик — карточка прибора.</p>
+        {% if problem_devices %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Прибор</th>
+                            <th scope="col">Подразделение</th>
+                            <th scope="col" class="num">Поломок всего</th>
+                            <th scope="col" class="num">За период</th>
+                            <th scope="col" class="num">Последняя</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in problem_devices %}
+                            <tr>
+                                <td><a href="{{ row.url }}">{{ row.device }}</a></td>
+                                <td>{{ row.department|default:"—" }}</td>
+                                <td class="num">{{ row.total|number }}</td>
+                                <td class="num">{{ row.in_period|number }}</td>
+                                <td class="num">{{ row.last_date|date:"d.m.Y" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+
+    <section class="an-card an-card--wide">
+        <h2>Сводная по моделям</h2>
+        <p class="an-card-note">Парк — на сегодня, ТО и поломки — за период; «на прибор в год» — как на графике, но для всех моделей; медиана — по закрытым поломкам. Подменные — в фонде, рабочих из всех.</p>
+        {% if models_summary %}
+            <div class="an-table-wrap">
+                <table class="an-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Модель</th>
+                            <th scope="col">Производитель</th>
+                            <th scope="col">Направление</th>
+                            <th scope="col" class="num">У клиентов</th>
+                            <th scope="col" class="num">Нами / не нами</th>
+                            <th scope="col" class="num">ТО</th>
+                            <th scope="col" class="num">Поломок</th>
+                            <th scope="col" class="num">На прибор в год</th>
+                            <th scope="col" class="num">Медиана ремонта, дней</th>
+                            <th scope="col" class="num">Подменных</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in models_summary %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.manufacturer }}</td>
+                                <td>{{ row.direction }}</td>
+                                <td class="num">{{ row.at_client|number }}</td>
+                                <td class="num">{{ row.ours|number }} / {{ row.others|number }}</td>
+                                <td class="num">{{ row.planned|number }}</td>
+                                <td class="num">{{ row.breakdowns|number }}</td>
+                                <td class="num">{{ row.per_unit_year|number2 }}</td>
+                                <td class="num">{{ row.median_days|number }}</td>
+                                <td class="num">{{ row.fund_working|number }} из {{ row.fund_total|number }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="an-chart-empty">Нет данных</p>
+        {% endif %}
+    </section>
+</div>

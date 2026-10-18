@@ -5,6 +5,11 @@ from django.test import TestCase
 
 from analytics.filters import EquipmentFilters, Period
 from analytics.services.equipment import (
+    effective_days,
+    models_summary,
+    problem_devices,
+    reliability,
+    repeat_repairs,
     NO_ENGINEER_LABEL,
     NO_SERVICE_TYPE_LABEL,
     OTHER_SERVICE_TYPES_LABEL,
@@ -611,3 +616,183 @@ class RepairsTests(TestCase):
         self.assertEqual(result["rows"][0]["days"][2], 2)
         self.assertEqual(result["rows"][0]["days"][4], 1)
         self.assertEqual(result["max"], 2)
+
+
+class ReliabilityTests(TestCase):
+    """Блок «Надёжность моделей»: только поломки (вид работ без «Плановое ТО»)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = make_department("Больница", client=make_client("Клиника"))
+        cls.model = make_equipment("BC-5000")
+        cls.maintenance = make_service_type("Тех. обслуживание", planned=True)
+        cls.repair = make_service_type("ремонт")
+
+    def _source(self):
+        return EquipmentSet.load()
+
+    def _installed(self, model, serial, **kwargs):
+        device = make_device(model, serial, **kwargs)
+        make_install(device, self.department, date(2020, 1, 1))
+        return device
+
+    def _breakdown(self, device, beg, end=None):
+        return make_service(device, beg, end, service_type=self.repair)
+
+    def test_effective_days(self):
+        self.assertEqual(effective_days(YEAR_2026, TODAY), 289)
+        self.assertEqual(
+            effective_days(Period(date(2027, 1, 1), date(2027, 12, 31)), TODAY), 0
+        )
+        self.assertEqual(
+            effective_days(Period(date(2025, 1, 1), date(2025, 12, 31)), TODAY), 365
+        )
+
+    def test_reliability_rate_and_min_units(self):
+        devices = [self._installed(self.model, f"M{n}") for n in range(4)]
+        self._breakdown(devices[0], date(2026, 3, 1), date(2026, 3, 5))
+        self._breakdown(devices[1], date(2026, 5, 1))
+        self._breakdown(devices[2], date(2026, 11, 1))  # позже сегодня
+        make_service(devices[3], date(2026, 4, 1), service_type=self.maintenance)
+        make_service(devices[3], date(2026, 4, 2))  # без вида работ
+        small = make_equipment("CL-900", direction="Биохимия")
+        small_devices = [self._installed(small, f"S{n}") for n in range(2)]
+        self._breakdown(small_devices[0], date(2026, 3, 1))
+
+        rows = reliability(YEAR_2026, TODAY, EquipmentFilters(), source=self._source())
+
+        self.assertEqual([row["label"] for row in rows], ["BC-5000"])
+        row = rows[0]
+        self.assertEqual(row["units"], 4)
+        self.assertEqual(row["breakdowns"], 2)
+        self.assertEqual(
+            row["per_unit_year"],
+            (Decimal(2) / 4 * 365 / 289).quantize(Decimal("0.01")),
+        )
+        self.assertEqual(len(row["service_ids"]), 2)
+
+    def test_reliability_future_period_is_empty(self):
+        devices = [self._installed(self.model, f"M{n}") for n in range(3)]
+        self._breakdown(devices[0], date(2027, 3, 1))
+
+        rows = reliability(
+            Period(date(2027, 1, 1), date(2027, 12, 31)),
+            TODAY,
+            EquipmentFilters(),
+            source=self._source(),
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_repeat_repairs_boundaries(self):
+        for serial, next_beg in [
+            ("X", date(2026, 3, 31)),  # 30 дней
+            ("Y", date(2026, 5, 30)),  # 90 дней
+            ("Z", date(2026, 5, 31)),  # 91 день — не повтор
+        ]:
+            device = self._installed(self.model, serial)
+            self._breakdown(device, date(2026, 2, 20), date(2026, 3, 1))
+            self._breakdown(device, next_beg)
+
+        result = repeat_repairs(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(result["counts"], {30: 1, 90: 2})
+        self.assertEqual([row["gap_days"] for row in result["rows"]], [30, 90])
+        self.assertEqual(result["rows"][0]["device"], "BC-5000 [X]")
+        self.assertEqual(result["rows"][0]["previous_date"], date(2026, 3, 1))
+        self.assertEqual(result["rows"][0]["current_date"], date(2026, 3, 31))
+
+    def test_repeat_repairs_previous_rules(self):
+        w = self._installed(self.model, "W")
+        self._breakdown(w, date(2025, 12, 20))  # без окончания, до периода
+        self._breakdown(w, date(2026, 1, 10))
+        v = self._installed(self.model, "V")
+        first = self._breakdown(v, date(2026, 4, 1), date(2026, 4, 5))
+        make_service(
+            v, date(2026, 4, 20), date(2026, 4, 20), service_type=self.maintenance
+        )
+        second = self._breakdown(v, date(2026, 5, 1))
+
+        rows = {
+            row["device"]: row
+            for row in repeat_repairs(
+                YEAR_2026, EquipmentFilters(), source=self._source()
+            )["rows"]
+        }
+
+        self.assertEqual(rows["BC-5000 [W]"]["previous_date"], date(2025, 12, 20))
+        self.assertEqual(rows["BC-5000 [W]"]["gap_days"], 21)
+        self.assertEqual(rows["BC-5000 [V]"]["previous_id"], first.pk)
+        self.assertEqual(rows["BC-5000 [V]"]["current_id"], second.pk)
+        self.assertEqual(rows["BC-5000 [V]"]["gap_days"], 26)
+
+    def test_problem_devices(self):
+        p_device = self._installed(self.model, "P")
+        for beg in (date(2024, 5, 1), date(2025, 5, 1), date(2026, 3, 1)):
+            self._breakdown(p_device, beg)
+        make_service(p_device, date(2026, 4, 1), service_type=self.maintenance)
+        q_device = self._installed(self.model, "Q")
+        for beg in (date(2026, 2, 1), date(2026, 6, 1)):
+            self._breakdown(q_device, beg)
+        self._breakdown(self._installed(self.model, "R"), date(2026, 2, 1))
+
+        rows = problem_devices(YEAR_2026, EquipmentFilters(), source=self._source())
+
+        self.assertEqual(
+            [
+                (row["device"], row["total"], row["in_period"], row["last_date"])
+                for row in rows
+            ],
+            [
+                ("BC-5000 [P]", 3, 1, date(2026, 3, 1)),
+                ("BC-5000 [Q]", 2, 2, date(2026, 6, 1)),
+            ],
+        )
+        self.assertEqual(rows[0]["device_id"], p_device.pk)
+        self.assertEqual(rows[0]["department"], "Больница (Казань)")
+
+    def test_models_summary_columns(self):
+        devices = [
+            self._installed(self.model, "A1"),
+            self._installed(self.model, "A2"),
+            self._installed(self.model, "A3", ours=False),
+        ]
+        removed = make_device(self.model, "A4")
+        make_install(removed, self.department, date(2019, 1, 1), active=False)
+        for day in (1, 2):
+            make_service(
+                devices[0],
+                date(2026, 3, day),
+                date(2026, 3, day),
+                service_type=self.maintenance,
+            )
+        self._breakdown(devices[1], date(2026, 5, 1), date(2026, 5, 5))
+        make_replacement(self.model, "R1")
+        make_replacement(self.model, "R2")
+        make_replacement(self.model, "R3", state="not_working")
+        spare_only = make_equipment("Запасной", direction=None, manufacturer=None)
+        make_replacement(spare_only, "R4")
+
+        rows = models_summary(
+            YEAR_2026, TODAY, EquipmentFilters(), source=self._source()
+        )
+
+        self.assertEqual([row["label"] for row in rows], ["BC-5000", "Запасной"])
+        first = rows[0]
+        self.assertEqual(first["manufacturer"], "Mindray")
+        self.assertEqual(first["direction"], "Гематология")
+        self.assertEqual(
+            (first["at_client"], first["ours"], first["others"]), (3, 2, 1)
+        )
+        self.assertEqual((first["planned"], first["breakdowns"]), (2, 1))
+        self.assertEqual(
+            first["per_unit_year"],
+            (Decimal(1) / 3 * 365 / 289).quantize(Decimal("0.01")),
+        )
+        self.assertEqual(first["median_days"], Decimal("5.0"))
+        self.assertEqual((first["fund_working"], first["fund_total"]), (2, 3))
+        second = rows[1]
+        self.assertEqual(second["at_client"], 0)
+        self.assertIsNone(second["per_unit_year"])
+        self.assertEqual(second["manufacturer"], "Производитель не указан")
+        self.assertEqual(second["direction"], "Направление не указано")

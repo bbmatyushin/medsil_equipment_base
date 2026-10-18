@@ -325,6 +325,50 @@ def _repairs_context(source, filters, period, today) -> dict:
     }
 
 
+def _reliability_context(source, filters, period, today) -> dict:
+    """Блок «Надёжность моделей»: частота поломок, повторы, проблемные, сводная."""
+    rows = equipment.reliability(period, today, filters, source=source)
+    repeats = equipment.repeat_repairs(period, filters, source=source)
+    repeats["rows"] = [
+        {
+            **row,
+            "previous_url": change_url(SERVICES, row["previous_id"]),
+            "current_url": change_url(SERVICES, row["current_id"]),
+        }
+        for row in repeats["rows"]
+    ]
+    return {
+        "reliability": rows,
+        "reliability_height": _horizontal_chart_height(len(rows)),
+        "min_units": equipment.MIN_UNITS_FOR_RELIABILITY,
+        "repeats": repeats,
+        "repeat_windows": equipment.REPEAT_WINDOWS,
+        "problem_devices": [
+            {**row, "url": change_url(ACCOUNTING, row["device_id"])}
+            for row in equipment.problem_devices(period, filters, source=source)
+        ],
+        "models_summary": equipment.models_summary(
+            period, today, filters, source=source
+        ),
+        "charts": {
+            "reliability": chart_spec(
+                "bar",
+                [row["label"] for row in rows],
+                [
+                    {
+                        "label": "Поломок на прибор в год",
+                        "data": [row["per_unit_year"] for row in rows],
+                        "color": "c1",
+                    }
+                ],
+                fmt="decimal",
+                horizontal=True,
+                links=[ids_link(SERVICES, row["service_ids"]) for row in rows],
+            ),
+        },
+    }
+
+
 class EquipmentView(AnalyticsTabView):
     """Вкладка «Оборудование»: парк, ремонты, надёжность, подменный фонд."""
 
@@ -344,6 +388,7 @@ class EquipmentView(AnalyticsTabView):
         for block in (
             _park_context(source, filters, today),
             _repairs_context(source, filters, period, today),
+            _reliability_context(source, filters, period, today),
         ):
             charts.update(block.pop("charts"))
             context.update(block)

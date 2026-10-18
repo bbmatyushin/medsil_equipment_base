@@ -34,6 +34,14 @@ def number(value) -> str:
 
 
 @register.filter
+def number2(value) -> str:
+    """Дробное число с двумя знаками: 0.63 -> «0,63», 2 -> «2,00», None -> «—»."""
+    if value is None:
+        return EMPTY
+    return _number(value, 2)
+
+
+@register.filter
 def pct(value) -> str:
     """12.5 -> «12,5 %», None -> «—»."""
     if value is None:

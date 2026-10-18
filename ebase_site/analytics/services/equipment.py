@@ -84,6 +84,14 @@ DURATION_BUCKETS = (
 MAX_MONTH_SERIES = 6
 REPAIR_KPI_KEYS = ("total", "planned", "breakdowns", "median_days", "replacement_share")
 
+# Надёжность: окна повторного ремонта (дни), минимум приборов модели в рейтинге
+REPEAT_WINDOWS = (30, 90)
+MIN_UNITS_FOR_RELIABILITY = 3
+TOP_RELIABILITY = 15
+TOP_PROBLEM_DEVICES = 10
+DAYS_IN_YEAR = 365
+HUNDREDTH = Decimal("0.01")
+
 
 # --- Правила и подписи ----------------------------------------------------------
 
@@ -794,3 +802,227 @@ def engineer_load(period: Period, filters: EquipmentFilters, source=None) -> dic
         "rows": rows,
         "max": max((count for row in rows for count in row["days"]), default=0),
     }
+
+
+# --- Блок В: надёжность моделей (только поломки) -------------------------------
+
+
+def effective_days(period: Period, today: date) -> int:
+    """Дни периода до сегодняшнего дня включительно; период в будущем — 0."""
+    end = min(period.date_to, today)
+    return max((end - period.date_from).days + 1, 0)
+
+
+def _per_unit_year(breakdowns: int, units: int, days: int) -> Decimal | None:
+    """Поломок на прибор в год: поломки / приборы × 365 / дни периода."""
+    if not units or not days:
+        return None
+    return (Decimal(breakdowns) / units * DAYS_IN_YEAR / days).quantize(
+        HUNDREDTH, ROUND_HALF_UP
+    )
+
+
+def _period_breakdowns(source, period, today, filters) -> list:
+    """Поломки периода с прибором, начатые не позже сегодня (для частоты в год)."""
+    return [
+        service
+        for service in source.services_in(period, filters)
+        if work_kind(service) == WORK_BREAKDOWN
+        and service.beg_dt <= today
+        and source.device_of(service) is not None
+    ]
+
+
+def _units_by_model(source, filters) -> dict:
+    """Приборы у клиентов по модели: {equipment_id: [прибор, ...]}."""
+    units = {}
+    for device, _ in _at_client(source.devices_of(filters)):
+        units.setdefault(device.equipment_id, []).append(device)
+    return units
+
+
+def reliability(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> list[dict]:
+    """Поломок на прибор в год по моделям с `MIN_UNITS_FOR_RELIABILITY`+ приборами.
+
+    Знаменатель — приборы модели у клиентов сейчас: истории парка нет.
+    """
+    source = _source(source)
+    days = effective_days(period, today)
+    if not days:
+        return []
+    units = _units_by_model(source, filters)
+    by_model = {}
+    for service in _period_breakdowns(source, period, today, filters):
+        by_model.setdefault(source.device_of(service).equipment_id, []).append(service)
+    rows = []
+    for equipment_id, services in by_model.items():
+        devices = units.get(equipment_id, [])
+        if len(devices) < MIN_UNITS_FOR_RELIABILITY:
+            continue
+        rows.append(
+            {
+                "equipment_id": equipment_id,
+                "label": model_label(devices[0].equipment),
+                "units": len(devices),
+                "breakdowns": len(services),
+                "per_unit_year": _per_unit_year(len(services), len(devices), days),
+                "service_ids": [str(service.pk) for service in services],
+            }
+        )
+    rows.sort(key=lambda row: (-row["per_unit_year"], -row["breakdowns"], row["label"]))
+    return rows[:TOP_RELIABILITY]
+
+
+def _breakdown_history(source, filters) -> dict:
+    """Все поломки приборов (вся история): {id прибора: [ремонт, ...]} по дате начала."""
+    history = {}
+    for service in source.services_of(filters):
+        if work_kind(service) != WORK_BREAKDOWN:
+            continue
+        device = source.device_of(service)
+        if device is not None:
+            history.setdefault(device.pk, []).append(service)
+    for services in history.values():
+        services.sort(key=lambda service: (service.beg_dt, service.create_dt))
+    return history
+
+
+def _device_department(device) -> str | None:
+    install = active_install(device)
+    return department_label(install.department) if install is not None else None
+
+
+def repeat_repairs(period: Period, filters: EquipmentFilters, source=None) -> dict:
+    """Поломки периода, у которых прошлая поломка прибора закончилась ≤ 30 / 90 дней назад.
+
+    Прошлая поломка ищется по всей истории; её дата — окончание, без него — начало.
+    """
+    source = _source(source)
+    window = max(REPEAT_WINDOWS)
+    rows = []
+    for device_id, services in _breakdown_history(source, filters).items():
+        device = source.device_by_id[device_id]
+        for previous, current in zip(services, services[1:]):
+            if not period.date_from <= current.beg_dt <= period.date_to:
+                continue
+            previous_date = previous.end_dt or previous.beg_dt
+            gap = max((current.beg_dt - previous_date).days, 0)
+            if gap > window:
+                continue
+            rows.append(
+                {
+                    "device": device_label(device),
+                    "department": _device_department(device),
+                    "previous_id": previous.pk,
+                    "previous_date": previous_date,
+                    "current_id": current.pk,
+                    "current_date": current.beg_dt,
+                    "gap_days": gap,
+                }
+            )
+    rows.sort(key=lambda row: (row["gap_days"], -row["current_date"].toordinal()))
+    return {
+        "counts": {
+            days: sum(1 for row in rows if row["gap_days"] <= days)
+            for days in REPEAT_WINDOWS
+        },
+        "rows": rows,
+    }
+
+
+def problem_devices(
+    period: Period, filters: EquipmentFilters, source=None
+) -> list[dict]:
+    """Приборы с двумя и более поломками за всю историю (`TOP_PROBLEM_DEVICES` строк)."""
+    source = _source(source)
+    rows = []
+    for device_id, services in _breakdown_history(source, filters).items():
+        if len(services) < 2:
+            continue
+        device = source.device_by_id[device_id]
+        rows.append(
+            {
+                "device_id": device_id,
+                "device": device_label(device),
+                "department": _device_department(device),
+                "total": len(services),
+                "in_period": sum(
+                    1
+                    for service in services
+                    if period.date_from <= service.beg_dt <= period.date_to
+                ),
+                "last_date": max(service.beg_dt for service in services),
+            }
+        )
+    rows.sort(key=lambda row: (-row["total"], -row["last_date"].toordinal()))
+    return rows[:TOP_PROBLEM_DEVICES]
+
+
+def _directory_name(item, empty_label: str) -> str:
+    return item.name if item is not None else empty_label
+
+
+def models_summary(
+    period: Period, today: date, filters: EquipmentFilters, source=None
+) -> list[dict]:
+    """Сводная по моделям: парк, ТО и поломки периода, частота, ремонт, подменный фонд."""
+    source = _source(source)
+    days = effective_days(period, today)
+    models = {}
+
+    def row_of(equipment) -> dict:
+        return models.setdefault(
+            equipment.pk,
+            {
+                "equipment_id": equipment.pk,
+                "label": model_label(equipment),
+                "manufacturer": _directory_name(
+                    equipment.manufacturer, NO_MANUFACTURER_LABEL
+                ),
+                "direction": _directory_name(
+                    equipment.med_direction, NO_DIRECTION_LABEL
+                ),
+                "at_client": 0,
+                "ours": 0,
+                "others": 0,
+                "planned": 0,
+                "breakdowns": 0,
+                "durations": [],
+                "fund_working": 0,
+                "fund_total": 0,
+            },
+        )
+
+    for device, _ in _at_client(source.devices_of(filters)):
+        row = row_of(device.equipment)
+        row["at_client"] += 1
+        row["ours" if device.is_our_supply else "others"] += 1
+    for service in source.services_in(period, filters):
+        device = source.device_of(service)
+        if device is not None and work_kind(service) == WORK_PLANNED:
+            row_of(device.equipment)["planned"] += 1
+    for service in _period_breakdowns(source, period, today, filters):
+        row = row_of(source.device_of(service).equipment)
+        row["breakdowns"] += 1
+        if service.end_dt is not None:
+            row["durations"].append(repair_days(service))
+    for replacement in source.replacements_of(filters):
+        row = row_of(replacement.equipment)
+        row["fund_total"] += 1
+        row["fund_working"] += 1 if replacement.state == "working" else 0
+    result = []
+    for row in models.values():
+        durations = row.pop("durations")
+        result.append(
+            {
+                **row,
+                "per_unit_year": _per_unit_year(
+                    row["breakdowns"], row["at_client"], days
+                ),
+                "median_days": _median(durations),
+            }
+        )
+    result.sort(key=lambda row: (-row["breakdowns"], -row["at_client"], row["label"]))
+    return result

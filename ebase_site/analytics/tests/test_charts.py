@@ -1,3 +1,4 @@
+from pathlib import Path
 import json
 import uuid
 from decimal import Decimal
@@ -21,6 +22,7 @@ from analytics.templatetags.analytics_tags import (
     delta_class,
     money,
     number,
+    number2,
     pct,
 )
 
@@ -238,6 +240,22 @@ class ChartSpecTests(SimpleTestCase):
         self.assertEqual(spec["format"], "money_short")
         self.assertIs(spec["value_labels"], True)
 
+    def test_decimal_format_for_fractional_counts(self):
+        # «поломок на прибор в год» — дробное число, не деньги и не целое
+        spec = chart_spec(
+            "bar",
+            ["BC-5000"],
+            [{"label": "Поломок на прибор в год", "data": [Decimal("0.63")]}],
+            fmt="decimal",
+            horizontal=True,
+        )
+        self.assertEqual(spec["format"], "decimal")
+        self.assertEqual(spec["datasets"][0]["data"], [0.63])
+        content = Path(finders.find("analytics/js/charts.js")).read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('fmt === "decimal"', content)
+
     def test_dataset_color_defaults_and_validation(self):
         spec = chart_spec("bar", ["a"], [{"label": "Сумма", "data": [1]}])
         self.assertIsNone(spec["datasets"][0]["color"])
@@ -330,6 +348,13 @@ class FilterTests(SimpleTestCase):
         self.assertEqual(number(None), "—")
         self.assertEqual(number(Decimal("12.5")), "12,5")
         self.assertEqual(number(Decimal("12.0")), "12")
+
+    def test_number2_filter(self):
+        # дробные показатели вроде «поломок на прибор в год»: всегда два знака
+        self.assertEqual(number2(Decimal("0.63")), "0,63")
+        self.assertEqual(number2(Decimal("2")), "2,00")
+        self.assertEqual(number2(Decimal("1234.5")), "1 234,50")
+        self.assertEqual(number2(None), "—")
 
     def test_pct_filter(self):
         self.assertEqual(pct(Decimal("12.5")), "12,5 %")
