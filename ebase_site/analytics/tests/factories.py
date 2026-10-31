@@ -32,7 +32,16 @@ from ebase.models import (
     ReplacementEquipment,
     Service,
 )
-from spare_part.models import SparePart, SparePartShipmentM2M, SparePartShipmentV2
+from spare_part.models import (
+    SparePart,
+    SparePartCount,
+    SparePartShipment,
+    SparePartShipmentM2M,
+    SparePartShipmentV2,
+    SparePartSupply,
+    SparePartSupplyItem,
+    SparePartSupplyV2,
+)
 from users.models import CompanyUser
 
 _inn_counter = count(1)
@@ -270,4 +279,107 @@ def make_replacement(equipment, serial, *, state="working") -> ReplacementEquipm
     """Подменный прибор; `state` — "working" или "not_working"."""
     return ReplacementEquipment.objects.create(
         equipment=equipment, serial_number=serial, state=state
+    )
+
+
+_supply_counter = count(1)
+_part_shipment_counter = count(1)
+
+
+def make_spare_part(
+    name="Датчик", article=None, unit="шт.", is_expiration=False, equipment=()
+) -> SparePart:
+    """Запчасть с единицей измерения и совместимыми моделями."""
+    if isinstance(unit, str):
+        unit, _ = Unit.objects.get_or_create(
+            short_name=unit, defaults={"full_name": "штука"}
+        )
+    part = SparePart.objects.create(
+        name=name, article=article, unit=unit, is_expiration=is_expiration
+    )
+    part.equipment.set(equipment)
+    return part
+
+
+def make_stock(part, amount, expiration_dt=None) -> SparePartCount:
+    """Устанавливает точный остаток запчасти для указанного срока."""
+    stock, _ = SparePartCount.objects.get_or_create(
+        spare_part=part,
+        expiration_dt=expiration_dt,
+        defaults={"amount": amount},
+    )
+    stock.amount = amount
+    stock.save(update_fields=["amount"])
+    return stock
+
+
+def _spare_part_user():
+    user, _ = CompanyUser.objects.get_or_create(username="test_spare_part_user")
+    return user
+
+
+def make_supply(
+    part, supply_dt, quantity, price=100, expiration_dt=None, archive=False
+):
+    """Поставка V2 или архивная V1 с включёнными складскими сигналами."""
+    if archive:
+        return SparePartSupply.objects.create(
+            spare_part=part,
+            doc_num=f"АП-{next(_supply_counter)}",
+            count_supply=quantity,
+            expiration_dt=expiration_dt,
+            supply_dt=supply_dt,
+            user=_spare_part_user(),
+        )
+    supply = SparePartSupplyV2.objects.create(
+        doc_num=f"П-{next(_supply_counter)}",
+        supply_dt=supply_dt,
+        user=_spare_part_user(),
+    )
+    return SparePartSupplyItem.objects.create(
+        supply=supply,
+        spare_part=part,
+        quantity=quantity,
+        price=price,
+        expiration_dt=expiration_dt,
+    )
+
+
+def make_part_shipment(
+    part,
+    shipment_dt,
+    quantity,
+    price=100,
+    expiration_dt=None,
+    service=None,
+    contract=None,
+    archive=False,
+):
+    """Отгрузка V2 или архивная V1 с включёнными складскими сигналами."""
+    if archive:
+        stock, _ = SparePartCount.objects.get_or_create(
+            spare_part=part,
+            expiration_dt=expiration_dt,
+            defaults={"amount": quantity},
+        )
+        return SparePartShipment.objects.create(
+            spare_part_count=stock,
+            doc_num=f"АО-{next(_part_shipment_counter)}",
+            count_shipment=quantity,
+            shipment_dt=shipment_dt,
+            user=_spare_part_user(),
+        )
+    shipment = SparePartShipmentV2.objects.create(
+        doc_num=f"О-{next(_part_shipment_counter)}",
+        shipment_dt=shipment_dt,
+        user=_spare_part_user(),
+        service=service,
+        contract=contract,
+    )
+    return SparePartShipmentM2M.objects.create(
+        shipment=shipment,
+        spare_part=part,
+        quantity=quantity,
+        price=price,
+        expiration_dt=expiration_dt,
     )
