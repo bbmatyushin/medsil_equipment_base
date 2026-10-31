@@ -9,6 +9,8 @@ from django import forms
 from business_trip.xlsx_report import employee_fio
 from clients.models import Client
 from directory.models import Manufacturer, MedDirection
+from ebase.models import Equipment
+from spare_part.models import SparePart
 from users.models import CompanyUser
 
 MONTH_ABBR = [
@@ -258,4 +260,90 @@ class EquipmentFilterForm(PeriodForm):
             direction=cleaned.get("direction"),
             manufacturer=cleaned.get("manufacturer"),
             supply=cleaned.get("supply") or DEFAULT_SUPPLY,
+        )
+
+
+EXPIRATION_CHOICES = [
+    ("all", "Все"),
+    ("overdue", "Просрочено"),
+    ("30", "До 30 дней"),
+    ("90", "До 90 дней"),
+    ("180", "До 180 дней"),
+    ("missing", "Срок не указан"),
+]
+STOCK_CHOICES = [
+    ("all", "Все"),
+    ("positive", "Положительный"),
+    ("zero", "Нулевой"),
+    ("negative", "Отрицательный"),
+]
+NONMOVING_CHOICES = [
+    ("all", "Все"),
+    ("180", "Неликвид 180 дней"),
+    ("365", "Неликвид 365 дней"),
+]
+
+
+@dataclass(frozen=True)
+class SparePartFilters:
+    """Фильтры вкладки «Запчасти» (кроме периода)."""
+
+    spare_part: SparePart | None = None
+    equipment: Equipment | None = None
+    expiration: str = "all"
+    stock: str = "all"
+    nonmoving: str = "all"
+
+    @property
+    def is_empty(self) -> bool:
+        return (
+            self.spare_part is None
+            and self.equipment is None
+            and self.expiration == "all"
+            and self.stock == "all"
+            and self.nonmoving == "all"
+        )
+
+
+class SparePartEquipmentChoiceField(forms.ModelChoiceField):
+    """Безопасная подпись модели, в том числе без обоих названий."""
+
+    def label_from_instance(self, obj) -> str:
+        return obj.full_name or obj.short_name or "Модель без названия"
+
+
+class SparePartFilterForm(PeriodForm):
+    """Фильтры вкладки «Запчасти»."""
+
+    spare_part = forms.ModelChoiceField(
+        SparePart.objects.select_related("unit").order_by("name", "article"),
+        required=False,
+        label="Запчасть",
+        empty_label="Все запчасти",
+    )
+    equipment = SparePartEquipmentChoiceField(
+        Equipment.objects.filter(spare_part_equipment__isnull=False)
+        .distinct()
+        .order_by("full_name", "short_name"),
+        required=False,
+        label="Модель оборудования",
+        empty_label="Все модели",
+    )
+    expiration = forms.ChoiceField(
+        choices=EXPIRATION_CHOICES, required=False, label="Срок годности"
+    )
+    stock = forms.ChoiceField(choices=STOCK_CHOICES, required=False, label="Остаток")
+    nonmoving = forms.ChoiceField(
+        choices=NONMOVING_CHOICES, required=False, label="Движение"
+    )
+
+    def get_filters(self) -> SparePartFilters:
+        """Выбранные фильтры; мусор в параметре даёт значение по умолчанию."""
+        cleaned = self._cleaned()
+        return SparePartFilters(
+            spare_part=cleaned.get("spare_part"),
+            equipment=cleaned.get("equipment"),
+            expiration=cleaned.get("expiration") or "all",
+            stock=cleaned.get("stock") or "all",
+            nonmoving=cleaned.get("nonmoving") or "all",
         )

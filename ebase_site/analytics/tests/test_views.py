@@ -238,6 +238,68 @@ class AnalyticsViewsTests(TestCase):
         # тот же раздел — в списке на главной: на телефоне боковая панель скрыта
         self.assertIn(app, response.context["app_list"])
 
+    def _spare_parts_staff(self):
+        user = User.objects.create_user(
+            "spare_parts_staff", password="pass", is_staff=True
+        )
+        user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="analytics", codename="view_spare_parts"
+            )
+        )
+        return user
+
+    def test_superuser_sees_spare_parts_tab(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("analytics:spare_parts"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Запчасти")
+
+    def test_staff_without_spare_parts_permission_gets_403(self):
+        self.client.force_login(self.finance_staff)
+        with self.assertLogs("django.request", "WARNING"):
+            response = self.client.get(reverse("analytics:spare_parts"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_index_redirects_to_spare_parts_when_only_it_permitted(self):
+        self.client.force_login(self._spare_parts_staff())
+        response = self.client.get(reverse("analytics:index"))
+        self.assertRedirects(response, reverse("analytics:spare_parts"))
+        self.assertEqual(
+            reverse("analytics:spare_parts"), "/admin/analytics/spare-parts/"
+        )
+
+    def test_sidebar_lists_spare_parts_tab_with_permission(self):
+        self.client.force_login(self._spare_parts_staff())
+        response = self.client.get(reverse("admin:index"))
+        app = next(
+            app
+            for app in response.context["available_apps"]
+            if app["app_label"] == "analytics"
+        )
+        self.assertEqual(
+            [(model["name"], model["admin_url"]) for model in app["models"]],
+            [("Запчасти", reverse("analytics:spare_parts"))],
+        )
+        self.assertIn(app, response.context["app_list"])
+
+    def test_spare_parts_tab_follows_equipment_in_tabs(self):
+        self.assertEqual(
+            [tab.key for tab in TABS],
+            ["finance", "trips", "equipment", "spare_parts"],
+        )
+
+    def test_spare_parts_page_has_sections(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("analytics:spare_parts"))
+        for title in (
+            "Склад",
+            "Движение и расход",
+            "Сроки годности",
+            "Неликвиды и контроль данных",
+        ):
+            self.assertContains(response, f'<h2 class="an-section-title">{title}</h2>')
+
     def test_equipment_tab_follows_trips_in_tabs(self):
         self.assertEqual(
             [tab.key for tab in TABS][:3], ["finance", "trips", "equipment"]

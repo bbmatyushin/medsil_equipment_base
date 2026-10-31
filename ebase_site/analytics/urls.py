@@ -3,6 +3,7 @@ from django.urls import path
 
 from . import views
 from .views_equipment import EquipmentView
+from .views_spare_parts import SparePartsView
 from .views_trips import TripsView
 
 app_name = "analytics"
@@ -17,5 +18,10 @@ urlpatterns = [
         "equipment/",
         admin.site.admin_view(EquipmentView.as_view()),
         name="equipment",
+    ),
+    path(
+        "spare-parts/",
+        admin.site.admin_view(SparePartsView.as_view()),
+        name="spare_parts",
     ),
 ]

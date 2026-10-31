@@ -17,14 +17,22 @@ OLD_UNUSED_PERMISSIONS = {
 }
 
 
+def _permissions_before_0006():
+    """Права как до миграции 0006: без view_spare_parts."""
+    Permission.objects.filter(
+        content_type__app_label="analytics", codename="view_spare_parts"
+    ).delete()
+
+
 def _permissions_before_0005():
-    """Права как до миграции 0005: без view_equipment.
+    """Права как до миграции 0005: без view_equipment и более новых.
 
     В тестах миграции выключены и права создаются по текущей модели.
     """
     Permission.objects.filter(
         content_type__app_label="analytics", codename="view_equipment"
     ).delete()
+    _permissions_before_0006()
 
 
 def _permissions_before_0004():
@@ -55,7 +63,7 @@ class StatisticsGroupMigrationTests(TestCase):
         )
         self.assertEqual(
             codenames,
-            {"view_finance", "view_trips", "view_equipment"},
+            {"view_finance", "view_trips", "view_equipment", "view_spare_parts"},
         )
 
     def test_group_gets_all_permissions_and_active_staff_only(self):
@@ -314,3 +322,78 @@ class EquipmentTabMigrationTests(TestCase):
         self.migration.remove_equipment_tab(django_apps, None)
 
         self.assertEqual(self._codenames(), {"view_finance", "view_trips"})
+
+
+class SparePartsTabMigrationTests(TestCase):
+    """Миграция 0006: право «Запчасти» и его выдача группе «Аналитика»."""
+
+    def setUp(self):
+        self.migration = importlib.import_module(
+            "analytics.migrations.0006_spare_parts_tab"
+        )
+        _permissions_before_0006()
+
+    @staticmethod
+    def _codenames():
+        return set(
+            Permission.objects.filter(content_type__app_label="analytics").values_list(
+                "codename", flat=True
+            )
+        )
+
+    def test_creates_permission_and_grants_group(self):
+        group = Group.objects.create(name="Аналитика")
+        staff = User.objects.create_user("staff", password="p", is_staff=True)
+        group.user_set.add(staff)
+
+        self.migration.add_spare_parts_tab(django_apps, None)
+
+        perm = Permission.objects.get(
+            content_type__app_label="analytics", codename="view_spare_parts"
+        )
+        self.assertEqual(perm.name, "Аналитика: Запчасти")
+        self.assertTrue(group.permissions.filter(pk=perm.pk).exists())
+        self.assertTrue(
+            User.objects.get(pk=staff.pk).has_perm("analytics.view_spare_parts")
+        )
+
+    def test_without_group_creates_permission_only(self):
+        self.migration.add_spare_parts_tab(django_apps, None)
+
+        self.assertIn("view_spare_parts", self._codenames())
+        self.assertEqual(Group.objects.count(), 0)
+
+    def test_is_idempotent(self):
+        group = Group.objects.create(name="Аналитика")
+
+        self.migration.add_spare_parts_tab(django_apps, None)
+        self.migration.add_spare_parts_tab(django_apps, None)
+
+        self.assertEqual(
+            self._codenames(),
+            {"view_finance", "view_trips", "view_equipment", "view_spare_parts"},
+        )
+        self.assertEqual(
+            list(group.permissions.values_list("codename", flat=True)),
+            ["view_spare_parts"],
+        )
+
+    def test_reverse_removes_permission(self):
+        self.migration.add_spare_parts_tab(django_apps, None)
+
+        self.migration.remove_spare_parts_tab(django_apps, None)
+
+        self.assertEqual(
+            self._codenames(), {"view_finance", "view_trips", "view_equipment"}
+        )
+
+    def test_forward_after_reverse(self):
+        self.migration.add_spare_parts_tab(django_apps, None)
+        self.migration.remove_spare_parts_tab(django_apps, None)
+
+        self.migration.add_spare_parts_tab(django_apps, None)
+
+        self.assertEqual(
+            self._codenames(),
+            {"view_finance", "view_trips", "view_equipment", "view_spare_parts"},
+        )

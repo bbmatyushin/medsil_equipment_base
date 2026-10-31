@@ -18,6 +18,7 @@ class AnalyticsAccess(models.Model):
             ("view_finance", "Аналитика: Финансы"),
             ("view_trips", "Аналитика: Командировки"),
             ("view_equipment", "Аналитика: Оборудование"),
+            ("view_spare_parts", "Аналитика: Запчасти"),
         )
         verbose_name = "Доступ к аналитике"
         verbose_name_plural = "Доступ к аналитике"

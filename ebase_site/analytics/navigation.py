@@ -21,6 +21,12 @@ TABS = [
     Tab("finance", "Финансы", "analytics.view_finance", "analytics:finance"),
     Tab("trips", "Командировки", "analytics.view_trips", "analytics:trips"),
     Tab("equipment", "Оборудование", "analytics.view_equipment", "analytics:equipment"),
+    Tab(
+        "spare_parts",
+        "Запчасти",
+        "analytics.view_spare_parts",
+        "analytics:spare_parts",
+    ),
 ]
 
 

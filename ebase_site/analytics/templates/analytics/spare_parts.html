@@ -1,0 +1,15 @@
+{% extends "analytics/base.html" %}
+
+{% block analytics_content %}
+<h2 class="an-section-title">Склад</h2>
+{% include "analytics/spare_parts/overview.html" %}
+
+<h2 class="an-section-title">Движение и расход</h2>
+{% include "analytics/spare_parts/movement.html" %}
+
+<h2 class="an-section-title">Сроки годности</h2>
+{% include "analytics/spare_parts/expiration.html" %}
+
+<h2 class="an-section-title">Неликвиды и контроль данных</h2>
+{% include "analytics/spare_parts/control.html" %}
+{% endblock %}

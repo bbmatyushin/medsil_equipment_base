@@ -5,14 +5,17 @@ from django.utils import translation
 
 from clients.models import Client
 from contracts.models import Contract
-from directory.models import City, Manufacturer, MedDirection
+from directory.models import City, Manufacturer, MedDirection, Unit
 from ebase.models import Equipment
 from business_trip.models import BusinessTrip
+from spare_part.models import SparePart
 from users.models import CompanyUser
 from analytics.filters import (
     EquipmentFilterForm,
     EquipmentFilters,
     FinanceFilterForm,
+    SparePartFilterForm,
+    SparePartFilters,
     TripsFilterForm,
     Period,
     PeriodForm,
@@ -379,3 +382,84 @@ class EquipmentFilterFormTests(TestCase):
             [label for _, label in form.fields["manufacturer"].choices],
             ["Все производители", "Mindray"],
         )
+
+
+class SparePartFilterFormTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        unit = Unit.objects.create(short_name="шт.", full_name="штука")
+        cls.part = SparePart.objects.create(
+            name="Датчик", article="D-100", unit=unit
+        )
+        cls.equipment = Equipment.objects.create(full_name="BC-5000")
+        cls.short_name = Equipment.objects.create(short_name="BC")
+        cls.nameless = Equipment.objects.create(full_name=None, short_name=None)
+        cls.unused = Equipment.objects.create(full_name="Не используется")
+        cls.part.equipment.set([cls.equipment, cls.short_name, cls.nameless])
+
+    def test_spare_part_form_defaults(self):
+        form = SparePartFilterForm(data={})
+        self.assertEqual(form.get_filters(), SparePartFilters())
+        self.assertTrue(form.get_filters().is_empty)
+        self.assertEqual(form.get_period(TODAY), YEAR_2026)
+
+    def test_spare_part_form_values(self):
+        form = SparePartFilterForm(
+            data={
+                "spare_part": str(self.part.pk),
+                "equipment": str(self.equipment.pk),
+                "expiration": "90",
+                "stock": "positive",
+                "nonmoving": "180",
+            }
+        )
+        filters = form.get_filters()
+        self.assertEqual(filters.spare_part, self.part)
+        self.assertEqual(filters.equipment, self.equipment)
+        self.assertEqual(filters.expiration, "90")
+        self.assertEqual(filters.stock, "positive")
+        self.assertEqual(filters.nonmoving, "180")
+        self.assertFalse(filters.is_empty)
+
+    def test_spare_part_form_garbage_falls_back(self):
+        form = SparePartFilterForm(
+            data={
+                "spare_part": "bad",
+                "equipment": "not-a-uuid",
+                "expiration": "foo",
+                "stock": "foo",
+                "nonmoving": "foo",
+            }
+        )
+        self.assertEqual(form.get_filters(), SparePartFilters())
+        self.assertEqual(form.get_period(TODAY), YEAR_2026)
+
+    def test_spare_part_form_lists_only_used_equipment(self):
+        queryset = SparePartFilterForm().fields["equipment"].queryset
+        self.assertEqual(
+            set(queryset), {self.equipment, self.short_name, self.nameless}
+        )
+        self.assertNotIn(self.unused, queryset)
+
+    def test_spare_part_labels(self):
+        form = SparePartFilterForm()
+        self.assertEqual(
+            form.fields["spare_part"].label_from_instance(self.part),
+            "Датчик (арт. D-100)",
+        )
+        equipment = form.fields["equipment"]
+        self.assertEqual(equipment.label_from_instance(self.equipment), "BC-5000")
+        self.assertEqual(equipment.label_from_instance(self.short_name), "BC")
+        self.assertEqual(
+            equipment.label_from_instance(self.nameless), "Модель без названия"
+        )
+
+    def test_spare_part_empty_labels(self):
+        form = SparePartFilterForm()
+        self.assertEqual(form.fields["spare_part"].empty_label, "Все запчасти")
+        self.assertEqual(form.fields["equipment"].empty_label, "Все модели")
+        for name in ("expiration", "stock", "nonmoving"):
+            with self.subTest(name=name):
+                field = form.fields[name]
+                self.assertFalse(field.required)
+                self.assertEqual(list(field.choices)[0][1], "Все")
