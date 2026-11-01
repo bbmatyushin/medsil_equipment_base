@@ -559,3 +559,236 @@ class MovementTests(TestCase):
 
         self.assertEqual(result["rows"][0]["label"], "Модель без названия")
         self.assertNotIn("None", result["rows"][0]["label"])
+
+
+class ExpirationTests(TestCase):
+    def test_expiration_bucket_boundaries(self):
+        part = make_spare_part()
+        for offset in (-1, 0, 30, 31, 90, 91, 180, 181):
+            make_stock(part, 1, TODAY + timedelta(days=offset))
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.expiration_rows(TODAY, SparePartFilters(), source)
+        }
+
+        self.assertEqual(
+            [row["count"] for row in rows.values()],
+            [1, 2, 2, 2, 1, 0],
+        )
+        self.assertEqual(
+            list(rows), ["overdue", "0_30", "31_90", "91_180", "181_plus", "missing"]
+        )
+
+    def test_expiration_missing_only_when_required(self):
+        required = make_spare_part(name="Обязательный", is_expiration=True)
+        optional = make_spare_part(name="Необязательный", is_expiration=False)
+        required_count = make_stock(required, 2)
+        make_stock(optional, 3)
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.expiration_rows(TODAY, SparePartFilters(), source)
+        }
+
+        self.assertEqual(rows["missing"]["count"], 1)
+        self.assertEqual(rows["missing"]["parts"], 1)
+        self.assertEqual(rows["missing"]["count_ids"], [required_count.pk])
+
+    def test_expiration_ignores_zero_negative_and_uses_date_not_flag(self):
+        part = make_spare_part()
+        make_stock(part, 0, TODAY - timedelta(days=1))
+        make_stock(part, -2, TODAY)
+        current = make_stock(part, 1, TODAY + timedelta(days=1))
+        current.is_overdue = True
+        current.save(update_fields=["is_overdue"])
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.expiration_rows(TODAY, SparePartFilters(), source)
+        }
+
+        self.assertEqual(rows["overdue"]["count"], 0)
+        self.assertEqual(rows["0_30"]["count"], 1)
+        self.assertEqual(rows["0_30"]["count_ids"], [current.pk])
+
+    def test_expiration_values_and_ids(self):
+        part = make_spare_part()
+        first_expiration = TODAY - timedelta(days=1)
+        second_expiration = TODAY - timedelta(days=2)
+        make_supply(part, TODAY, 1, price=100, expiration_dt=first_expiration)
+        first = make_stock(part, 2, first_expiration)
+        second = make_stock(part, 3, second_expiration)
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.expiration_rows(TODAY, SparePartFilters(), source)
+        }
+
+        overdue = rows["overdue"]
+        self.assertEqual(overdue["count"], 2)
+        self.assertEqual(overdue["parts"], 1)
+        self.assertEqual(overdue["value"], Decimal("500.00"))
+        self.assertEqual(set(overdue["count_ids"]), {first.pk, second.pk})
+
+    def test_expiration_kpi_and_nonmoving_kpi(self):
+        expired = make_spare_part(name="Просроченная")
+        make_supply(expired, TODAY, 1, price=100)
+        make_stock(expired, 0)
+        make_stock(expired, 2, TODAY - timedelta(days=1))
+        recent = make_spare_part(name="С движением")
+        make_supply(recent, TODAY, 5, price=50)
+        make_part_shipment(recent, TODAY, 1, price=50)
+        make_stock(recent, 3)
+        unknown = make_spare_part(name="Без цены")
+        make_stock(unknown, 10, TODAY - timedelta(days=1))
+        source = sp.SparePartSet.load()
+
+        kpis = sp.overview_kpis(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            TODAY,
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(kpis["expired_value"], Decimal("200.00"))
+        self.assertEqual(kpis["nonmoving_value"], Decimal("200.00"))
+
+
+class StockControlTests(TestCase):
+    def test_nonmoving_180_and_365_boundaries(self):
+        recent_180 = make_spare_part(name="Граница 180")
+        old_180 = make_spare_part(name="До границы 180")
+        recent_365 = make_spare_part(name="Граница 365")
+        old_365 = make_spare_part(name="До границы 365")
+        never = make_spare_part(name="Никогда")
+        for part in (recent_180, old_180, recent_365, old_365, never):
+            make_stock(part, 2)
+        make_part_shipment(recent_180, TODAY - timedelta(days=179), 1)
+        make_part_shipment(old_180, TODAY - timedelta(days=180), 1)
+        make_part_shipment(recent_365, TODAY - timedelta(days=364), 1)
+        make_part_shipment(old_365, TODAY - timedelta(days=365), 1)
+        source = sp.SparePartSet.load()
+
+        rows = sp.nonmoving_rows(TODAY, SparePartFilters(), source)
+
+        self.assertEqual(
+            {row["id"] for row in rows[180]},
+            {old_180.pk, recent_365.pk, old_365.pk, never.pk},
+        )
+        self.assertEqual({row["id"] for row in rows[365]}, {old_365.pk, never.pk})
+        self.assertEqual(rows[365][0]["unit"], "шт.")
+        self.assertIn("stock_value", rows[365][0])
+        self.assertIn("demand", rows[365][0])
+
+    def test_restock_zero_stock_and_recent_demand(self):
+        zero = make_spare_part(name="Нулевой")
+        positive = make_spare_part(name="Положительный")
+        negative = make_spare_part(name="Отрицательный")
+        no_demand = make_spare_part(name="Без спроса")
+        future = make_spare_part(name="Будущая")
+        for part in (zero, positive, negative):
+            make_part_shipment(part, TODAY, 1)
+        make_part_shipment(future, TODAY + timedelta(days=1), 1)
+        make_stock(zero, 0)
+        make_stock(positive, 2)
+        make_stock(negative, -1)
+        make_stock(no_demand, 0)
+        make_stock(future, 0)
+        source = sp.SparePartSet.load()
+
+        rows = sp.restock_rows(TODAY, SparePartFilters(), source)
+
+        self.assertEqual([row["id"] for row in rows], [zero.pk])
+        self.assertEqual(rows[0]["demand"], Decimal("0.08"))
+        self.assertEqual(rows[0]["last_shipment"], TODAY)
+
+    def test_restock_without_count_record(self):
+        part = make_spare_part()
+        make_part_shipment(part, TODAY, 1)
+        from spare_part.models import SparePartCount
+
+        SparePartCount.objects.filter(spare_part=part).delete()
+        source = sp.SparePartSet.load()
+
+        rows = sp.restock_rows(TODAY, SparePartFilters(), source)
+
+        self.assertEqual([row["id"] for row in rows], [part.pk])
+
+    def test_data_quality_categories(self):
+        negative = make_spare_part(name="Отрицательный")
+        negative_count = make_stock(negative, -1)
+        unknown = make_spare_part(name="Неизвестная цена")
+        unknown_count = make_stock(unknown, 1)
+        zero_supply_part = make_spare_part(name="Нулевая поставка")
+        supply = make_supply(zero_supply_part, TODAY, 1, price=0)
+        zero_shipment_part = make_spare_part(name="Нулевая отгрузка")
+        shipment = make_part_shipment(zero_shipment_part, TODAY, 1, price=0)
+        missing_part = make_spare_part(name="Без срока", is_expiration=True)
+        missing_count = make_stock(missing_part, 1)
+        archive_supply = make_supply(unknown, TODAY, 1, archive=True)
+        archive_shipment = make_part_shipment(unknown, TODAY, 1, archive=True)
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.data_quality(TODAY, SparePartFilters(), source)
+        }
+
+        self.assertIn(negative_count.pk, rows["negative_stock"]["ids"])
+        self.assertEqual(rows["negative_stock"]["target"], "counts")
+        self.assertIn(unknown_count.pk, rows["unknown_price"]["ids"])
+        self.assertEqual(rows["zero_supply_price"]["ids"], [supply.supply_id])
+        self.assertEqual(rows["zero_supply_price"]["target"], "supplies")
+        self.assertEqual(rows["zero_shipment_price"]["ids"], [shipment.shipment_id])
+        self.assertEqual(rows["zero_shipment_price"]["target"], "shipments")
+        self.assertEqual(rows["missing_expiration"]["ids"], [missing_count.pk])
+        self.assertEqual(rows["archive_supplies"]["ids"], [archive_supply.pk])
+        self.assertEqual(rows["archive_supplies"]["target"], "archive_supplies")
+        self.assertEqual(rows["archive_shipments"]["ids"], [archive_shipment.pk])
+        self.assertEqual(rows["archive_shipments"]["target"], "archive_shipments")
+
+    def test_data_quality_ids_point_to_parent_documents(self):
+        first = make_spare_part(name="Первая")
+        second = make_spare_part(name="Вторая")
+        supply = make_supply(first, TODAY, 1, price=0)
+        shipment = make_part_shipment(first, TODAY, 1, price=0)
+        from spare_part.models import SparePartShipmentM2M, SparePartSupplyItem
+
+        SparePartSupplyItem.objects.create(
+            supply=supply.supply, spare_part=second, quantity=1, price=0
+        )
+        SparePartShipmentM2M.objects.create(
+            shipment=shipment.shipment, spare_part=second, quantity=1, price=0
+        )
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["key"]: row
+            for row in sp.data_quality(TODAY, SparePartFilters(), source)
+        }
+
+        self.assertEqual(rows["zero_supply_price"]["count"], 1)
+        self.assertEqual(rows["zero_supply_price"]["ids"], [supply.supply_id])
+        self.assertEqual(rows["zero_shipment_price"]["count"], 1)
+        self.assertEqual(rows["zero_shipment_price"]["ids"], [shipment.shipment_id])
+
+    def test_data_quality_archive_is_informational(self):
+        part = make_spare_part()
+        make_supply(part, TODAY, 1, archive=True)
+        make_part_shipment(part, TODAY, 1, archive=True)
+        make_stock(part, -1)
+        source = sp.SparePartSet.load()
+
+        rows = sp.data_quality(TODAY, SparePartFilters(), source)
+
+        info = {row["key"]: row["info"] for row in rows}
+        self.assertTrue(info["archive_supplies"])
+        self.assertTrue(info["archive_shipments"])
+        self.assertFalse(
+            any(value for key, value in info.items() if not key.startswith("archive_"))
+        )

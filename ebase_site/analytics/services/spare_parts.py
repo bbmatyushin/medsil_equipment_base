@@ -414,7 +414,226 @@ def overview_kpis(period, today, filters, source=None) -> dict:
         "shipment_cost": sum(
             (row.cost or ZERO for row in shipments if not row.is_archive), ZERO
         ),
+        "expired_value": next(
+            row["value"]
+            for row in expiration_rows(today, filters, source)
+            if row["key"] == "overdue"
+        ),
+        "nonmoving_value": sum(
+            (row["stock_value"] or ZERO for row in rows if row["nonmoving_365"]),
+            ZERO,
+        ),
     }
+
+
+EXPIRATION_BUCKETS = (
+    ("overdue", "Просрочено"),
+    ("0_30", "До 30 дней"),
+    ("31_90", "31–90 дней"),
+    ("91_180", "91–180 дней"),
+    ("181_plus", "Более 180 дней"),
+    ("missing", "Срок не указан"),
+)
+
+
+def _expiration_bucket(part, count, today):
+    expiration = count.expiration_dt
+    if expiration is None:
+        return "missing" if part.is_expiration else None
+    days = (expiration - today).days
+    if days < 0:
+        return "overdue"
+    if days <= 30:
+        return "0_30"
+    if days <= 90:
+        return "31_90"
+    if days <= 180:
+        return "91_180"
+    return "181_plus"
+
+
+def expiration_rows(today, filters, source=None) -> list[dict]:
+    """Положительные остатки по корзинам сроков годности."""
+    source = _source(source)
+    parts = parts_of(filters, today, source)
+    part_by_id = {part.pk: part for part in parts}
+    indexes = _price_indexes(source)
+    groups = {
+        key: {
+            "key": key,
+            "label": label,
+            "count_ids": [],
+            "part_ids": set(),
+            "value": ZERO,
+        }
+        for key, label in EXPIRATION_BUCKETS
+    }
+    for count in source.counts:
+        part = part_by_id.get(count.spare_part_id)
+        amount = _decimal(count.amount)
+        if part is None or amount <= 0:
+            continue
+        key = _expiration_bucket(part, count, today)
+        if key is None:
+            continue
+        group = groups[key]
+        group["count_ids"].append(count.pk)
+        group["part_ids"].add(part.pk)
+        price = _indexed_price(part.pk, count.expiration_dt, indexes)
+        if price is not None:
+            group["value"] += amount * price
+    result = []
+    for key, _ in EXPIRATION_BUCKETS:
+        group = groups[key]
+        count_ids = sorted(group["count_ids"], key=str)
+        result.append(
+            {
+                "key": key,
+                "label": group["label"],
+                "count": len(count_ids),
+                "parts": len(group["part_ids"]),
+                "value": group["value"],
+                "count_ids": count_ids,
+            }
+        )
+    return result
+
+
+def _stock_control_rows(today, filters, source):
+    return stock_rows(Period(today, today), today, filters, source)
+
+
+def nonmoving_rows(today, filters, source=None) -> dict:
+    """Позиции с положительным остатком без отгрузок 180 и 365 дней."""
+    rows = _stock_control_rows(today, filters, _source(source))
+    return {
+        days: [
+            {
+                "id": row["id"],
+                "label": row["label"],
+                "unit": row["unit"],
+                "stock": row["stock"],
+                "stock_value": row["stock_value"],
+                "last_shipment": row["last_shipment"],
+                "demand": row["average_monthly"],
+            }
+            for row in rows
+            if row[f"nonmoving_{days}"]
+        ]
+        for days in (180, 365)
+    }
+
+
+def restock_rows(today, filters, source=None) -> list[dict]:
+    """Нулевые остатки с фактическим спросом за последние 365 дней."""
+    source = _source(source)
+    rows = _stock_control_rows(today, filters, source)
+    start = window_start(today, DEMAND_DAYS)
+    demand = _sums_by_part(
+        [row for row in source.shipments if start <= row.shipment_dt <= today],
+        "shipment_dt",
+        "quantity",
+    )
+    result = [
+        {
+            "id": row["id"],
+            "label": row["label"],
+            "unit": row["unit"],
+            "last_shipment": row["last_shipment"],
+            "demand": row["average_monthly"],
+        }
+        for row in rows
+        if row["stock"] == 0 and demand.get(row["id"], ZERO) > 0
+    ]
+    result.sort(key=lambda row: (-demand[row["id"]], row["label"]))
+    return result
+
+
+def _quality_row(key, label, ids, target, info=False):
+    ids = sorted(set(ids), key=str)
+    return {
+        "key": key,
+        "label": label,
+        "count": len(ids),
+        "ids": ids,
+        "target": target,
+        "info": info,
+    }
+
+
+def data_quality(today, filters, source=None) -> list[dict]:
+    """Ошибки учёта и информационные счётчики архива V1."""
+    source = _source(source)
+    parts = parts_of(filters, today, source)
+    part_by_id = {part.pk: part for part in parts}
+    part_ids = set(part_by_id)
+    indexes = _price_indexes(source)
+    negative, unknown, missing = [], [], []
+    for count in source.counts:
+        part = part_by_id.get(count.spare_part_id)
+        if part is None:
+            continue
+        amount = _decimal(count.amount)
+        if amount < 0:
+            negative.append(count.pk)
+        if amount > 0:
+            if _indexed_price(part.pk, count.expiration_dt, indexes) is None:
+                unknown.append(count.pk)
+            if part.is_expiration and count.expiration_dt is None:
+                missing.append(count.pk)
+    supplies = [row for row in source.supplies if row.part_id in part_ids]
+    shipments = [row for row in source.shipments if row.part_id in part_ids]
+    return [
+        _quality_row(
+            "negative_stock", "Отрицательные записи остатков", negative, "counts"
+        ),
+        _quality_row(
+            "unknown_price",
+            "Положительные остатки без известной цены",
+            unknown,
+            "counts",
+        ),
+        _quality_row(
+            "zero_supply_price",
+            "Поставки V2 с нулевой ценой",
+            [
+                row.document_id
+                for row in supplies
+                if not row.is_archive and row.price == 0
+            ],
+            "supplies",
+        ),
+        _quality_row(
+            "zero_shipment_price",
+            "Отгрузки V2 с нулевой ценой",
+            [
+                row.document_id
+                for row in shipments
+                if not row.is_archive and row.price == 0
+            ],
+            "shipments",
+        ),
+        _quality_row(
+            "missing_expiration",
+            "Обязательный срок годности не указан",
+            missing,
+            "counts",
+        ),
+        _quality_row(
+            "archive_supplies",
+            "Архивные поставки V1 без стоимости",
+            [row.document_id for row in supplies if row.is_archive],
+            "archive_supplies",
+            info=True,
+        ),
+        _quality_row(
+            "archive_shipments",
+            "Архивные отгрузки V1 без стоимости",
+            [row.document_id for row in shipments if row.is_archive],
+            "archive_shipments",
+            info=True,
+        ),
+    ]
 
 
 def _period_v2_rows(period, filters, source):

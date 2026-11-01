@@ -1,1 +1,60 @@
-<div class="an-grid"></div>
+{% load analytics_tags %}
+<div class="an-charts">
+    {% for block in nonmoving_blocks %}
+        <section class="an-card">
+            <h2>Неликвиды {{ block.days }} дней</h2>
+            <p class="an-card-note">Положительный остаток без отгрузок за {{ block.days }} дней. Позиций: {{ block.total }}.</p>
+            {% if block.rows %}
+                <div class="an-table-wrap">
+                    <table class="an-table">
+                        <thead><tr><th scope="col">Запчасть</th><th scope="col" class="num">Остаток</th><th scope="col" class="num">Оценка</th><th scope="col">Последняя отгрузка</th><th scope="col" class="num">Расход в месяц</th></tr></thead>
+                        <tbody>
+                            {% for row in block.rows %}
+                                <tr><td>{{ row.label }}</td><td class="num">{{ row.stock|number }} {{ row.unit }}</td><td class="num">{{ row.stock_value|money }}</td><td>{{ row.last_shipment|date:"d.m.Y"|default:"—" }}</td><td class="num">{{ row.demand|number2 }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if block.total > stock_control_limit %}<p class="an-card-note">Показаны {{ stock_control_limit }} из {{ block.total }}.</p>{% endif %}
+            {% else %}
+                <p class="an-chart-empty">Нет данных</p>
+            {% endif %}
+        </section>
+    {% endfor %}
+</div>
+<section class="an-card an-card--wide">
+    <h2>Кандидаты на пополнение</h2>
+    <p class="an-card-note">Нулевой остаток и хотя бы одна отгрузка за последние 365 дней. Позиций: {{ restock_total }}.</p>
+    {% if restock_rows %}
+        <div class="an-table-wrap">
+            <table class="an-table">
+                <thead><tr><th scope="col">Запчасть</th><th scope="col">Последняя отгрузка</th><th scope="col" class="num">Расход в месяц</th></tr></thead>
+                <tbody>
+                    {% for row in restock_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.last_shipment|date:"d.m.Y"|default:"—" }}</td><td class="num">{{ row.demand|number2 }} {{ row.unit }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if restock_total > stock_control_limit %}<p class="an-card-note">Показаны {{ stock_control_limit }} из {{ restock_total }}.</p>{% endif %}
+    {% else %}
+        <p class="an-chart-empty">Нет данных</p>
+    {% endif %}
+</section>
+<section class="an-card an-card--wide">
+    <h2>Контроль качества данных</h2>
+    <div class="an-table-wrap">
+        <table class="an-table">
+            <thead><tr><th scope="col">Проверка</th><th scope="col" class="num">Записей</th><th scope="col">Примечание</th></tr></thead>
+            <tbody>
+                {% for row in data_quality %}
+                    <tr>
+                        <td>{% if row.url %}<a href="{{ row.url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+                        <td class="num">{{ row.count }}</td>
+                        <td>{% if row.info %}информационно{% elif row.too_many %}список слишком большой для прямой ссылки{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>

@@ -7,8 +7,20 @@ from .services import spare_parts
 from .views import MAX_LINK_IDS, AnalyticsTabView, _horizontal_chart_height
 
 SPARE_PARTS = "spare_part_sparepart"
+COUNTS = "spare_part_sparepartcount"
+SUPPLIES = "spare_part_sparepartsupplyv2"
 SHIPMENTS = "spare_part_sparepartshipmentv2"
+ARCHIVE_SUPPLIES = "spare_part_sparepartsupply"
+ARCHIVE_SHIPMENTS = "spare_part_sparepartshipment"
+QUALITY_TARGETS = {
+    "counts": COUNTS,
+    "supplies": SUPPLIES,
+    "shipments": SHIPMENTS,
+    "archive_supplies": ARCHIVE_SUPPLIES,
+    "archive_shipments": ARCHIVE_SHIPMENTS,
+}
 STOCK_ROWS_LIMIT = 100
+STOCK_CONTROL_LIMIT = 50
 
 
 def _ids_link(admin_name, ids) -> str | None:
@@ -48,6 +60,18 @@ def _overview_context(source, filters, period, today) -> dict:
             "value": kpis["shipment_cost"],
             "kind": "money",
             "note": f"{period.date_from:%d.%m.%Y} — {period.date_to:%d.%m.%Y}",
+        },
+        {
+            "label": "Просрочено",
+            "value": kpis["expired_value"],
+            "kind": "money",
+            "note": "оценка на сегодня",
+        },
+        {
+            "label": "Неликвиды",
+            "value": kpis["nonmoving_value"],
+            "kind": "money",
+            "note": "без отгрузок 365 дней",
         },
     ]
     return {
@@ -113,6 +137,55 @@ def _movement_context(source, filters, period, today) -> dict:
     }
 
 
+def _expiration_context(source, filters, today) -> dict:
+    """Корзины сроков годности и ссылки на складские записи."""
+    rows = spare_parts.expiration_rows(today, filters, source)
+    for row in rows:
+        row["url"] = _ids_link(COUNTS, row["count_ids"])
+        row["too_many"] = len(row["count_ids"]) > MAX_LINK_IDS
+    chart = chart_spec(
+        "bar",
+        [row["label"] for row in rows],
+        [{"label": "Оценочная стоимость", "data": [row["value"] for row in rows]}],
+        fmt="money",
+        horizontal=True,
+        links=[row["url"] for row in rows],
+    )
+    return {
+        "expiration_rows": rows,
+        "expiration_height": _horizontal_chart_height(len(rows)),
+        "charts": {"expiration": chart},
+    }
+
+
+def _control_context(source, filters, today) -> dict:
+    """Неликвиды, пополнение и ошибки учёта."""
+    nonmoving = spare_parts.nonmoving_rows(today, filters, source)
+    restock = spare_parts.restock_rows(today, filters, source)
+    quality = spare_parts.data_quality(today, filters, source)
+    for row in quality:
+        row["url"] = _ids_link(QUALITY_TARGETS[row["target"]], row["ids"])
+        row["too_many"] = len(row["ids"]) > MAX_LINK_IDS
+    return {
+        "nonmoving_rows": {
+            days: rows[:STOCK_CONTROL_LIMIT] for days, rows in nonmoving.items()
+        },
+        "nonmoving_total": {days: len(rows) for days, rows in nonmoving.items()},
+        "nonmoving_blocks": [
+            {
+                "days": days,
+                "rows": rows[:STOCK_CONTROL_LIMIT],
+                "total": len(rows),
+            }
+            for days, rows in nonmoving.items()
+        ],
+        "restock_rows": restock[:STOCK_CONTROL_LIMIT],
+        "restock_total": len(restock),
+        "stock_control_limit": STOCK_CONTROL_LIMIT,
+        "data_quality": quality,
+    }
+
+
 class SparePartsView(AnalyticsTabView):
     tab_key = "spare_parts"
     form_class = SparePartFilterForm
@@ -126,4 +199,8 @@ class SparePartsView(AnalyticsTabView):
         context.update(filters=filters, charts={})
         context.update(_overview_context(source, filters, period, today))
         context.update(_movement_context(source, filters, period, today))
+        expiration = _expiration_context(source, filters, today)
+        context["charts"].update(expiration.pop("charts"))
+        context.update(expiration)
+        context.update(_control_context(source, filters, today))
         return context

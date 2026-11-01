@@ -1839,6 +1839,8 @@ class SparePartsPageTests(TestCase):
                 "Оценочная стоимость остатка",
                 "Закуплено за период",
                 "Отгружено за период",
+                "Просрочено",
+                "Неликвиды",
             ],
         )
         self.assertEqual(tiles["Позиций с остатком"]["value"], 1)
@@ -1948,4 +1950,105 @@ class SparePartsPageTests(TestCase):
         self.assertContains(response, "Без указания модели: 125,00 ₽")
         self.assertNotIn(
             "Не указана", response.context["charts"]["top_equipment"]["labels"]
+        )
+
+    def test_spare_parts_expiration_chart_and_links(self):
+        part = make_spare_part(is_expiration=True)
+        make_supply(part, TODAY, 1, price=100)
+        make_stock(part, 2, TODAY - timedelta(days=1))
+
+        response = self._get()
+
+        rows = response.context["expiration_rows"]
+        spec = response.context["charts"]["expiration"]
+        self.assertEqual(
+            [row["key"] for row in rows],
+            ["overdue", "0_30", "31_90", "91_180", "181_plus", "missing"],
+        )
+        self.assertEqual(
+            spec["labels"],
+            [
+                "Просрочено",
+                "До 30 дней",
+                "31–90 дней",
+                "91–180 дней",
+                "Более 180 дней",
+                "Срок не указан",
+            ],
+        )
+        self.assertTrue(spec["horizontal"])
+        self.assertEqual(spec["format"], "money")
+        self.assertEqual(spec["datasets"][0]["data"][0], 200.0)
+        self.assertEqual(rows[0]["count"], 1)
+        self.assertEqual(rows[0]["parts"], 1)
+        self.assertEqual(spec["links"], [row["url"] for row in rows])
+        changelist = self.client.get(rows[0]["url"])
+        self.assertEqual(changelist.status_code, 200)
+        self.assertEqual(changelist.context["cl"].result_count, 1)
+
+    def test_spare_parts_expiration_large_bucket_has_no_long_url(self):
+        for number in range(MAX_LINK_IDS + 1):
+            part = make_spare_part(name=f"Просроченная {number:02d}")
+            make_stock(part, 1, TODAY - timedelta(days=1))
+
+        response = self._get()
+
+        row = response.context["expiration_rows"][0]
+        self.assertEqual(row["count"], MAX_LINK_IDS + 1)
+        self.assertIsNone(row["url"])
+        self.assertIsNone(response.context["charts"]["expiration"]["links"][0])
+        self.assertContains(response, "список слишком большой для прямой ссылки")
+
+    def test_spare_parts_nonmoving_and_restock_tables(self):
+        nonmoving = make_spare_part(name="Неликвидная позиция")
+        make_stock(nonmoving, 2)
+        restock = make_spare_part(name="Пополнить позицию")
+        make_part_shipment(restock, TODAY, 1)
+        make_stock(restock, 0)
+
+        response = self._get()
+
+        for title in (
+            "Неликвиды 180 дней",
+            "Неликвиды 365 дней",
+            "Кандидаты на пополнение",
+        ):
+            self.assertContains(response, title)
+        self.assertContains(response, nonmoving.name)
+        self.assertContains(response, restock.name)
+        self.assertEqual(response.context["nonmoving_total"][365], 1)
+        self.assertEqual(response.context["restock_total"], 1)
+
+    def test_spare_parts_data_quality_links(self):
+        negative = make_spare_part(name="Отрицательный остаток")
+        make_stock(negative, -1)
+        unknown = make_spare_part(name="Неизвестная цена")
+        make_stock(unknown, 1)
+        supply_part = make_spare_part(name="Поставка без цены")
+        make_supply(supply_part, TODAY, 1, price=0)
+        shipment_part = make_spare_part(name="Отгрузка без цены")
+        make_part_shipment(shipment_part, TODAY, 1, price=0)
+        missing = make_spare_part(name="Срок не заполнен", is_expiration=True)
+        make_stock(missing, 1)
+        make_supply(unknown, TODAY, 1, archive=True)
+        make_part_shipment(unknown, TODAY, 1, archive=True)
+
+        response = self._get()
+
+        rows = response.context["data_quality"]
+        self.assertEqual(len(rows), 7)
+        for row in rows:
+            with self.subTest(key=row["key"]):
+                self.assertGreater(row["count"], 0)
+                self.assertIsNotNone(row["url"])
+                changelist = self.client.get(row["url"])
+                self.assertEqual(changelist.status_code, 200)
+        self.assertContains(response, "информационно", count=2)
+
+    def test_spare_parts_overview_all_six_tiles(self):
+        response = self._get()
+
+        self.assertEqual(
+            [tile["label"] for tile in response.context["tiles"]][-2:],
+            ["Просрочено", "Неликвиды"],
         )
