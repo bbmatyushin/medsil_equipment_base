@@ -2052,3 +2052,237 @@ class SparePartsPageTests(TestCase):
             [tile["label"] for tile in response.context["tiles"]][-2:],
             ["Просрочено", "Неликвиды"],
         )
+
+    def test_spare_parts_page_empty_db(self):
+        response = self._get()
+
+        for title in (
+            "Склад",
+            "Движение и расход",
+            "Сроки годности",
+            "Неликвиды и контроль данных",
+        ):
+            self.assertContains(response, title)
+        self.assertEqual(
+            set(response.context["charts"]),
+            {"money_by_month", "top_parts", "top_equipment", "expiration"},
+        )
+        for spec in response.context["charts"].values():
+            with self.subTest(labels=spec["labels"]):
+                self.assertTrue(spec["empty"])
+        self.assertEqual([tile["value"] for tile in response.context["tiles"]], [0] * 6)
+        self.assertContains(response, "—")
+        self.assertNotContains(response, "None")
+
+    def test_spare_parts_page_bad_params(self):
+        response = self._get(
+            {
+                "preset": "unknown",
+                "date_from": "not-a-date",
+                "date_to": "2026-99-99",
+                "spare_part": "not-a-uuid",
+                "equipment": "not-a-uuid",
+                "expiration": "unknown",
+                "stock": "unknown",
+                "nonmoving": "unknown",
+            }
+        )
+
+        self.assertEqual(
+            response.context["period"], Period(date(2026, 1, 1), date(2026, 12, 31))
+        )
+        filters = response.context["filters"]
+        self.assertIsNone(filters.spare_part)
+        self.assertIsNone(filters.equipment)
+        self.assertEqual(filters.expiration, "all")
+        self.assertEqual(filters.stock, "all")
+        self.assertEqual(filters.nonmoving, "all")
+
+    def test_spare_parts_page_with_mixed_real_data(self):
+        contract = make_contract(
+            make_client("Клиент смешанных данных"),
+            "SP-MIXED",
+            date(2026, 1, 10),
+            1000,
+        )
+        equipment = make_equipment("Модель смешанных данных")
+        service = make_service(make_device(equipment, "SN-SP-MIXED"), TODAY)
+        part = make_spare_part(name="Смешанная V1/V2", is_expiration=True)
+        make_supply(
+            part, date(2026, 2, 1), 2, price=100, expiration_dt=date(2026, 11, 1)
+        )
+        make_part_shipment(
+            part,
+            date(2026, 3, 1),
+            1,
+            price=80,
+            expiration_dt=date(2026, 11, 1),
+            service=service,
+            contract=contract,
+        )
+        make_part_shipment(
+            part,
+            date(2026, 4, 1),
+            1,
+            price=40,
+            expiration_dt=date(2026, 11, 1),
+        )
+        make_supply(
+            part,
+            date(2026, 5, 1),
+            2,
+            expiration_dt=date(2026, 12, 1),
+            archive=True,
+        )
+        make_part_shipment(
+            part,
+            date(2026, 6, 1),
+            1,
+            expiration_dt=date(2026, 12, 1),
+            archive=True,
+        )
+        unknown = make_spare_part(name="Смешанная без цены")
+        make_stock(unknown, 2)
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile["value"] for tile in response.context["tiles"]}
+        self.assertEqual(tiles["Позиций с остатком"], 2)
+        self.assertEqual(tiles["Оценочная стоимость остатка"], Decimal("100.00"))
+        self.assertEqual(tiles["Закуплено за период"], Decimal("200.00"))
+        self.assertEqual(tiles["Отгружено за период"], Decimal("120.00"))
+        self.assertEqual(tiles["Просрочено"], Decimal("0"))
+        self.assertEqual(tiles["Неликвиды"], Decimal("0"))
+        row = next(
+            row for row in response.context["stock_rows"] if row["id"] == part.pk
+        )
+        self.assertEqual(row["received"], Decimal("4"))
+        self.assertEqual(row["shipped"], Decimal("3"))
+        charts = response.context["charts"]
+        self.assertEqual(sum(charts["money_by_month"]["datasets"][0]["data"]), 200.0)
+        self.assertEqual(sum(charts["money_by_month"]["datasets"][1]["data"]), 120.0)
+        self.assertEqual(sum(charts["top_parts"]["datasets"][0]["data"]), 120.0)
+        self.assertEqual(
+            sum(charts["top_equipment"]["datasets"][0]["data"])
+            + float(response.context["without_equipment_cost"]),
+            120.0,
+        )
+        self.assertEqual(sum(charts["expiration"]["datasets"][0]["data"]), 100.0)
+
+    def test_spare_parts_period_does_not_change_snapshot(self):
+        part = make_spare_part(name="Снимок склада", is_expiration=True)
+        expiration = date(2026, 11, 15)
+        make_supply(part, date(2025, 2, 1), 3, price=50, expiration_dt=expiration)
+        make_supply(part, date(2026, 3, 1), 2, price=100, expiration_dt=expiration)
+        make_part_shipment(
+            part, date(2026, 4, 1), 1, price=80, expiration_dt=expiration
+        )
+        empty = make_spare_part(name="Снимок пополнения")
+        make_part_shipment(empty, date(2026, 4, 1), 1, price=20)
+        make_stock(empty, 0)
+
+        current = self._get()
+        previous = self._get({"preset": "prev_year"})
+
+        def snapshot(response):
+            return {
+                "tiles": [
+                    tile["value"]
+                    for tile in response.context["tiles"]
+                    if tile["label"]
+                    in (
+                        "Позиций с остатком",
+                        "Оценочная стоимость остатка",
+                        "Просрочено",
+                        "Неликвиды",
+                    )
+                ],
+                "stock": [
+                    {
+                        key: row[key]
+                        for key in (
+                            "id",
+                            "stock",
+                            "stock_value",
+                            "average_monthly",
+                            "days_stock",
+                            "last_shipment",
+                            "nonmoving_180",
+                            "nonmoving_365",
+                        )
+                    }
+                    for row in response.context["stock_rows"]
+                ],
+                "expiration": response.context["expiration_rows"],
+                "nonmoving": response.context["nonmoving_rows"],
+                "restock": response.context["restock_rows"],
+            }
+
+        self.assertEqual(snapshot(current), snapshot(previous))
+        self.assertNotEqual(
+            current.context["charts"]["money_by_month"],
+            previous.context["charts"]["money_by_month"],
+        )
+
+    def test_spare_parts_contract_shipments_match_finance_subset(self):
+        from analytics.services.finance import money_flow
+        from analytics.services.spare_parts import SparePartSet
+        from spare_part.models import SparePartShipmentM2M
+
+        contract = make_contract(
+            make_client("Клиент сверки запчастей"),
+            "SP-FINANCE",
+            date(2026, 1, 10),
+            1000,
+        )
+        part = make_spare_part(name="Сверка с финансами")
+        make_supply(part, date(2026, 1, 1), 3, price=100)
+        make_part_shipment(part, date(2026, 3, 1), 1, price=80, contract=contract)
+        make_part_shipment(part, date(2026, 4, 1), 1, price=40)
+
+        response = self._get()
+        period = response.context["period"]
+        contract_document_ids = set(
+            SparePartShipmentM2M.objects.filter(
+                shipment__contract__isnull=False,
+                shipment__shipment_dt__range=(period.date_from, period.date_to),
+            ).values_list("shipment_id", flat=True)
+        )
+        contract_cost = sum(
+            (
+                row.cost or Decimal("0")
+                for row in SparePartSet.load().shipments
+                if row.document_id in contract_document_ids
+            ),
+            Decimal("0"),
+        )
+
+        self.assertEqual(contract_cost, Decimal("80.00"))
+        self.assertEqual(contract_cost, sum(money_flow(period)["spare_parts"]))
+        tiles = {tile["label"]: tile["value"] for tile in response.context["tiles"]}
+        self.assertEqual(tiles["Отгружено за период"], Decimal("120.00"))
+        self.assertGreaterEqual(tiles["Отгружено за период"], contract_cost)
+
+    def test_spare_parts_page_query_count_is_small_and_constant(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        part = make_spare_part(name="Запросы склада")
+        make_supply(part, date(2026, 1, 1), 3, price=100)
+        make_part_shipment(part, date(2026, 2, 1), 1, price=80)
+
+        def count_queries():
+            with _fixed_today(), CaptureQueriesContext(connection) as ctx:
+                response = self.client.get(reverse("analytics:spare_parts"))
+            self.assertEqual(response.status_code, 200)
+            return len(ctx.captured_queries)
+
+        before = count_queries()
+        for number in range(5):
+            extra = make_spare_part(name=f"Запросы склада {number}")
+            make_supply(extra, date(2026, 3, 1), 2, price=50)
+            make_part_shipment(extra, date(2026, 4, 1), 1, price=40)
+        after = count_queries()
+
+        self.assertLessEqual(before, 35)
+        self.assertEqual(before, after)
