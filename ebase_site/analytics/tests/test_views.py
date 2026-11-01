@@ -45,6 +45,7 @@ from analytics.views_equipment import (
     ids_link,
 )
 from analytics.views_trips import _ids_link
+from analytics.views_spare_parts import SHIPMENTS, _ids_link as spare_parts_ids_link
 from clients.models import Client
 from contracts.admin import format_money
 from contracts.models import Contract, ContractExpense
@@ -1880,3 +1881,71 @@ class SparePartsPageTests(TestCase):
         response = self._get()
         self.assertContains(response, "Оценочная стоимость")
         self.assertNotContains(response, "Себестоимость склада")
+
+    def test_spare_parts_money_chart(self):
+        part = make_spare_part()
+        make_supply(part, date(2026, 2, 1), 2, price=100)
+        make_part_shipment(part, date(2026, 3, 1), 1, price=80)
+
+        response = self._get()
+
+        spec = response.context["charts"]["money_by_month"]
+        self.assertEqual(len(spec["labels"]), 12)
+        self.assertEqual(spec["format"], "money")
+        self.assertFalse(spec["stacked"])
+        self.assertEqual(
+            [(row["label"], row["kind"], row["color"]) for row in spec["datasets"]],
+            [
+                ("Закуплено", "bar", "c1"),
+                ("Отгружено", "bar", "c2"),
+                ("Сальдо", "line", "c3"),
+            ],
+        )
+        self.assertEqual(spec["datasets"][0]["data"][1], 200.0)
+        self.assertEqual(spec["datasets"][1]["data"][2], 80.0)
+        self.assertEqual(spec["datasets"][2]["data"][2], -80.0)
+
+    def test_spare_parts_top_charts_are_horizontal_with_links(self):
+        equipment = make_equipment("BC-5000")
+        device = make_device(equipment, "SN-TOP")
+        make_install(device, make_department("Больница топа"), TODAY)
+        service = make_service(device, TODAY)
+        part = make_spare_part()
+        make_part_shipment(part, TODAY, 1, price=80, service=service)
+
+        response = self._get()
+
+        for key in ("top_parts", "top_equipment"):
+            with self.subTest(key=key):
+                spec = response.context["charts"][key]
+                self.assertTrue(spec["horizontal"])
+                self.assertEqual(spec["format"], "money")
+                self.assertLessEqual(len(spec["labels"]), 15)
+                self.assertEqual(len(spec["links"]), len(spec["labels"]))
+                changelist = self.client.get(spec["links"][0])
+                self.assertEqual(changelist.status_code, 200)
+                self.assertEqual(changelist.context["cl"].result_count, 1)
+
+    def test_spare_parts_top_shipment_link_limit(self):
+        self.assertIsNone(spare_parts_ids_link(SHIPMENTS, []))
+        fake_ids = [str(uuid.uuid4()) for _ in range(MAX_LINK_IDS + 1)]
+        url = spare_parts_ids_link(SHIPMENTS, fake_ids[:MAX_LINK_IDS])
+        query = parse_qs(urlsplit(url).query)
+        self.assertEqual(len(query["id__in"][0].split(",")), MAX_LINK_IDS)
+        self.assertIsNone(spare_parts_ids_link(SHIPMENTS, fake_ids))
+
+    def test_spare_parts_archive_money_note(self):
+        response = self._get()
+        self.assertContains(response, "Денежные суммы учитывают только документы V2")
+
+    def test_spare_parts_unassigned_equipment_cost_note(self):
+        part = make_spare_part()
+        make_part_shipment(part, TODAY, 1, price=125)
+
+        response = self._get()
+
+        self.assertEqual(response.context["without_equipment_cost"], Decimal("125.00"))
+        self.assertContains(response, "Без указания модели: 125,00 ₽")
+        self.assertNotIn(
+            "Не указана", response.context["charts"]["top_equipment"]["labels"]
+        )

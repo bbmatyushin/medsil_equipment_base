@@ -74,9 +74,7 @@ class SparePartSetTests(TestCase):
         source = sp.SparePartSet.load()
 
         self.assertNotIn(old_supply.pk, {row.document_id for row in source.supplies})
-        self.assertNotIn(
-            old_shipment.pk, {row.document_id for row in source.shipments}
-        )
+        self.assertNotIn(old_shipment.pk, {row.document_id for row in source.shipments})
 
     def test_stock_total_without_count_is_zero(self):
         part = make_spare_part()
@@ -108,9 +106,7 @@ class SparePartSetTests(TestCase):
         old_shipment = make_part_shipment(part, period.date_to, 1, archive=True)
         source = sp.SparePartSet.load()
 
-        supply_ids = {
-            row.document_id for row in source.supplies_in([part.pk], period)
-        }
+        supply_ids = {row.document_id for row in source.supplies_in([part.pk], period)}
         shipment_ids = {
             row.document_id for row in source.shipments_in([part.pk], period)
         }
@@ -244,9 +240,7 @@ class StockValuationTests(TestCase):
         make_supply(part, TODAY, 0, price=999, expiration_dt=expiration)
         source = sp.SparePartSet.load()
 
-        self.assertEqual(
-            sp.known_price(part.pk, expiration, source), Decimal("150.00")
-        )
+        self.assertEqual(sp.known_price(part.pk, expiration, source), Decimal("150.00"))
         self.assertEqual(
             sp.known_price(part.pk, date(2028, 1, 1), source), Decimal("150.00")
         )
@@ -439,3 +433,129 @@ class StockRowsTests(TestCase):
         )
 
         self.assertEqual([row["id"] for row in rows], [selected.pk])
+
+
+class MovementTests(TestCase):
+    def test_money_by_month_fills_gaps_and_balance(self):
+        part = make_spare_part()
+        period = Period(date(2026, 1, 1), date(2026, 4, 30))
+        make_supply(part, date(2026, 1, 10), 2, price=100)
+        make_supply(part, date(2026, 3, 10), 1, price=50)
+        make_part_shipment(part, date(2026, 2, 10), 1, price=30)
+        make_part_shipment(part, date(2026, 3, 20), 1, price=20)
+        source = sp.SparePartSet.load()
+
+        result = sp.money_by_month(period, SparePartFilters(), source)
+
+        self.assertEqual(result["months"], period.months())
+        self.assertEqual(
+            result["purchases"],
+            [Decimal("200.00"), Decimal("0"), Decimal("50.00"), Decimal("0")],
+        )
+        self.assertEqual(
+            result["shipments"],
+            [Decimal("0"), Decimal("30.00"), Decimal("20.00"), Decimal("0")],
+        )
+        self.assertEqual(
+            result["balance"],
+            [Decimal("200.00"), Decimal("-30.00"), Decimal("30.00"), Decimal("0")],
+        )
+
+    def test_money_by_month_ignores_archive_money(self):
+        part = make_spare_part()
+        period = Period(date(2026, 1, 1), date(2026, 12, 31))
+        make_supply(part, TODAY, 10, price=1000, archive=True)
+        make_part_shipment(part, TODAY, 10, price=1000, archive=True)
+        source = sp.SparePartSet.load()
+
+        result = sp.money_by_month(period, SparePartFilters(), source)
+
+        self.assertEqual(result["purchases"], [Decimal("0")] * 12)
+        self.assertEqual(result["shipments"], [Decimal("0")] * 12)
+        self.assertEqual(result["balance"], [Decimal("0")] * 12)
+
+    def test_top_parts_sorts_limits_and_collects_document_ids(self):
+        parts = [make_spare_part(name=f"Запчасть {number:02d}") for number in range(16)]
+        first = make_part_shipment(parts[0], TODAY, 1, price=100)
+        from spare_part.models import SparePartShipmentM2M
+
+        SparePartShipmentM2M.objects.create(
+            shipment=first.shipment, spare_part=parts[0], quantity=1, price=100
+        )
+        SparePartShipmentM2M.objects.create(
+            shipment=first.shipment, spare_part=parts[1], quantity=1, price=100
+        )
+        for part in parts[2:]:
+            make_part_shipment(part, TODAY, 1, price=100)
+        make_part_shipment(parts[0], TODAY, 1, price=10000, archive=True)
+        source = sp.SparePartSet.load()
+
+        rows = sp.top_parts(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(len(rows), 15)
+        self.assertEqual(rows[0]["cost"], Decimal("200.00"))
+        self.assertEqual(rows[0]["shipment_ids"], [first.shipment_id])
+        self.assertEqual(rows[1]["shipment_ids"], [first.shipment_id])
+        self.assertEqual(
+            [row["label"] for row in rows[1:]],
+            [f"Запчасть {number:02d}" for number in range(1, 15)],
+        )
+        self.assertNotIn("Запчасть 15", [row["label"] for row in rows])
+
+    def test_top_equipment_uses_actual_service_device(self):
+        compatible = make_equipment("Совместимая")
+        actual = make_equipment("Фактическая")
+        part = make_spare_part(equipment=[compatible])
+        service = make_service(make_device(actual, "SN-ACTUAL"), TODAY)
+        make_part_shipment(part, TODAY, 1, price=80, service=service)
+        source = sp.SparePartSet.load()
+
+        result = sp.top_equipment(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(len(result["rows"]), 1)
+        self.assertEqual(result["rows"][0]["equipment_id"], actual.pk)
+        self.assertEqual(result["rows"][0]["label"], "Фактическая")
+        self.assertEqual(result["rows"][0]["cost"], Decimal("80.00"))
+
+    def test_top_equipment_without_device_is_separate(self):
+        assigned = make_spare_part(name="С прибором")
+        unassigned = make_spare_part(name="Без прибора")
+        equipment = make_equipment("Модель")
+        service = make_service(make_device(equipment, "SN-1"), TODAY)
+        make_part_shipment(assigned, TODAY, 1, price=80, service=service)
+        make_part_shipment(unassigned, TODAY, 1, price=50)
+        make_part_shipment(unassigned, TODAY, 1, price=999, archive=True)
+        source = sp.SparePartSet.load()
+
+        result = sp.top_equipment(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual([row["label"] for row in result["rows"]], ["Модель"])
+        self.assertEqual(result["without_equipment_cost"], Decimal("50.00"))
+
+    def test_top_equipment_nameless_model_has_safe_label(self):
+        equipment = make_equipment(None, None)
+        part = make_spare_part()
+        service = make_service(make_device(equipment, "SN-EMPTY"), TODAY)
+        make_part_shipment(part, TODAY, 1, price=80, service=service)
+        source = sp.SparePartSet.load()
+
+        result = sp.top_equipment(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(result["rows"][0]["label"], "Модель без названия")
+        self.assertNotIn("None", result["rows"][0]["label"])

@@ -1,1 +1,17 @@
-<div class="an-grid"></div>
+{% load analytics_tags %}
+<section class="an-card an-card--wide">
+    <h2>Движение денег</h2>
+    <p class="an-card-note">Денежные суммы учитывают только документы V2; архив V1 входит в количества, но не в деньги.</p>
+    {% include "analytics/includes/chart.html" with spec=charts.money_by_month chart_id="chart-spare-parts-money" title="Закупки и себестоимость отгрузок запчастей" %}
+</section>
+<div class="an-charts">
+    <section class="an-card">
+        <h2>Запчасти по себестоимости отгрузок</h2>
+        {% include "analytics/includes/chart.html" with spec=charts.top_parts chart_id="chart-spare-parts-top" title="Запчасти по себестоимости отгрузок" height=top_parts_height %}
+    </section>
+    <section class="an-card">
+        <h2>Модели оборудования по расходу запчастей</h2>
+        <p class="an-card-note">Модель берётся из прибора связанного ремонта. Без указания модели: {{ without_equipment_cost|money }}.</p>
+        {% include "analytics/includes/chart.html" with spec=charts.top_equipment chart_id="chart-spare-parts-equipment" title="Модели оборудования по расходу запчастей" height=top_equipment_height %}
+    </section>
+</div>

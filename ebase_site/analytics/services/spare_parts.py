@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.utils import timezone
+
 from analytics.filters import Period, SparePartFilters
+from analytics.services.finance import _bucket_by_month
 from spare_part.models import (
     SparePart,
     SparePartCount,
@@ -97,9 +100,7 @@ class SparePartSet:
                 expiration_dt=item["expiration_dt"],
                 is_archive=True,
             )
-            for item in SparePartSupply.objects.filter(
-                spare_part__isnull=False
-            ).values(
+            for item in SparePartSupply.objects.filter(spare_part__isnull=False).values(
                 "id",
                 "spare_part_id",
                 "supply_dt",
@@ -126,12 +127,14 @@ class SparePartSet:
                     expiration_dt=item.expiration_dt,
                     equipment_id=equipment.pk if equipment else None,
                     equipment_label=(
-                        equipment.full_name
-                        or equipment.short_name
-                        or "Модель без названия"
-                    )
-                    if equipment
-                    else None,
+                        (
+                            equipment.full_name
+                            or equipment.short_name
+                            or "Модель без названия"
+                        )
+                        if equipment
+                        else None
+                    ),
                     is_archive=False,
                 )
             )
@@ -228,9 +231,7 @@ def _matches_expiration(part, counts, choice: str, today: date) -> bool:
     return False
 
 
-def parts_of(
-    filters: SparePartFilters, today: date, source=None
-) -> list[SparePart]:
+def parts_of(filters: SparePartFilters, today: date, source=None) -> list[SparePart]:
     """Отбирает запчасти целиком по уже загруженным данным."""
     source = _source(source)
     result = []
@@ -324,9 +325,7 @@ def _part_valuation(part_id, counts, indexes):
 def _sums_by_part(rows, date_field, value_field):
     result = {}
     for row in rows:
-        result[row.part_id] = result.get(row.part_id, ZERO) + getattr(
-            row, value_field
-        )
+        result[row.part_id] = result.get(row.part_id, ZERO) + getattr(row, value_field)
     return result
 
 
@@ -335,7 +334,9 @@ def stock_rows(period, today, filters, source=None) -> list[dict]:
     source = _source(source)
     parts = parts_of(filters, today, source)
     part_ids = [part.pk for part in parts]
-    received = _sums_by_part(source.supplies_in(part_ids, period), "supply_dt", "quantity")
+    received = _sums_by_part(
+        source.supplies_in(part_ids, period), "supply_dt", "quantity"
+    )
     shipped = _sums_by_part(
         source.shipments_in(part_ids, period), "shipment_dt", "quantity"
     )
@@ -343,8 +344,7 @@ def stock_rows(period, today, filters, source=None) -> list[dict]:
     demand_rows = [
         row
         for row in source.shipments
-        if row.part_id in set(part_ids)
-        and demand_start <= row.shipment_dt <= today
+        if row.part_id in set(part_ids) and demand_start <= row.shipment_dt <= today
     ]
     demand = _sums_by_part(demand_rows, "shipment_dt", "quantity")
     indexes = _price_indexes(source)
@@ -378,14 +378,10 @@ def stock_rows(period, today, filters, source=None) -> list[dict]:
                 "days_stock": days_stock,
                 "last_shipment": last.shipment_dt if last else None,
                 "nonmoving_180": stock > 0
-                and (
-                    last is None
-                    or last.shipment_dt < window_start(today, 180)
-                ),
+                and (last is None or last.shipment_dt < window_start(today, 180)),
                 "nonmoving_365": stock > 0
                 and (
-                    last is None
-                    or last.shipment_dt < window_start(today, DEMAND_DAYS)
+                    last is None or last.shipment_dt < window_start(today, DEMAND_DAYS)
                 ),
             }
         )
@@ -409,9 +405,7 @@ def overview_kpis(period, today, filters, source=None) -> dict:
     shipments = source.shipments_in(part_ids, period)
     return {
         "positive_count": sum(row["stock"] > 0 for row in rows),
-        "stock_value": sum(
-            (row["stock_value"] or ZERO for row in rows), ZERO
-        ),
+        "stock_value": sum((row["stock_value"] or ZERO for row in rows), ZERO),
         "priced_count": sum(row["value_complete"] for row in rows),
         "priced_total": sum(row["stock"] > 0 for row in rows),
         "purchase_amount": sum(
@@ -420,4 +414,91 @@ def overview_kpis(period, today, filters, source=None) -> dict:
         "shipment_cost": sum(
             (row.cost or ZERO for row in shipments if not row.is_archive), ZERO
         ),
+    }
+
+
+def _period_v2_rows(period, filters, source):
+    """Движения V2 отобранных позиций за период."""
+    source = _source(source)
+    part_ids = [part.pk for part in parts_of(filters, timezone.localdate(), source)]
+    supplies = [
+        row for row in source.supplies_in(part_ids, period) if not row.is_archive
+    ]
+    shipments = [
+        row for row in source.shipments_in(part_ids, period) if not row.is_archive
+    ]
+    return source, supplies, shipments
+
+
+def money_by_month(period, filters, source=None) -> dict:
+    """Закупки, себестоимость отгрузок и их сальдо по месяцам периода."""
+    _, supplies, shipments = _period_v2_rows(period, filters, source)
+    months = period.months()
+    purchases = _bucket_by_month(
+        ((row.supply_dt, row.amount or ZERO) for row in supplies),
+        months,
+    )
+    shipped = _bucket_by_month(
+        ((row.shipment_dt, row.cost or ZERO) for row in shipments),
+        months,
+    )
+    return {
+        "months": months,
+        "purchases": purchases,
+        "shipments": shipped,
+        "balance": [purchase - cost for purchase, cost in zip(purchases, shipped)],
+    }
+
+
+def top_parts(period, filters, source=None, limit=15) -> list[dict]:
+    """Запчасти с наибольшей себестоимостью отгрузок V2."""
+    source, _, shipments = _period_v2_rows(period, filters, source)
+    groups = {}
+    for row in shipments:
+        group = groups.setdefault(
+            row.part_id,
+            {
+                "id": row.part_id,
+                "label": source.part_by_id[row.part_id].name,
+                "cost": ZERO,
+                "shipment_ids": set(),
+            },
+        )
+        group["cost"] += row.cost or ZERO
+        group["shipment_ids"].add(row.document_id)
+    rows = [row for row in groups.values() if row["cost"] != 0]
+    for row in rows:
+        row["shipment_ids"] = sorted(row["shipment_ids"], key=str)
+    rows.sort(key=lambda row: (-row["cost"], row["label"]))
+    return rows[:limit]
+
+
+def top_equipment(period, filters, source=None, limit=15) -> dict:
+    """Расход запчастей по фактическим моделям из связанных ремонтов."""
+    _, _, shipments = _period_v2_rows(period, filters, source)
+    groups = {}
+    without_equipment_cost = ZERO
+    for row in shipments:
+        cost = row.cost or ZERO
+        if row.equipment_id is None:
+            without_equipment_cost += cost
+            continue
+        group = groups.setdefault(
+            row.equipment_id,
+            {
+                "equipment_id": row.equipment_id,
+                "label": row.equipment_label or "Модель без названия",
+                "cost": ZERO,
+                "shipment_ids": set(),
+            },
+        )
+        group["cost"] += cost
+        group["shipment_ids"].add(row.document_id)
+    rows = [row for row in groups.values() if row["cost"] != 0]
+    for row in rows:
+        row["shipment_ids"] = sorted(row["shipment_ids"], key=str)
+    rows.sort(key=lambda row: (-row["cost"], row["label"]))
+    return {
+        "rows": rows[:limit],
+        "without_equipment_cost": without_equipment_cost,
     }
