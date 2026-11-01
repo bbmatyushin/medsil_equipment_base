@@ -12,9 +12,9 @@
 
 <section class="an-card an-card--wide">
     <h2>Складская таблица</h2>
-    <p class="an-card-note">Отобрано позиций: {{ stock_rows_total }}.{% if stock_rows_total > stock_rows_limit %} Показаны {{ stock_rows_limit }} из {{ stock_rows_total }}.{% endif %}</p>
+    <p class="an-card-note">Отобрано позиций: {{ stock_rows_total }}. Показаны {{ stock_rows_from }}–{{ stock_rows_to }} из {{ stock_rows_total }}.</p>
     {% if stock_rows %}
-        <div class="an-table-wrap">
+        <div class="an-table-wrap an-table-wrap--scroll" data-an-max-rows="15">
             <table class="an-table">
                 <thead>
                     <tr>
@@ -56,6 +56,13 @@
         </div>
     {% else %}
         <p class="an-chart-empty">Нет данных</p>
+    {% endif %}
+    {% if stock_pages > 1 %}
+        <nav class="an-pagination" aria-label="Страницы складской таблицы">
+            {% for link in stock_page_links %}
+                {% if link.active %}<span class="an-pagination-current">{{ link.page }}</span>{% else %}<a href="{{ link.url }}">{{ link.page }}</a>{% endif %}
+            {% endfor %}
+        </nav>
     {% endif %}
     <p class="an-card-note">Количества включают архив V1 и текущие записи V2; деньги — только V2.</p>
 </section>

@@ -2,8 +2,11 @@
 <section class="an-card an-card--wide">
     <h2>Остатки по срокам годности</h2>
     <p class="an-card-note">Снимок на сегодня; нулевые и отрицательные остатки не входят.</p>
-    {% include "analytics/includes/chart.html" with spec=charts.expiration chart_id="chart-spare-parts-expiration" title="Оценочная стоимость по срокам годности" height=expiration_height %}
-    <div class="an-table-wrap">
+    <div class="an-split an-split--even">
+        <div>
+            {% include "analytics/includes/chart.html" with spec=charts.expiration chart_id="chart-spare-parts-expiration" title="Оценочная стоимость по срокам годности" height=expiration_height only %}
+        </div>
+        <div class="an-table-wrap">
         <table class="an-table">
             <thead>
                 <tr>
@@ -27,5 +30,6 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 </section>

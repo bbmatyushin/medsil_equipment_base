@@ -1,4 +1,5 @@
 {% extends "analytics/base.html" %}
+{% load static %}
 
 {% block analytics_content %}
 <h2 class="an-section-title">Склад</h2>
@@ -12,4 +13,5 @@
 
 <h2 class="an-section-title">Неликвиды и контроль данных</h2>
 {% include "analytics/spare_parts/control.html" %}
+<script src="{% static 'analytics/js/summary-table.js' %}" defer></script>
 {% endblock %}

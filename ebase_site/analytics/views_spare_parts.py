@@ -31,11 +31,35 @@ def _ids_link(admin_name, ids) -> str | None:
     return changelist_url(admin_name, id__in=ids)
 
 
-def _overview_context(source, filters, period, today) -> dict:
+def _stock_page_number(request, pages: int) -> int:
+    """Номер страницы складской таблицы; мусор и выход за диапазон — первая."""
+    try:
+        page = int(request.GET.get("stock_page", ""))
+    except ValueError:
+        return 1
+    return page if 1 <= page <= pages else 1
+
+
+def _page_url(request, page: int) -> str:
+    """Ссылка на страницу складской таблицы с сохранением фильтров."""
+    params = request.GET.copy()
+    if page == 1:
+        params.pop("stock_page", None)
+    else:
+        params["stock_page"] = page
+    query = params.urlencode()
+    return f"{request.path}?{query}" if query else request.path
+
+
+def _overview_context(source, filters, period, today, request) -> dict:
     """Плитки и основная таблица текущего склада."""
     kpis = spare_parts.overview_kpis(period, today, filters, source)
     rows = spare_parts.stock_rows(period, today, filters, source)
-    for row in rows:
+    pages = max(1, -(-len(rows) // STOCK_ROWS_LIMIT))
+    page = _stock_page_number(request, pages)
+    start = (page - 1) * STOCK_ROWS_LIMIT
+    page_rows = rows[start : start + STOCK_ROWS_LIMIT]
+    for row in page_rows:
         row["url"] = change_url(SPARE_PARTS, row["id"])
     tiles = [
         {
@@ -76,9 +100,20 @@ def _overview_context(source, filters, period, today) -> dict:
     ]
     return {
         "tiles": tiles,
-        "stock_rows": rows[:STOCK_ROWS_LIMIT],
+        "stock_rows": page_rows,
         "stock_rows_total": len(rows),
-        "stock_rows_limit": STOCK_ROWS_LIMIT,
+        "stock_rows_from": start + 1,
+        "stock_rows_to": start + len(page_rows),
+        "stock_page": page,
+        "stock_pages": pages,
+        "stock_page_links": [
+            {
+                "page": number,
+                "url": _page_url(request, number),
+                "active": number == page,
+            }
+            for number in range(1, pages + 1)
+        ],
         "kpis": kpis,
     }
 
@@ -197,7 +232,7 @@ class SparePartsView(AnalyticsTabView):
         source = spare_parts.SparePartSet.load()
         period, today = context["period"], context["today"]
         context.update(filters=filters, charts={})
-        context.update(_overview_context(source, filters, period, today))
+        context.update(_overview_context(source, filters, period, today, self.request))
         context.update(_movement_context(source, filters, period, today))
         expiration = _expiration_context(source, filters, today)
         context["charts"].update(expiration.pop("charts"))

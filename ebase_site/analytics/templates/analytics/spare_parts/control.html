@@ -5,7 +5,7 @@
             <h2>Неликвиды {{ block.days }} дней</h2>
             <p class="an-card-note">Положительный остаток без отгрузок за {{ block.days }} дней. Позиций: {{ block.total }}.</p>
             {% if block.rows %}
-                <div class="an-table-wrap">
+                <div class="an-table-wrap an-table-wrap--scroll" data-an-max-rows="15">
                     <table class="an-table">
                         <thead><tr><th scope="col">Запчасть</th><th scope="col" class="num">Остаток</th><th scope="col" class="num">Оценка</th><th scope="col">Последняя отгрузка</th><th scope="col" class="num">Расход в месяц</th></tr></thead>
                         <tbody>
@@ -26,7 +26,7 @@
     <h2>Кандидаты на пополнение</h2>
     <p class="an-card-note">Нулевой остаток и хотя бы одна отгрузка за последние 365 дней. Позиций: {{ restock_total }}.</p>
     {% if restock_rows %}
-        <div class="an-table-wrap">
+        <div class="an-table-wrap an-table-wrap--scroll" data-an-max-rows="20">
             <table class="an-table">
                 <thead><tr><th scope="col">Запчасть</th><th scope="col">Последняя отгрузка</th><th scope="col" class="num">Расход в месяц</th></tr></thead>
                 <tbody>

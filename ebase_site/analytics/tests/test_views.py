@@ -1823,6 +1823,31 @@ class SparePartsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return response
 
+    def test_spare_parts_tables_scroll_after_15_rows(self):
+        part = make_spare_part()
+        make_stock(part, 2)
+
+        response = self._get()
+
+        # «Складская таблица» и обе таблицы неликвидов — не выше 15 строк с прокруткой
+        self.assertContains(response, 'data-an-max-rows="15"', count=3)
+
+    def test_spare_parts_expiration_chart_left_table_right(self):
+        response = self._get()
+
+        # «Остатки по срокам годности»: график слева, таблица справа
+        self.assertContains(response, "an-split an-split--even", count=1)
+
+    def test_spare_parts_restock_table_scroll_after_20_rows(self):
+        part = make_spare_part()
+        make_part_shipment(part, TODAY, 1)
+        make_stock(part, 0)
+
+        response = self._get()
+
+        # «Кандидаты на пополнение» — не выше 20 строк с прокруткой
+        self.assertContains(response, 'data-an-max-rows="20"', count=1)
+
     def test_spare_parts_overview_tiles(self):
         part = make_spare_part()
         make_supply(part, TODAY, 2, price=100)
@@ -1873,7 +1898,37 @@ class SparePartsPageTests(TestCase):
 
         self.assertEqual(len(response.context["stock_rows"]), 100)
         self.assertEqual(response.context["stock_rows_total"], 101)
-        self.assertContains(response, "Показаны 100 из 101")
+        self.assertEqual(response.context["stock_page"], 1)
+        self.assertEqual(response.context["stock_pages"], 2)
+        self.assertContains(response, "Показаны 1–100 из 101")
+        # страницы переключаются, текущая не ссылка
+        self.assertContains(
+            response, f'href="{reverse("analytics:spare_parts")}?stock_page=2"'
+        )
+
+    def test_spare_parts_stock_table_second_page(self):
+        for number in range(101):
+            make_spare_part(name=f"Запчасть {number:03d}")
+
+        response = self._get({"stock_page": "2"})
+
+        rows = response.context["stock_rows"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["label"], "Запчасть 100")
+        self.assertEqual(response.context["stock_page"], 2)
+        self.assertContains(response, "Показаны 101–101 из 101")
+        self.assertContains(response, f'href="{reverse("analytics:spare_parts")}"')
+
+    def test_spare_parts_stock_table_page_garbage_falls_back(self):
+        for number in range(101):
+            make_spare_part(name=f"Запчасть {number:03d}")
+
+        for garbage in ("abc", "0", "-3", "99"):
+            with self.subTest(garbage=garbage):
+                response = self._get({"stock_page": garbage})
+
+                self.assertEqual(response.context["stock_page"], 1)
+                self.assertEqual(len(response.context["stock_rows"]), 100)
 
     def test_spare_parts_snapshot_note(self):
         response = self._get()

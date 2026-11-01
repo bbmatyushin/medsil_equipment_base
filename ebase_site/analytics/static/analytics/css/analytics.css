@@ -509,6 +509,25 @@ html[data-theme="dark"] {
     overflow-wrap: anywhere;
 }
 
+/* Пагинация под складской таблицей «Запчастей» */
+.an-pagination {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0 0;
+}
+
+.an-pagination a,
+.an-pagination .an-pagination-current {
+    padding: 2px 9px;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+}
+
+.an-pagination .an-pagination-current {
+    background: var(--darkened-bg);
+    font-weight: 600;
+}
+
 /* «Где сейчас подменные»: ремонт закрыт, а прибор не вернули в офис */
 .an-table tr.an-tone-risk td {
     background: color-mix(in srgb, var(--an-negative) 14%, var(--an-surface));
