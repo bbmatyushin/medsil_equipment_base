@@ -232,3 +232,210 @@ class SparePartSetFilterTests(TestCase):
         )
 
         self.assertEqual(sp.parts_of(filters, TODAY, source), [matching])
+
+
+class StockValuationTests(TestCase):
+    def test_known_price_weighted_by_expiration_then_part_fallback(self):
+        part = make_spare_part()
+        expiration = date(2027, 1, 1)
+        make_supply(part, TODAY, 5, price=100, expiration_dt=expiration)
+        make_supply(part, TODAY, 5, price=200, expiration_dt=expiration)
+        make_supply(part, TODAY, 10, price=0, expiration_dt=expiration)
+        make_supply(part, TODAY, 0, price=999, expiration_dt=expiration)
+        source = sp.SparePartSet.load()
+
+        self.assertEqual(
+            sp.known_price(part.pk, expiration, source), Decimal("150.00")
+        )
+        self.assertEqual(
+            sp.known_price(part.pk, date(2028, 1, 1), source), Decimal("150.00")
+        )
+
+    def test_stock_value_positive_only(self):
+        part = make_spare_part()
+        make_supply(part, TODAY, 2, price=100)
+        positive = make_stock(part, 3)
+        zero = make_stock(part, 0, date(2027, 1, 1))
+        negative = make_stock(part, -2, date(2028, 1, 1))
+        source = sp.SparePartSet.load()
+
+        self.assertEqual(sp.stock_value(positive, source), Decimal("300.00"))
+        self.assertIsNone(sp.stock_value(zero, source))
+        self.assertIsNone(sp.stock_value(negative, source))
+
+    def test_overview_kpis_and_price_coverage(self):
+        complete = make_spare_part(name="Полная")
+        make_supply(complete, TODAY, 1, price=100)
+        make_stock(complete, 2)
+        unknown = make_spare_part(name="Неизвестная")
+        make_stock(unknown, 1)
+        partial = make_spare_part(name="Частичная")
+        expiration = date(2027, 1, 1)
+        make_supply(partial, TODAY, 1, price=50, expiration_dt=expiration)
+        make_stock(partial, 1, expiration)
+        make_stock(partial, 2, date(2028, 1, 1))
+        source = sp.SparePartSet.load()
+
+        kpis = sp.overview_kpis(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            TODAY,
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(kpis["positive_count"], 3)
+        self.assertEqual(kpis["priced_count"], 2)
+        self.assertEqual(kpis["priced_total"], 3)
+        self.assertEqual(kpis["stock_value"], Decimal("350.00"))
+
+    def test_overview_money_uses_v2_and_all_shipments(self):
+        part = make_spare_part()
+        period = Period(date(2026, 2, 1), date(2026, 2, 28))
+        make_supply(part, period.date_from, 1, price=100)
+        make_supply(part, period.date_to, 2, price=100)
+        make_supply(part, period.date_from, 5, price=500, archive=True)
+        make_supply(part, date(2026, 3, 1), 10, price=100)
+        make_part_shipment(part, period.date_from, 1, price=50)
+        make_part_shipment(part, period.date_to, 2, price=100)
+        make_part_shipment(part, period.date_to, 5, price=500, archive=True)
+        source = sp.SparePartSet.load()
+
+        kpis = sp.overview_kpis(period, TODAY, SparePartFilters(), source)
+
+        self.assertEqual(kpis["purchase_amount"], Decimal("300.00"))
+        self.assertEqual(kpis["shipment_cost"], Decimal("250.00"))
+
+    def test_stock_value_does_not_depend_on_period(self):
+        part = make_spare_part()
+        make_supply(part, date(2020, 1, 1), 1, price=100)
+        make_stock(part, 3)
+        source = sp.SparePartSet.load()
+
+        first = sp.overview_kpis(
+            Period(date(2025, 1, 1), date(2025, 12, 31)),
+            TODAY,
+            SparePartFilters(),
+            source,
+        )
+        second = sp.overview_kpis(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            TODAY,
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(first["stock_value"], second["stock_value"])
+        self.assertEqual(first["stock_value"], Decimal("300.00"))
+
+
+class StockRowsTests(TestCase):
+    def test_stock_rows_quantities_demand_and_days(self):
+        part = make_spare_part()
+        period = Period(date(2026, 2, 1), date(2026, 2, 28))
+        make_supply(part, period.date_from, 2)
+        make_supply(part, period.date_to, 3, archive=True)
+        make_supply(part, date(2026, 3, 1), 10)
+        make_part_shipment(part, period.date_from, 4)
+        make_part_shipment(part, period.date_to, 2, archive=True)
+        make_part_shipment(part, TODAY + timedelta(days=1), 100)
+        make_stock(part, 20)
+        source = sp.SparePartSet.load()
+
+        (row,) = sp.stock_rows(period, TODAY, SparePartFilters(), source)
+
+        self.assertEqual(row["received"], Decimal("5"))
+        self.assertEqual(row["shipped"], Decimal("6"))
+        self.assertEqual(row["average_monthly"], Decimal("0.50"))
+        self.assertEqual(row["days_stock"], 1217)
+        self.assertEqual(row["last_shipment"], period.date_to)
+        self.assertTrue(row["nonmoving_180"])
+        self.assertFalse(row["nonmoving_365"])
+
+    def test_stock_rows_without_demand_or_with_zero_stock(self):
+        empty = make_spare_part(name="Пустая")
+        full = make_spare_part(name="Полная")
+        make_stock(empty, 0)
+        make_stock(full, 2)
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["id"]: row
+            for row in sp.stock_rows(
+                Period(date(2026, 1, 1), date(2026, 12, 31)),
+                TODAY,
+                SparePartFilters(),
+                source,
+            )
+        }
+
+        self.assertEqual(rows[empty.pk]["average_monthly"], Decimal("0.00"))
+        self.assertIsNone(rows[empty.pk]["days_stock"])
+        self.assertFalse(rows[empty.pk]["nonmoving_180"])
+        self.assertIsNone(rows[full.pk]["days_stock"])
+        self.assertTrue(rows[full.pk]["nonmoving_365"])
+
+    def test_stock_rows_partial_price_is_marked(self):
+        part = make_spare_part(name="С fallback")
+        expiration = date(2027, 1, 1)
+        make_supply(part, TODAY, 1, price=50, expiration_dt=expiration)
+        make_stock(part, 1, expiration)
+        make_stock(part, 2, date(2028, 1, 1))
+        unknown = make_spare_part(name="Без цены")
+        make_stock(unknown, 2)
+        source = sp.SparePartSet.load()
+
+        rows = {
+            row["id"]: row
+            for row in sp.stock_rows(
+                Period(date(2026, 1, 1), date(2026, 12, 31)),
+                TODAY,
+                SparePartFilters(),
+                source,
+            )
+        }
+
+        # Любая известная поставка даёт fallback для всех сроков этой запчасти.
+        self.assertTrue(rows[part.pk]["value_complete"])
+        self.assertEqual(rows[part.pk]["stock_value"], Decimal("150.00"))
+        self.assertEqual(rows[part.pk]["average_price"], Decimal("50.00"))
+        self.assertFalse(rows[unknown.pk]["value_complete"])
+        self.assertIsNone(rows[unknown.pk]["stock_value"])
+
+    def test_stock_rows_sorting(self):
+        expensive = make_spare_part(name="Дорогая")
+        make_supply(expensive, TODAY, 1, price=200)
+        make_stock(expensive, 2)
+        cheap = make_spare_part(name="Дешёвая")
+        make_supply(cheap, TODAY, 1, price=100)
+        make_stock(cheap, 1)
+        unknown_a = make_spare_part(name="Альфа")
+        unknown_b = make_spare_part(name="Бета")
+        make_stock(unknown_a, 10)
+        make_stock(unknown_b, 10)
+        source = sp.SparePartSet.load()
+
+        rows = sp.stock_rows(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            TODAY,
+            SparePartFilters(),
+            source,
+        )
+
+        self.assertEqual(
+            [row["label"] for row in rows],
+            ["Дорогая", "Дешёвая", "Альфа", "Бета"],
+        )
+
+    def test_stock_rows_respect_selected_parts(self):
+        selected = make_spare_part(name="Выбранная")
+        make_spare_part(name="Другая")
+        source = sp.SparePartSet.load()
+
+        rows = sp.stock_rows(
+            Period(date(2026, 1, 1), date(2026, 12, 31)),
+            TODAY,
+            SparePartFilters(spare_part=selected),
+            source,
+        )
+
+        self.assertEqual([row["id"] for row in rows], [selected.pk])

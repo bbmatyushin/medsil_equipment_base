@@ -260,3 +260,164 @@ def parts_of(
                 continue
         result.append(part)
     return result
+
+
+def _price_indexes(source):
+    """Суммы и количества известных цен по сроку и по запчасти."""
+    exact = {}
+    overall = {}
+    for row in source.supplies:
+        if row.is_archive or row.quantity <= 0 or row.price is None or row.price <= 0:
+            continue
+        amount = row.quantity * row.price
+        for index, key in (
+            (exact, (row.part_id, row.expiration_dt)),
+            (overall, row.part_id),
+        ):
+            total_amount, total_quantity = index.get(key, (ZERO, ZERO))
+            index[key] = (total_amount + amount, total_quantity + row.quantity)
+    return exact, overall
+
+
+def _indexed_price(part_id, expiration_dt, indexes) -> Decimal | None:
+    exact, overall = indexes
+    amount, quantity = exact.get((part_id, expiration_dt), (ZERO, ZERO))
+    if quantity <= 0:
+        amount, quantity = overall.get(part_id, (ZERO, ZERO))
+    return amount / quantity if quantity > 0 else None
+
+
+def known_price(part_id, expiration_dt, source=None) -> Decimal | None:
+    """Средняя известная цена сначала по сроку, затем по всей запчасти."""
+    source = _source(source)
+    return _indexed_price(part_id, expiration_dt, _price_indexes(source))
+
+
+def stock_value(count, source=None) -> Decimal | None:
+    """Оценка положительной складской записи при известной цене."""
+    source = _source(source)
+    amount = _decimal(count.amount)
+    if amount <= 0:
+        return None
+    price = known_price(count.spare_part_id, count.expiration_dt, source)
+    return amount * price if price is not None else None
+
+
+def _part_valuation(part_id, counts, indexes):
+    """Известная стоимость и полнота оценки всех положительных записей."""
+    value = ZERO
+    positive = False
+    complete = True
+    for count in counts:
+        amount = _decimal(count.amount)
+        if amount <= 0:
+            continue
+        positive = True
+        price = _indexed_price(part_id, count.expiration_dt, indexes)
+        if price is None:
+            complete = False
+        else:
+            value += amount * price
+    return (value if positive and value > 0 else None), positive and complete
+
+
+def _sums_by_part(rows, date_field, value_field):
+    result = {}
+    for row in rows:
+        result[row.part_id] = result.get(row.part_id, ZERO) + getattr(
+            row, value_field
+        )
+    return result
+
+
+def stock_rows(period, today, filters, source=None) -> list[dict]:
+    """Строки склада: снимок, движение периода и спрос за 365 дней."""
+    source = _source(source)
+    parts = parts_of(filters, today, source)
+    part_ids = [part.pk for part in parts]
+    received = _sums_by_part(source.supplies_in(part_ids, period), "supply_dt", "quantity")
+    shipped = _sums_by_part(
+        source.shipments_in(part_ids, period), "shipment_dt", "quantity"
+    )
+    demand_start = window_start(today, DEMAND_DAYS)
+    demand_rows = [
+        row
+        for row in source.shipments
+        if row.part_id in set(part_ids)
+        and demand_start <= row.shipment_dt <= today
+    ]
+    demand = _sums_by_part(demand_rows, "shipment_dt", "quantity")
+    indexes = _price_indexes(source)
+    result = []
+    for part in parts:
+        counts = [count for count in source.counts if count.spare_part_id == part.pk]
+        stock = source.stock_total(part.pk)
+        value, complete = _part_valuation(part.pk, counts, indexes)
+        part_demand = demand.get(part.pk, ZERO)
+        average_monthly = (part_demand / Decimal("12")).quantize(Decimal("0.01"))
+        days_stock = None
+        if stock > 0 and part_demand > 0:
+            exact_days = stock * Decimal(DEMAND_DAYS) / part_demand
+            days_stock = int(exact_days)
+            if Decimal(days_stock) < exact_days:
+                days_stock += 1
+        last = source.last_shipment(part.pk, today)
+        result.append(
+            {
+                "id": part.pk,
+                "label": part.name,
+                "article": part.article,
+                "unit": str(part.unit),
+                "stock": stock,
+                "average_price": _indexed_price(part.pk, None, indexes),
+                "stock_value": value,
+                "value_complete": complete,
+                "received": received.get(part.pk, ZERO),
+                "shipped": shipped.get(part.pk, ZERO),
+                "average_monthly": average_monthly,
+                "days_stock": days_stock,
+                "last_shipment": last.shipment_dt if last else None,
+                "nonmoving_180": stock > 0
+                and (
+                    last is None
+                    or last.shipment_dt < window_start(today, 180)
+                ),
+                "nonmoving_365": stock > 0
+                and (
+                    last is None
+                    or last.shipment_dt < window_start(today, DEMAND_DAYS)
+                ),
+            }
+        )
+    result.sort(
+        key=lambda row: (
+            row["stock_value"] is None,
+            -(row["stock_value"] or ZERO),
+            row["label"],
+            row["article"] or "",
+        )
+    )
+    return result
+
+
+def overview_kpis(period, today, filters, source=None) -> dict:
+    """Плитки склада и денежные итоги V2 за период."""
+    source = _source(source)
+    rows = stock_rows(period, today, filters, source)
+    part_ids = [row["id"] for row in rows]
+    supplies = source.supplies_in(part_ids, period)
+    shipments = source.shipments_in(part_ids, period)
+    return {
+        "positive_count": sum(row["stock"] > 0 for row in rows),
+        "stock_value": sum(
+            (row["stock_value"] or ZERO for row in rows), ZERO
+        ),
+        "priced_count": sum(row["value_complete"] for row in rows),
+        "priced_total": sum(row["stock"] > 0 for row in rows),
+        "purchase_amount": sum(
+            (row.amount or ZERO for row in supplies if not row.is_archive), ZERO
+        ),
+        "shipment_cost": sum(
+            (row.cost or ZERO for row in shipments if not row.is_archive), ZERO
+        ),
+    }

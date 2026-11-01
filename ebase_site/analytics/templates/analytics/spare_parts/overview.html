@@ -1,1 +1,61 @@
-<div class="an-grid"></div>
+{% load analytics_tags %}
+<section class="an-tiles" aria-label="Склад запчастей">
+    {% for tile in tiles %}
+        <div class="an-tile">
+            <p class="an-tile-label">{{ tile.label }}</p>
+            <p class="an-tile-value">{% if tile.kind == "money" %}{{ tile.value|money }}{% else %}{{ tile.value|number }}{% endif %}</p>
+            {% if tile.note %}<p class="an-tile-note">{{ tile.note }}</p>{% endif %}
+        </div>
+    {% endfor %}
+</section>
+<p class="an-registry-link">Остатки и их оценка — на сегодня, период не учитывается.</p>
+
+<section class="an-card an-card--wide">
+    <h2>Складская таблица</h2>
+    <p class="an-card-note">Отобрано позиций: {{ stock_rows_total }}.{% if stock_rows_total > stock_rows_limit %} Показаны {{ stock_rows_limit }} из {{ stock_rows_total }}.{% endif %}</p>
+    {% if stock_rows %}
+        <div class="an-table-wrap">
+            <table class="an-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Запчасть</th>
+                        <th scope="col">Артикул</th>
+                        <th scope="col">Ед. изм.</th>
+                        <th scope="col" class="num">Остаток</th>
+                        <th scope="col" class="num">Средняя цена</th>
+                        <th scope="col" class="num">Оценочная стоимость</th>
+                        <th scope="col" class="num">Поступило</th>
+                        <th scope="col" class="num">Отгружено</th>
+                        <th scope="col" class="num">Расход в месяц</th>
+                        <th scope="col" class="num">Запас, дней</th>
+                        <th scope="col">Последняя отгрузка</th>
+                        <th scope="col">Неликвид 180</th>
+                        <th scope="col">Неликвид 365</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in stock_rows %}
+                        <tr>
+                            <td><a href="{{ row.url }}">{{ row.label }}</a></td>
+                            <td>{{ row.article|default:"—" }}</td>
+                            <td>{{ row.unit }}</td>
+                            <td class="num">{{ row.stock|number }}</td>
+                            <td class="num">{{ row.average_price|money }}</td>
+                            <td class="num">{{ row.stock_value|money }}{% if row.stock_value is not None and not row.value_complete %} <span class="an-note">частично</span>{% endif %}</td>
+                            <td class="num">{{ row.received|number }}</td>
+                            <td class="num">{{ row.shipped|number }}</td>
+                            <td class="num">{{ row.average_monthly|number2 }}</td>
+                            <td class="num">{{ row.days_stock|number }}</td>
+                            <td>{{ row.last_shipment|date:"d.m.Y"|default:"—" }}</td>
+                            <td>{% if row.nonmoving_180 %}да{% else %}—{% endif %}</td>
+                            <td>{% if row.nonmoving_365 %}да{% else %}—{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="an-chart-empty">Нет данных</p>
+    {% endif %}
+    <p class="an-card-note">Количества включают архив V1 и текущие записи V2; деньги — только V2.</p>
+</section>

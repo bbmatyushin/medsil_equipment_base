@@ -21,12 +21,16 @@ from analytics.tests.factories import (
     make_employee,
     make_equipment,
     make_install,
+    make_part_shipment,
     make_payment,
     make_receipt,
     make_replacement,
     make_service,
     make_service_type,
     make_shipment,
+    make_spare_part,
+    make_stock,
+    make_supply,
     make_trip,
 )
 from analytics.filters import Period
@@ -1798,3 +1802,81 @@ class EquipmentPageTests(TestCase):
         self.assertContains(
             response, "Поломки приборов, которые сейчас не у клиента, не входят: 2."
         )
+
+
+class SparePartsPageTests(TestCase):
+    """Вкладка «Запчасти»: складские виджеты и ссылки."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            "spare_parts_super", "spare_parts@example.com", "pass"
+        )
+
+    def setUp(self):
+        self.client.force_login(self.superuser)
+
+    def _get(self, params=None):
+        with _fixed_today():
+            response = self.client.get(reverse("analytics:spare_parts"), params or {})
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_spare_parts_overview_tiles(self):
+        part = make_spare_part()
+        make_supply(part, TODAY, 2, price=100)
+        make_part_shipment(part, TODAY, 1, price=80)
+        make_stock(part, 2)
+
+        response = self._get()
+
+        tiles = {tile["label"]: tile for tile in response.context["tiles"]}
+        self.assertEqual(
+            list(tiles),
+            [
+                "Позиций с остатком",
+                "Оценочная стоимость остатка",
+                "Закуплено за период",
+                "Отгружено за период",
+            ],
+        )
+        self.assertEqual(tiles["Позиций с остатком"]["value"], 1)
+        self.assertEqual(
+            tiles["Оценочная стоимость остатка"]["value"], Decimal("200.00")
+        )
+        self.assertEqual(
+            tiles["Оценочная стоимость остатка"]["note"],
+            "цена известна: 1 из 1 позиций",
+        )
+        self.assertEqual(tiles["Закуплено за период"]["value"], Decimal("200.00"))
+        self.assertEqual(tiles["Отгружено за период"]["value"], Decimal("80.00"))
+        self.assertContains(response, "200,00 ₽")
+        self.assertContains(response, "80,00 ₽")
+
+    def test_spare_parts_stock_row_links_to_part(self):
+        part = make_spare_part()
+
+        response = self._get()
+
+        row = response.context["stock_rows"][0]
+        self.assertEqual(row["url"], change_url("spare_part_sparepart", part.pk))
+        self.assertEqual(self.client.get(row["url"]).status_code, 200)
+
+    def test_spare_parts_stock_table_limits_to_100(self):
+        for number in range(101):
+            make_spare_part(name=f"Запчасть {number:03d}")
+
+        response = self._get()
+
+        self.assertEqual(len(response.context["stock_rows"]), 100)
+        self.assertEqual(response.context["stock_rows_total"], 101)
+        self.assertContains(response, "Показаны 100 из 101")
+
+    def test_spare_parts_snapshot_note(self):
+        response = self._get()
+        self.assertContains(response, "на сегодня, период не учитывается")
+
+    def test_spare_parts_estimated_value_wording(self):
+        response = self._get()
+        self.assertContains(response, "Оценочная стоимость")
+        self.assertNotContains(response, "Себестоимость склада")
